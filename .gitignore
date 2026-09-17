@@ -1,0 +1,23 @@
+# Environments
+.env
+.venv
+env/
+venv/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+# Node/Frontend
+node_modules/
+dist/
+build/
+.next/
+# Android
+*.apk
+*.dex
+*.class
+local.properties
+# OS generated files
+.DS_Store
+Thumbs.db
