@@ -21,3 +21,19 @@ local.properties
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Databases / Data
+*.sqlite3
+*.db
+nexus.db
+
+# Build / Packaging (Python)
+*.egg-info/
+build/
+dist/
