@@ -30,6 +30,16 @@ def init(url: str = typer.Option("http://127.0.0.1:8000", help="API Base URL")):
     save_config(config)
     console.print(Panel(f"API URL set to: [bold cyan]{config.api_url}[/bold cyan]", title="[bold green]NEXUS CLI Initialized[/bold green]", border_style="green", expand=False))
 
+@app.command("ui")
+def launch_tui():
+    """Launch the interactive NEXUS Full-Screen TUI."""
+    try:
+        from tui import NexusTUI
+        app = NexusTUI()
+        app.run()
+    except ImportError as e:
+        console.print(Panel(f"Could not load TUI module.\n[dim]{e}[/dim]", title="[bold red]ERROR[/bold red]", border_style="red"))
+
 @app.command()
 def status():
     """Check the connection to the NEXUS core node."""
