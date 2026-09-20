@@ -1,4 +1,5 @@
 import requests
+from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, Horizontal
 from textual.widgets import Header, Footer, Static, Input, DataTable, Button, Label
@@ -26,13 +27,47 @@ class NexusHeader(Static):
     def render(self) -> str:
         return ASCII_BANNER
 
+class ChangeStatusScreen(ModalScreen):
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-dialog"):
+            yield Label("[bold cyan]Change Status[/bold cyan]", id="modal-title")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Pending ⏳", variant="warning", id="pending")
+                yield Button("In Progress 🔄", variant="primary", id="in_progress")
+                yield Button("Completed ✅", variant="success", id="completed")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", variant="error", id="cancel")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(None)
+        else:
+            self.dismiss(event.button.id)
+
+class SettingsScreen(ModalScreen):
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-dialog"):
+            yield Label("[bold cyan]TUI Settings[/bold cyan]", id="modal-title")
+            yield Label("Select Theme:", id="theme-label")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Synthwave", variant="primary", id="textual-dark")
+                yield Button("Light Mode", variant="warning", id="textual-light")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Close", variant="error", id="cancel")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(None)
+        else:
+            self.dismiss(event.button.id)
+
 class AddProjectScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-dialog"):
             yield Label("[bold cyan]Add New Project[/bold cyan]", id="modal-title")
             yield Input(placeholder="Project Title", id="project-title")
             yield Input(placeholder="Description (optional)", id="project-desc")
-            with Horizontal(id="modal-buttons"):
+            with Horizontal(classes="modal-buttons"):
                 yield Button("Create", variant="success", id="submit")
                 yield Button("Cancel", variant="error", id="cancel")
     
@@ -51,7 +86,7 @@ class AddTaskScreen(ModalScreen):
             yield Label("[bold cyan]Add New Task[/bold cyan]", id="modal-title")
             yield Input(placeholder="Task Title", id="task-title")
             yield Input(placeholder="Project ID (number)", id="project-id")
-            with Horizontal(id="modal-buttons"):
+            with Horizontal(classes="modal-buttons"):
                 yield Button("Create", variant="success", id="submit")
                 yield Button("Cancel", variant="error", id="cancel")
     
@@ -70,7 +105,7 @@ class AddNoteScreen(ModalScreen):
             yield Label("[bold cyan]Add New Note[/bold cyan]", id="modal-title")
             yield Input(placeholder="Note Title", id="note-title")
             yield Input(placeholder="Content", id="note-content")
-            with Horizontal(id="modal-buttons"):
+            with Horizontal(classes="modal-buttons"):
                 yield Button("Create", variant="success", id="submit")
                 yield Button("Cancel", variant="error", id="cancel")
     
@@ -119,7 +154,11 @@ class NexusTUI(App):
         content-align: center middle;
         margin-bottom: 1;
     }
-    #modal-buttons {
+    #theme-label {
+        content-align: center middle;
+        margin-top: 1;
+    }
+    .modal-buttons {
         margin-top: 1;
         align: center middle;
     }
@@ -136,12 +175,13 @@ class NexusTUI(App):
         ("ctrl+p", "add_project", "Add Project"),
         ("ctrl+t", "add_task", "Add Task"),
         ("ctrl+n", "add_note", "Add Note"),
+        ("ctrl+s", "settings", "Settings"),
     ]
 
     def compose(self) -> ComposeResult:
         yield Container(NexusHeader(), id="header-container")
         yield Input(placeholder="Search NEXUS...", id="search")
-        yield DataTable(id="main-table")
+        yield DataTable(id="main-table", cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -158,43 +198,55 @@ class NexusTUI(App):
         elif self.current_view == "notes":
             self.action_show_notes()
 
+    def format_status(self, status: str) -> str:
+        if status == "completed": return "✅ Completed"
+        if status == "in_progress": return "🔄 In Progress"
+        return "⏳ Pending"
+
     def action_show_projects(self) -> None:
-        self.current_view = "projects"
         table = self.query_one(DataTable)
-        table.clear(columns=True)
-        table.add_columns("ID", "Project Title", "Status")
+        if self.current_view != "projects" or not table.columns:
+            table.clear(columns=True)
+            table.add_columns("ID", "Project Title", "Status")
+        else:
+            table.clear()
+        self.current_view = "projects"
         
         try:
             response = requests.get(f"{config.api_url}/api/projects", headers=get_headers())
             if response.status_code == 200:
                 projects = response.json()
                 for p in projects:
-                    status = "✅ Completed" if p.get("status") == "completed" else "⏳ Pending"
-                    table.add_row(str(p["id"]), p["title"], status)
+                    table.add_row(str(p["id"]), p["title"], self.format_status(p.get("status", "pending")), key=str(p["id"]))
         except Exception:
-            table.add_row("ERR", "Could not connect to Core API", "ERROR")
+            table.add_row("ERR", "Could not connect to Core API", "ERROR", key="ERR")
 
     def action_show_tasks(self) -> None:
-        self.current_view = "tasks"
         table = self.query_one(DataTable)
-        table.clear(columns=True)
-        table.add_columns("ID", "Task Title", "Project ID", "Status")
+        if self.current_view != "tasks" or not table.columns:
+            table.clear(columns=True)
+            table.add_columns("ID", "Task Title", "Project ID", "Status")
+        else:
+            table.clear()
+        self.current_view = "tasks"
         
         try:
             response = requests.get(f"{config.api_url}/api/tasks", headers=get_headers())
             if response.status_code == 200:
                 tasks = response.json()
                 for t in tasks:
-                    status = "✅ Done" if t.get("is_completed") else "⏳ Pending"
-                    table.add_row(str(t["id"]), t["title"], str(t.get("project_id", "-")), status)
+                    table.add_row(str(t["id"]), t["title"], str(t.get("project_id", "-")), self.format_status(t.get("status", "pending")), key=str(t["id"]))
         except Exception:
-            table.add_row("ERR", "Could not connect to Core API", "-", "ERROR")
+            table.add_row("ERR", "Could not connect to Core API", "-", "ERROR", key="ERR")
 
     def action_show_notes(self) -> None:
-        self.current_view = "notes"
         table = self.query_one(DataTable)
-        table.clear(columns=True)
-        table.add_columns("ID", "Note Title", "Content Preview")
+        if self.current_view != "notes" or not table.columns:
+            table.clear(columns=True)
+            table.add_columns("ID", "Note Title", "Content Preview")
+        else:
+            table.clear()
+        self.current_view = "notes"
         
         try:
             response = requests.get(f"{config.api_url}/api/notes", headers=get_headers())
@@ -202,9 +254,36 @@ class NexusTUI(App):
                 notes = response.json()
                 for n in notes:
                     preview = (n.get("content") or "")[:50] + "..."
-                    table.add_row(str(n["id"]), n["title"], preview)
+                    table.add_row(str(n["id"]), n["title"], preview, key=str(n["id"]))
         except Exception:
-            table.add_row("ERR", "Could not connect to Core API", "ERROR")
+            table.add_row("ERR", "Could not connect to Core API", "ERROR", key="ERR")
+
+    @on(DataTable.RowSelected)
+    def handle_row_selected(self, event: DataTable.RowSelected) -> None:
+        row_key = event.row_key.value
+        if row_key == "ERR" or self.current_view == "notes":
+            return
+            
+        def check_result(result):
+            if result:
+                endpoint = "projects" if self.current_view == "projects" else "tasks"
+                try:
+                    requests.patch(
+                        f"{config.api_url}/api/{endpoint}/{row_key}/status", 
+                        json={"status": result}, 
+                        headers=get_headers()
+                    )
+                    self.refresh_current_view()
+                except:
+                    pass
+
+        self.push_screen(ChangeStatusScreen(), check_result)
+
+    def action_settings(self) -> None:
+        def check_result(result):
+            if result:
+                self.theme = result
+        self.push_screen(SettingsScreen(), check_result)
 
     def action_add_project(self) -> None:
         def check_result(result):

@@ -29,13 +29,15 @@ Check the health and connectivity of your configured API server.
 ### `nexus ui`
 Launch the full-screen interactive Terminal User Interface (TUI). This interface provides a persistent, interactive way to view and add Projects, Tasks, and Notes using a synthwave aesthetic.
 
-**TUI Keyboard Shortcuts:**
+**TUI Keyboard Shortcuts & Interactions:**
 - `p`: Switch view to Projects
 - `t`: Switch view to Tasks
 - `n`: Switch view to Notes
-- `Ctrl+P`: Open modal to add a new Project
-- `Ctrl+T`: Open modal to add a new Task
-- `Ctrl+N`: Open modal to add a new Note
+- `P`: Open modal to add a new Project
+- `T`: Open modal to add a new Task
+- `N`: Open modal to add a new Note
+- `Ctrl+S`: Open the Command Palette
+- `Enter` or `Click`: Select a Project or Task row to change its status (Pending, In Progress, Completed)
 - `q`: Quit the application
 
 ---

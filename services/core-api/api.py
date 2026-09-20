@@ -62,6 +62,16 @@ def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db)
 def get_projects(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     return db.query(models.Project).filter(models.Project.owner_id == current_user.id).all()
 
+@router.patch("/projects/{project_id}/status", response_model=schemas.Project)
+def update_project_status(project_id: int, status_update: schemas.StatusUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_project = db.query(models.Project).filter(models.Project.id == project_id, models.Project.owner_id == current_user.id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    db_project.status = status_update.status
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
 # --- Tasks ---
 @router.post("/tasks", response_model=schemas.Task)
 def create_task(task: schemas.TaskCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -81,6 +91,16 @@ def create_task(task: schemas.TaskCreate, db: Session = Depends(get_db), current
 def get_tasks(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     # For MVP, get all tasks (in reality, filter by user via projects or direct link)
     return db.query(models.Task).all()
+
+@router.patch("/tasks/{task_id}/status", response_model=schemas.Task)
+def update_task_status(task_id: int, status_update: schemas.StatusUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db_task.status = status_update.status
+    db.commit()
+    db.refresh(db_task)
+    return db_task
 
 # --- Notes ---
 @router.post("/notes", response_model=schemas.Note)

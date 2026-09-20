@@ -56,6 +56,7 @@ class Note(NoteBase):
 class ProjectBase(BaseModel):
     title: str
     description: Optional[str] = None
+    status: str = "pending"
 
 class ProjectCreate(ProjectBase):
     pass
@@ -82,3 +83,7 @@ class User(UserBase):
     projects: List[Project] = []
     class Config:
         from_attributes = True
+
+# --- Common Schemas ---
+class StatusUpdate(BaseModel):
+    status: str
