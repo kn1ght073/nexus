@@ -2,7 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+import os
+from pathlib import Path
 
 import models
 import schemas
@@ -119,3 +121,73 @@ def create_note(note: schemas.NoteCreate, db: Session = Depends(get_db), current
 @router.get("/notes", response_model=List[schemas.Note])
 def get_notes(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     return db.query(models.Note).all()
+
+# --- Files & Search ---
+@router.get("/files/browse", response_model=List[schemas.FileInfo])
+def browse_files(path: Optional[str] = None, current_user: models.User = Depends(get_current_user)):
+    target_dir = Path(path) if path else Path.home()
+    
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Directory not found")
+        
+    files = []
+    try:
+        for entry in os.scandir(target_dir):
+            try:
+                files.append({
+                    "name": entry.name,
+                    "path": entry.path,
+                    "is_dir": entry.is_dir(follow_symlinks=False),
+                    "size": entry.stat(follow_symlinks=False).st_size if not entry.is_dir(follow_symlinks=False) else 0
+                })
+            except (PermissionError, FileNotFoundError):
+                continue
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+        
+    return sorted(files, key=lambda x: (not x["is_dir"], x["name"].lower()))
+
+@router.get("/files/search", response_model=List[schemas.SearchResult])
+def search_files(query: str, path: Optional[str] = None, current_user: models.User = Depends(get_current_user)):
+    if not query:
+        return []
+        
+    target_dir = Path(path) if path else Path.home()
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Directory not found")
+
+    results = []
+    query_lower = query.lower()
+    
+    try:
+        for root, dirs, files in os.walk(target_dir):
+            # Skip hidden directories to speed up search
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            
+            for file in files:
+                if file.startswith('.'):
+                    continue
+                    
+                file_path = os.path.join(root, file)
+                try:
+                    # Only search small text files to prevent memory/performance issues
+                    if os.path.getsize(file_path) > 1_000_000:
+                        continue
+                        
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        for line in f:
+                            if query_lower in line.lower():
+                                results.append({
+                                    "path": file_path,
+                                    "match_context": line.strip()[:100]
+                                })
+                                break # One match per file is enough for MVP
+                except (PermissionError, FileNotFoundError):
+                    continue
+                    
+                if len(results) >= 50:
+                    return results
+    except Exception as e:
+        pass
+        
+    return results

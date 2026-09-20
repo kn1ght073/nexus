@@ -1,4 +1,6 @@
 import typer
+import warnings
+warnings.filterwarnings("ignore", message=".*urllib3 v2 only supports OpenSSL.*")
 import requests
 from rich.console import Console
 from rich.table import Table
@@ -12,10 +14,12 @@ app = typer.Typer(help="NEXUS CLI - Power Tools for the NEXUS Ecosystem")
 project_app = typer.Typer(help="Manage projects")
 task_app = typer.Typer(help="Manage tasks")
 note_app = typer.Typer(help="Manage notes")
+file_app = typer.Typer(help="Access files")
 
 app.add_typer(project_app, name="project")
 app.add_typer(task_app, name="task")
 app.add_typer(note_app, name="note")
+app.add_typer(file_app, name="file")
 
 console = Console()
 config = load_config()
@@ -140,6 +144,59 @@ def add_note(title: str, content: str):
         console.print(Panel(f"[dim]{n.get('content', '')}[/dim]", title=f"[bold blue]Note Saved: {n['title']} (ID: {n['id']})[/bold blue]", border_style="blue", expand=False))
     except Exception as e:
         console.print(Panel(str(e), title="[bold red]Error adding note[/bold red]", border_style="red", expand=False))
+
+# --- FILES ---
+@file_app.command("list")
+def list_files(path: str = typer.Argument(None, help="Directory path to browse")):
+    """List files in the specified directory (defaults to home)."""
+    try:
+        with console.status(f"[bold cyan]Browsing files{' in '+path if path else ''}...[/bold cyan]"):
+            params = {"path": path} if path else {}
+            response = requests.get(f"{config.api_url}/api/files/browse", params=params, headers=get_headers())
+            response.raise_for_status()
+            files = response.json()
+            
+        table = Table(title=f"[bold]NEXUS Files[/bold]", box=box.ROUNDED, header_style="bold yellow")
+        table.add_column("Type", width=4)
+        table.add_column("Name")
+        table.add_column("Size (bytes)", justify="right")
+        
+        for f in files:
+            icon = "📁" if f["is_dir"] else "📄"
+            size_str = str(f["size"]) if not f["is_dir"] else "-"
+            table.add_row(icon, f["name"], size_str)
+            
+        console.print(table)
+    except Exception as e:
+        console.print(Panel(str(e), title="[bold red]Error browsing files[/bold red]", border_style="red", expand=False))
+
+# --- SEARCH ---
+@app.command("search")
+def search_files(query: str, path: str = typer.Option(None, help="Directory path to search in")):
+    """Search for text within files on the device."""
+    try:
+        with console.status(f"[bold cyan]Searching for '{query}'...[/bold cyan]"):
+            params = {"query": query}
+            if path:
+                params["path"] = path
+            response = requests.get(f"{config.api_url}/api/files/search", params=params, headers=get_headers())
+            response.raise_for_status()
+            results = response.json()
+            
+        if not results:
+            console.print(Panel(f"No results found for '{query}'", title="[bold yellow]Search Empty[/bold yellow]", border_style="yellow", expand=False))
+            return
+            
+        table = Table(title=f"[bold]Search Results for '{query}'[/bold]", box=box.ROUNDED, header_style="bold green")
+        table.add_column("File Path", style="cyan")
+        table.add_column("Match Context")
+        
+        for r in results:
+            table.add_row(r["path"], r["match_context"])
+            
+        console.print(table)
+    except Exception as e:
+        console.print(Panel(str(e), title="[bold red]Error searching files[/bold red]", border_style="red", expand=False))
 
 if __name__ == "__main__":
     app()

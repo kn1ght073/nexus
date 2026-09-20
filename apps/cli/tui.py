@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", message=".*urllib3 v2 only supports OpenSSL.*")
 import requests
 from textual import on
 from textual.app import App, ComposeResult
@@ -118,6 +120,23 @@ class AddNoteScreen(ModalScreen):
             if title:
                 self.dismiss({"title": title, "content": content})
 
+class SearchScreen(ModalScreen):
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-dialog"):
+            yield Label("[bold cyan]Search Device Files[/bold cyan]", id="modal-title")
+            yield Input(placeholder="Search Query...", id="search-query")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Search", variant="success", id="submit")
+                yield Button("Cancel", variant="error", id="cancel")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(None)
+        elif event.button.id == "submit":
+            query = self.query_one("#search-query", Input).value
+            if query:
+                self.dismiss(query)
+
 class NexusTUI(App):
     CSS = """
     Screen {
@@ -172,10 +191,12 @@ class NexusTUI(App):
         ("p", "show_projects", "Projects"),
         ("t", "show_tasks", "Tasks"),
         ("n", "show_notes", "Notes"),
-        ("ctrl+p", "add_project", "Add Project"),
-        ("ctrl+t", "add_task", "Add Task"),
-        ("ctrl+n", "add_note", "Add Note"),
-        ("ctrl+s", "settings", "Settings"),
+        ("f", "show_files", "Files"),
+        ("s", "show_search", "Search"),
+        ("P", "add_project", "Add Project"),
+        ("T", "add_task", "Add Task"),
+        ("N", "add_note", "Add Note"),
+        ("ctrl+s", "command_palette", "Palette"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -197,6 +218,8 @@ class NexusTUI(App):
             self.action_show_tasks()
         elif self.current_view == "notes":
             self.action_show_notes()
+        elif self.current_view == "files":
+            self.action_show_files()
 
     def format_status(self, status: str) -> str:
         if status == "completed": return "✅ Completed"
@@ -261,7 +284,7 @@ class NexusTUI(App):
     @on(DataTable.RowSelected)
     def handle_row_selected(self, event: DataTable.RowSelected) -> None:
         row_key = event.row_key.value
-        if row_key == "ERR" or self.current_view == "notes":
+        if row_key in ["ERR", "EMPTY"] or self.current_view in ["notes", "files", "search"]:
             return
             
         def check_result(result):
@@ -314,6 +337,52 @@ class NexusTUI(App):
                 except:
                     pass
         self.push_screen(AddNoteScreen(), check_result)
+
+    def action_show_files(self) -> None:
+        table = self.query_one(DataTable)
+        if self.current_view != "files" or not table.columns:
+            table.clear(columns=True)
+            table.add_columns("Type", "Name", "Size (bytes)")
+        else:
+            table.clear()
+        self.current_view = "files"
+        
+        try:
+            response = requests.get(f"{config.api_url}/api/files/browse", headers=get_headers())
+            if response.status_code == 200:
+                files = response.json()
+                for f in files:
+                    icon = "📁" if f["is_dir"] else "📄"
+                    size_str = str(f["size"]) if not f["is_dir"] else "-"
+                    table.add_row(icon, f["name"], size_str, key=f["path"])
+        except Exception:
+            table.add_row("ERR", "Could not connect to Core API", "ERROR", key="ERR")
+
+    def action_show_search(self) -> None:
+        def check_result(query):
+            if query:
+                self.perform_search(query)
+        self.push_screen(SearchScreen(), check_result)
+
+    def perform_search(self, query: str) -> None:
+        table = self.query_one(DataTable)
+        if self.current_view != "search" or not table.columns:
+            table.clear(columns=True)
+            table.add_columns("File Path", "Match Context")
+        else:
+            table.clear()
+        self.current_view = "search"
+        
+        try:
+            response = requests.get(f"{config.api_url}/api/files/search", params={"query": query}, headers=get_headers())
+            if response.status_code == 200:
+                results = response.json()
+                if not results:
+                    table.add_row("-", "No results found.", key="EMPTY")
+                for r in results:
+                    table.add_row(r["path"], r["match_context"], key=r["path"])
+        except Exception:
+            table.add_row("ERR", "Could not connect to Core API", key="ERR")
 
 if __name__ == "__main__":
     app = NexusTUI()

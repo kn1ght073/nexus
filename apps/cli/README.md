@@ -33,12 +33,32 @@ Launch the full-screen interactive Terminal User Interface (TUI). This interface
 - `p`: Switch view to Projects
 - `t`: Switch view to Tasks
 - `n`: Switch view to Notes
+- `f`: Switch view to Files (Local filesystem)
+- `s`: Open global file search modal
 - `P`: Open modal to add a new Project
 - `T`: Open modal to add a new Task
 - `N`: Open modal to add a new Note
 - `Ctrl+S`: Open the Command Palette
 - `Enter` or `Click`: Select a Project or Task row to change its status (Pending, In Progress, Completed)
 - `q`: Quit the application
+
+---
+
+## File Operations
+
+### `nexus file list`
+List all files in a specific directory (defaults to the home directory).
+- **Arguments:**
+  - `PATH` (string, optional): The directory path to list.
+- **Example:** `nexus file list /Users/jaishastri/Documents`
+
+### `nexus search`
+Globally search for text within files on the connected device.
+- **Arguments:**
+  - `QUERY` (string): The text to search for.
+- **Options:**
+  - `--path` (string, optional): The directory to search within (defaults to home).
+- **Example:** `nexus search "API_KEY" --path /Users/jaishastri/Projects`
 
 ---
 

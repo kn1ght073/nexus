@@ -87,3 +87,14 @@ class User(UserBase):
 # --- Common Schemas ---
 class StatusUpdate(BaseModel):
     status: str
+
+# --- File & Search Schemas ---
+class FileInfo(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+    size: int
+
+class SearchResult(BaseModel):
+    path: str
+    match_context: str
