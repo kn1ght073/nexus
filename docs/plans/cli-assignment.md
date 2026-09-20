@@ -35,7 +35,9 @@ We will build the CLI client in `apps/cli/` using **Python** (specifically the `
 2. **Environment Setup**: Set up a virtual environment in `apps/cli/` and install `typer`, `rich` (for colored terminal output), and `requests`.
 3. **Configuration Module**: Build a small module to read/write the server URL to a local config file (e.g., `~/.nexus-cli.json`) so the CLI knows where the API lives.
 4. **Command Routing**: Implement the `project`, `task`, and `note` subcommands.
-5. **Testing**: We will test the CLI commands against your live backend server to prove the ecosystem works.
+5. **Global Packaging**: Add `pyproject.toml` to package the CLI so it can be installed globally via `pip install -e .`, enabling the `nexus` command anywhere on the system.
+6. **Cross-Device Networking**: Document the workflow to run the backend on Windows (`--host 0.0.0.0`) and connect from Mac via `nexus init --url http://<WINDOWS_IP>:8000`.
+7. **Testing**: We will test the CLI commands against your live backend server to prove the ecosystem works.
 
 ## Verification Plan
 
