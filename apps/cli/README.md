@@ -47,18 +47,18 @@ Launch the full-screen interactive Terminal User Interface (TUI). This interface
 ## File Operations
 
 ### `nexus file list`
-List all files in a specific directory (defaults to the home directory).
+List all files in a specific directory (defaults to the server's first configured storage root — the file jail).
 - **Arguments:**
   - `PATH` (string, optional): The directory path to list.
-- **Example:** `nexus file list /Users/jaishastri/Documents`
+- **Example:** `nexus file list ~/Documents`
 
 ### `nexus search`
 Globally search for text within files on the connected device.
 - **Arguments:**
   - `QUERY` (string): The text to search for.
 - **Options:**
-  - `--path` (string, optional): The directory to search within (defaults to home).
-- **Example:** `nexus search "API_KEY" --path /Users/jaishastri/Projects`
+  - `--path` (string, optional): The directory to search within (defaults to the storage root).
+- **Example:** `nexus search "API_KEY" --path ~/Projects`
 
 ---
 
@@ -103,3 +103,48 @@ Quickly capture a thought or text note to the central brain.
   - `TITLE` (string): The title of the note.
   - `CONTENT` (string): The body content of the note.
 - **Example:** `nexus note add "Shopping List" "Milk, Eggs, Bread"`
+
+
+---
+
+## Authentication (new)
+
+Since Core v0.2.0 the API uses real token authentication. The CLI stores it
+after login and attaches it to every request automatically.
+
+### `nexus register`
+Create your first NEXUS account (password must be 8+ characters).
+- **Example:** `nexus register`
+
+### `nexus login`
+Log in and store the access token locally (`~/.nexus-cli.json`).
+- **Example:** `nexus login`
+
+### `nexus logout`
+Forget the stored credentials.
+- **Example:** `nexus logout`
+
+### `nexus whoami`
+Show the account tied to the stored token.
+- **Example:** `nexus whoami`
+
+---
+
+## Additional Task & Device Commands (new)
+
+### `nexus task done`
+Mark a task as completed by its ID.
+- **Arguments:** `TASK_ID` (integer)
+- **Example:** `nexus task done 3`
+
+### `nexus task today`
+Show tasks created today (your daily focus list).
+- **Example:** `nexus task today`
+
+### `nexus devices`
+List the devices registered against your NEXUS account.
+- **Example:** `nexus devices`
+
+### `nexus file roots`
+Show the server's configured storage roots (what the file jail allows).
+- **Example:** `nexus file roots`

@@ -1,0 +1,122 @@
+"""Pytest configuration: fresh DB + jailed storage roots per test session.
+
+Settings are injected through the environment (NEXUS_*), which
+pydantic-settings reads natively. The app is imported once, after the
+env vars are set, and tables are recreated per test for isolation.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+# Ensure the service package is importable when running from anywhere
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+
+@pytest.fixture(scope="session")
+def storage_root(tmp_path_factory) -> Path:
+    root = tmp_path_factory.mktemp("storage")
+    (root / "docs").mkdir()
+    (root / "docs" / "report.txt").write_text(
+        "The networking assignment is due Thursday", encoding="utf-8"
+    )
+    (root / "secret_inside.txt").write_text("this file is inside the root", encoding="utf-8")
+    (root / "docs" / "big.txt").write_text("x" * 1_100_000, encoding="utf-8")  # >1MB: skipped
+    # a sibling outside the jail to prove traversal rejection
+    outside = root.parent / "outside"
+    outside.mkdir(exist_ok=True)
+    (outside / "root").write_text("root:x:0:0", encoding="utf-8")
+    return root
+
+
+@pytest.fixture(scope="session")
+def env(storage_root, tmp_path_factory):
+    """Set NEXUS_* env vars, then import the app once with those settings."""
+    db_dir = tmp_path_factory.mktemp("db")
+    overrides = {
+        "NEXUS_DATABASE_PATH": str(db_dir / "test.db"),
+        "NEXUS_JWT_SECRET_FILE": str(db_dir / "jwt_secret"),
+        # list[str] fields are JSON-decoded from env by pydantic-settings
+        "NEXUS_STORAGE_ROOTS": json.dumps([str(storage_root)]),
+    }
+    saved = {k: os.environ.get(k) for k in overrides}
+    os.environ.update(overrides)
+
+    import nexus_core.settings as settings_mod
+
+    settings_mod.get_settings.cache_clear()
+    import nexus_core.database as database_mod
+
+    import nexus_core.main as main_mod
+
+    app = main_mod.app
+    engine = database_mod.engine
+
+    yield {"app": app, "engine": engine}
+
+    database_mod.Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    settings_mod.get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def fresh_tables(env):
+    """Recreate a clean schema before every test (rows never leak across)."""
+    from nexus_core.database import Base
+
+    Base.metadata.drop_all(bind=env["engine"])
+    Base.metadata.create_all(bind=env["engine"])
+    yield
+
+
+@pytest.fixture()
+def client(env):
+    from fastapi.testclient import TestClient
+
+    with TestClient(env["app"]) as c:
+        yield c
+
+
+@pytest.fixture()
+def user_a(client):
+    """Registered user A with valid token."""
+    r = client.post(
+        "/api/auth/register",
+        json={"email": "a@nexus.example.com", "password": "password-a-123"},
+    )
+    assert r.status_code == 201, r.text
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "a@nexus.example.com", "password": "password-a-123"},
+    )
+    assert r.status_code == 200, r.text
+    return {
+        "token": r.json()["access_token"],
+        "headers": {"Authorization": f"Bearer {r.json()['access_token']}"},
+    }
+
+
+@pytest.fixture()
+def user_b(client):
+    """Registered user B with valid token (isolation tests)."""
+    r = client.post(
+        "/api/auth/register",
+        json={"email": "b@nexus.example.com", "password": "password-b-456"},
+    )
+    assert r.status_code == 201, r.text
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "b@nexus.example.com", "password": "password-b-456"},
+    )
+    assert r.status_code == 200, r.text
+    return {
+        "token": r.json()["access_token"],
+        "headers": {"Authorization": f"Bearer {r.json()['access_token']}"},
+    }

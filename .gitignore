@@ -28,10 +28,13 @@ Thumbs.db
 *.swp
 *.swo
 
-# Databases / Data
+# Databases / Data (any SQLite file, any suffix — .db, .bak, WAL sidecars)
 *.sqlite3
 *.db
-nexus.db
+*.db-bak
+*.db.bak
+nexus.db*
+nexus_jwt_secret*
 
 # Build / Packaging (Python)
 *.egg-info/

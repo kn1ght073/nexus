@@ -12,7 +12,10 @@ import os
 config = load_config()
 
 def get_headers():
-    return {"Authorization": "Bearer mock-token-123"}
+    """Auth headers from the stored login token (real JWT since core v0.2.0)."""
+    if config.token:
+        return {"Authorization": f"Bearer {config.token}"}
+    return {}
 
 ASCII_BANNER = """
 [bold cyan]
@@ -209,6 +212,12 @@ class NexusTUI(App):
         self.title = "NEXUS Core TUI"
         self.theme = "textual-dark"
         self.current_view = "projects"
+        if not config.token:
+            table = self.query_one(DataTable)
+            table.clear(columns=True)
+            table.add_columns("Hint")
+            table.add_row("Not logged in. Run 'nexus login' in a terminal, then restart 'nexus ui'.")
+            return
         self.action_show_projects()
 
     def refresh_current_view(self) -> None:
