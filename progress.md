@@ -21,10 +21,10 @@
 
 ## Current state
 
-- **Phase**: Step 6 (AI layer skeleton) — in progress
-- **Last commit**: `33d1ce7` (step 5)
-- **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 34 passed
-- **Loop health**: each session = one roadmap step, committed & pushed, ledger updated
+- **Phase**: ✅ BASIC BUILD COMPLETE (steps 1–6 done; step 7 deliberately deferred)
+- **Last commit**: `d077cac` (step 6)
+- **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 40 passed
+- **Loop health**: basic work finished — see "Completion summary" at the end of the step log
 
 ## Roadmap (from the architecture plan §8)
 
@@ -37,8 +37,8 @@
 | 4b | Desktop fallback (sandbox-scope): produce design doc + static HTML prototype of the dashboard/login (self-contained, inline CSS/JS) | ✅ merged into 4c | the React app IS the prototype; extra static HTML would duplicate — skipped deliberately |
 | 4c | Desktop fallback: Tauri 2 scaffold — `apps/desktop` with tauri.conf.json, Rust src-tauri skeleton, React+TS frontend skeleton, README on building locally | ✅ done | as above |
 | 5 | Mobile: pairing, capture, tasks, upload, notifications; Room cache + background sync | ✅ done (scaffold) | commit `33d1ce7`; Compose login + quick-capture tasks + done, Retrofit client, EncryptedSharedPreferences tokens, loopback/LAN network policy; Room cache + voice capture = next milestone |
-| 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | 🔄 in progress | interfaces + worker skeleton + mock pipeline; models can't be downloaded in sandbox |
-| 7 | Media/downloads/automation | ⬜ pending | per Initiation doc build order; only after core ecosystem works |
+| 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | ✅ done (skeleton) | commit `d077cac`; mock + Ollama backends, strict intent schema, permission-checked action engine, /inbox text+audio with 202 background pipeline; 40/40 tests |
+| 7 | Media/downloads/automation | ⬜ deferred | plan says: only after core ecosystem works; needs real backends (download clients, media servers) — next phase, after LAN TLS + Room cache land |
 
 ## Step log (append-only)
 
@@ -159,7 +159,7 @@ commit source only. One step, commit, push, update this ledger, stop.~~
   /sync, voice capture → STT job, foreground-service WS notifications).
 - Source-only (no Android SDK in sandbox) — builds in Android Studio.
 
-**Next session → Step 6.** AI layer skeleton per plan §2.1/§6.5: a
+**Next session → Step 6.** ~~AI layer skeleton per plan §2.1/§6.5: a
 `services/core-api/nexus_core/workers/` package with (a) `stt.py` —
 faster-whisper transcription interface with a mock fallback when the model is
 absent, (b) `llm.py` — Ollama client + strict JSON-Schema intent validation,
@@ -167,4 +167,63 @@ absent, (b) `llm.py` — Ollama client + strict JSON-Schema intent validation,
 registry before executing (create-task only in the skeleton), (d) an inbox
 job queue on the existing event bus, wired as FastAPI background tasks. Tests
 with the mock pipeline (no model downloads in sandbox). One step, commit,
-push, update this ledger, stop.
+push, update this ledger, stop.~~
+
+### Step 6 — AI layer skeleton ✅ (commit: `d077cac`)
+
+- `workers/stt.py`: faster-whisper when installed; deterministic mock
+  (sha256-derived pseudo-transcript) otherwise — pipeline testable without
+  model weights.
+- `workers/llm.py`: `INTENT_SCHEMA` (action ∈ create_task|create_note, title
+  1–200 chars, optional description/priority, `additionalProperties: false`);
+  `validate_intent` rejects bad shapes, unknown fields, prose-wrapped JSON;
+  `extract_intent_via_ollama` (localhost:11434) + `extract_intent_mock`;
+  `extract_intent(backend="auto")` tries Ollama then falls back.
+- `workers/action_engine.py`: the only executor. `PERMISSIONS` maps actions
+  to token scopes; execute_intent checks the actor's scope, then creates the
+  row with bump_revision + activity + events, exactly like the REST routers.
+- `routers/inbox.py`: `POST /api/inbox` (text form) and `POST
+  /api/inbox/audio` (multipart blob → `{storage_root}/inbox/`), both 202 +
+  background `run_pipeline`; `GET /api/inbox/{id}` status (result JSON
+  decoded). Pipeline statuses: pending → processing → completed |
+  rejected | failed (with error captured).
+- `InboxItem` model (kind, content, transcript, backend, result, error,
+  status, owner_id, timestamps).
+- Tests: 40/40 — text pipeline → task created + `[ai:text]` activity; audio
+  mock-STT pipeline; cross-user isolation (404); device token without
+  capture scope → 403; 8 intent-validation unit cases; action-engine scope
+  enforcement (capture OK, read rejected).
+
+---
+
+## Completion summary — basic build finished
+
+The roadmap's basic scope (steps 1–6) is **complete** as of commit `d077cac`
+(2026-11-15). What exists:
+
+- **Core API** (`services/core-api/nexus_core/`): real auth (Argon2+JWT),
+  ownership-isolated CRUD for projects/tasks/notes, path-jailed file
+  browse/search, activity timeline, sync engine (revisions + pull/push LWW),
+  scoped device tokens, WebSocket events, Universal Inbox with a
+  permission-checked AI pipeline (mock backends until Ollama/Whisper are
+  installed locally). **40/40 tests.**
+- **CLI** (`apps/cli/`): full command surface incl. login/register/logout,
+  sync, `--json` pipeline output, device tokens; TUI preserved.
+- **Desktop** (`apps/desktop/`): Tauri 2 + React/TS scaffold with
+  login/dashboard/tasks/devices/activity views and live WS updates.
+- **Mobile** (`apps/mobile/`): Kotlin/Compose scaffold with login +
+  quick-capture tasks, encrypted token store, LAN TLS network policy.
+
+**Deliberately not done** (recorded so the next session does not re-derive):
+step 7 (media/downloads/automation) per the plan's build order; LAN TLS +
+mDNS discovery; Room offline cache; keychain token stores; real AI backends
+(needs local model downloads); keyring CLI store. These are the next
+milestones — pick them up one at a time with the same step discipline.
+
+**Loop note**: the Z.ai scheduled-task tool was unavailable in this sandbox
+(cron tool errored "No such tool available" twice). The loop ran as a single
+continuous session instead: one roadmap step per iteration, each committed
+and pushed (bb718a3 → a4e2c02 → b3f1ed0 → 096ecd4 → 33d1ce7 → d077cac),
+ledger updated after each. All state is durable in this file + git history,
+so any future session can resume from `git log` + this file even without the
+scheduler.
