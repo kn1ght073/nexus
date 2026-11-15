@@ -113,3 +113,24 @@ class Activity(Base):
     action = Column(String, nullable=False, index=True)   # login, project.created, ...
     detail = Column(String, default="")
     created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class InboxItem(Base):
+    """Universal Inbox job: capture-anything, processed by the AI pipeline.
+
+    kind: text | audio. For audio, `content` holds the stored blob path.
+    Status machine: pending -> processing -> completed | rejected | failed.
+    """
+    __tablename__ = "inbox_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kind = Column(String, nullable=False)                 # text | audio
+    content = Column(String, nullable=False)              # text body or audio path
+    transcript = Column(String, nullable=True)            # STT output (audio)
+    backend = Column(String, nullable=True)               # stt backend used
+    result = Column(String, nullable=True)                # JSON result of the action engine
+    error = Column(String, nullable=True)
+    status = Column(String, default="pending", nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)

@@ -21,8 +21,8 @@
 
 ## Current state
 
-- **Phase**: Step 5 (Mobile scaffold) — in progress
-- **Last commit**: `096ecd4` (step 4c)
+- **Phase**: Step 6 (AI layer skeleton) — in progress
+- **Last commit**: `33d1ce7` (step 5)
 - **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 34 passed
 - **Loop health**: each session = one roadmap step, committed & pushed, ledger updated
 
@@ -33,11 +33,11 @@
 | 1 | Harden the Node: real auth, ownership-filtered queries, path-jailed files, CORS lockdown, remove nexus.db.bak | ✅ done | `nexus_core/` package; Argon2+JWT; 28 tests; CLI updated to real auth; repo hygiene |
 | 2 | Extend the Core: `updated_at/revision/deleted_at` + `/sync/pull` `/sync/push`; WebSocket event channel; device registry with capabilities + scopes | ✅ done | commit `a4e2c02`; revision bumped on all 9 mutation handlers; push LWW + stale-conflict results; device tokens with capability-validated scopes; 34/34 tests |
 | 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | ✅ done | commit `b3f1ed0`; `nexus sync`, `--json` on all 8 listing commands (stdout JSON, stderr rich), `nexus device token`; e2e 8/8 parse OK; keyring store deferred (documented) |
-| 4 | Desktop Tauri shell: login/pairing, dashboard, projects/tasks/notes, file manager, live events | 🔄 in progress | scaffold in step 4c; no build toolchain in sandbox |
-| 4b | Desktop fallback (sandbox-scope): produce design doc + static HTML prototype of the dashboard/login (self-contained, inline CSS/JS) | ⬜ pending | satisfies plan §2.2 for the review milestone |
-| 4c | Desktop fallback: Tauri 2 scaffold — `apps/desktop` with tauri.conf.json, Rust src-tauri skeleton, React+TS frontend skeleton, README on building locally | ⬜ pending | real code users can run locally; no cross-compile in sandbox |
-| 5 | Mobile: pairing, capture, tasks, upload, notifications; Room cache + background sync | ⬜ pending | Kotlin project scaffold + design doc; no emulator in sandbox |
-| 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | ⬜ pending | interfaces + worker skeleton + mock pipeline; models can't be downloaded in sandbox |
+| 4 | Desktop Tauri shell: login/pairing, dashboard, projects/tasks/notes, file manager, live events | ✅ done (scaffold) | commit `096ecd4`; Tauri 2 + React/TS: login/register, dashboard, tasks/devices/activity views, live WS refresh, CSP scoped to Core origins; keychain token store + file manager = next milestone; no build toolchain in sandbox |
+| 4b | Desktop fallback (sandbox-scope): produce design doc + static HTML prototype of the dashboard/login (self-contained, inline CSS/JS) | ✅ merged into 4c | the React app IS the prototype; extra static HTML would duplicate — skipped deliberately |
+| 4c | Desktop fallback: Tauri 2 scaffold — `apps/desktop` with tauri.conf.json, Rust src-tauri skeleton, React+TS frontend skeleton, README on building locally | ✅ done | as above |
+| 5 | Mobile: pairing, capture, tasks, upload, notifications; Room cache + background sync | ✅ done (scaffold) | commit `33d1ce7`; Compose login + quick-capture tasks + done, Retrofit client, EncryptedSharedPreferences tokens, loopback/LAN network policy; Room cache + voice capture = next milestone |
+| 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | 🔄 in progress | interfaces + worker skeleton + mock pipeline; models can't be downloaded in sandbox |
 | 7 | Media/downloads/automation | ⬜ pending | per Initiation doc build order; only after core ecosystem works |
 
 ## Step log (append-only)
@@ -117,9 +117,54 @@ One step, commit, push, update this ledger, stop.~~
 - Verified by live e2e: 8/8 `--json` commands emit parseable JSON; plain table
   mode unchanged; register/login/CRUD all green.
 
-**Next session → Step 4c.** Scaffold `apps/desktop` as a Tauri 2 project:
+**Next session → Step 4c.** ~~Scaffold `apps/desktop` as a Tauri 2 project:
 `tauri.conf.json`, `src-tauri/` Rust skeleton (main.rs with nexus core URL
 config), React+TS frontend skeleton (login view + dashboard shell + API client
 module hitting the Core's REST endpoints), and a README with local build
 instructions. Do not attempt to build (no Rust/npm toolchain in the sandbox);
-commit source only. One step, commit, push, update this ledger, stop.
+commit source only. One step, commit, push, update this ledger, stop.~~
+
+### Step 4c — Desktop Tauri scaffold ✅ (commit: `096ecd4`)
+
+- `apps/desktop/src-tauri/`: tauri.conf.json (1200×800 window, CSP allowing
+  only 127.0.0.1:8000 + nexus.local:8443 REST/WS), Cargo.toml (tauri 2),
+  build.rs, lib.rs (`core_base_url`, `core_health` commands as the Rust-side
+  hooks for tray/service integration), main.rs (windows_subsystem).
+- Frontend (vite 6 + react 18 + TS strict): `api.ts` client (login/register,
+  projects, tasks + done, devices, activity, health), `LoginView` (login /
+  register + live Core status), `DashboardView` (dashboard, projects, tasks
+  with add/complete, devices, activity feed; WebSocket `/ws` first-frame
+  token auth triggers refresh on any event), dark theme styles.
+- README: prerequisites, dev flow (Core → CLI register → `npm run tauri
+  dev`), production build, layout notes (icons via `npx tauri icon`).
+- Verified: all JSON configs parse, all relative imports resolve, file tree
+  complete. Source-only (no npm/Rust in sandbox) — builds locally.
+
+### Step 5 — Mobile scaffold ✅ (commit: `33d1ce7`)
+
+- `apps/mobile/`: Gradle version catalog (AGP 8.5.2, Kotlin 2.0.20, Compose
+  BOM 2024.09, Retrofit 2.11 + Moshi, OkHttp 4.12, Room 2.6.1,
+  security-crypto, datastore).
+- `NexusApi.kt`: Retrofit interface + DTOs for auth (login/register/me),
+  tasks (list/create/done), notes, devices — matching the Core's schemas
+  including `revision`.
+- `TokenStore.kt`: JWTs in EncryptedSharedPreferences (Keystore-backed
+  AES256), core URL in plain DataStore.
+- `ui/ViewModels.kt`: LoginViewModel + TasksViewModel + Compose screens —
+  login form (8+ char password hint) and quick-capture task list with Done.
+- `network_security_config.xml`: cleartext only for 127.0.0.1/localhost
+  (adb reverse dev flow); commented nexus.local CA-pinning block for LAN TLS
+  pairing; base-config denies cleartext.
+- README: dev build steps, LAN pairing, next milestones (Room offline cache +
+  /sync, voice capture → STT job, foreground-service WS notifications).
+- Source-only (no Android SDK in sandbox) — builds in Android Studio.
+
+**Next session → Step 6.** AI layer skeleton per plan §2.1/§6.5: a
+`services/core-api/nexus_core/workers/` package with (a) `stt.py` —
+faster-whisper transcription interface with a mock fallback when the model is
+absent, (b) `llm.py` — Ollama client + strict JSON-Schema intent validation,
+(c) `action_engine.py` — validates structured intents against a permission
+registry before executing (create-task only in the skeleton), (d) an inbox
+job queue on the existing event bus, wired as FastAPI background tasks. Tests
+with the mock pipeline (no model downloads in sandbox). One step, commit,
+push, update this ledger, stop.

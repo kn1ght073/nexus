@@ -364,3 +364,121 @@ def test_device_token_scopes(client, user_a):
     assert pull2.status_code == 200
     browse2 = client.get("/api/files/browse", headers={"Authorization": f"Bearer {read_tok['access_token']}"})
     assert browse2.status_code == 200
+
+
+# --- Step 6: Universal Inbox + AI pipeline (mock backends) ---
+def test_inbox_text_creates_task_via_pipeline(client, user_a):
+    r = client.post(
+        "/api/inbox",
+        data={"text": "Submit the networking assignment by Friday. It needs a diagram."},
+        headers=user_a["headers"],
+    )
+    assert r.status_code == 202, r.text
+    item_id = r.json()["inbox_item_id"]
+
+    status = client.get(f"/api/inbox/{item_id}", headers=user_a["headers"]).json()
+    assert status["status"] == "completed", status
+    assert status["result"] is not None
+
+    # pipeline created a task from the first sentence
+    tasks = client.get("/api/tasks", headers=user_a["headers"]).json()
+    assert any("networking assignment" in t["title"].lower() for t in tasks)
+
+    # activity shows the ai source
+    activity = client.get("/api/activity", headers=user_a["headers"]).json()
+    assert any(a["action"] == "task.created" and "[ai:text]" in a["detail"] for a in activity)
+
+
+def test_inbox_audio_mock_stt_pipeline(client, user_a, storage_root):
+    import io
+
+    # fake audio blob; mock STT derives a deterministic transcript
+    blob = io.BytesIO(b"FAKEAUDIODATA" * 100)
+    r = client.post(
+        "/api/inbox/audio",
+        files={"audio": ("voice.wav", blob, "audio/wav")},
+        headers=user_a["headers"],
+    )
+    assert r.status_code == 202, r.text
+    item_id = r.json()["inbox_item_id"]
+    assert r.json()["bytes"] > 0
+
+    status = client.get(f"/api/inbox/{item_id}", headers=user_a["headers"]).json()
+    assert status["status"] == "completed", status
+    assert status["result"]["kind"] == "task" and status["result"]["id"] > 0
+
+
+def test_inbox_isolation(client, user_a, user_b):
+    r = client.post("/api/inbox", data={"text": "A's private note"}, headers=user_a["headers"])
+    item_id = r.json()["inbox_item_id"]
+    r2 = client.get(f"/api/inbox/{item_id}", headers=user_b["headers"])
+    assert r2.status_code == 404
+
+
+def test_inbox_requires_capture_scope(client, user_a):
+    device = client.post(
+        "/api/devices/register",
+        json={"name": "Reader", "platform": "linux", "capabilities": ["notifications"]},
+        headers=user_a["headers"],
+    ).json()
+    tok = client.post(
+        f"/api/devices/{device['id']}/token",
+        json={"scopes": ["notifications"]},
+        headers=user_a["headers"],
+    ).json()
+    r = client.post(
+        "/api/inbox",
+        data={"text": "should be rejected"},
+        headers={"Authorization": f"Bearer {tok['access_token']}"},
+    )
+    assert r.status_code == 403
+
+
+# --- Step 6: intent validation (unit level) ---
+def test_intent_validation_rejects_bad_shapes():
+    from nexus_core.workers.llm import validate_intent, IntentValidationError
+
+    ok = validate_intent({"action": "create_task", "title": "Write report"})
+    assert ok["action"] == "create_task"
+
+    for bad in [
+        {"action": "rm -rf /", "title": "x"},          # action not in registry
+        {"title": "missing action"},
+        {"action": "create_task"},                      # missing title
+        {"action": "create_task", "title": ""},         # empty title
+        {"action": "create_task", "title": "x", "shell": "rm -rf"},  # unknown field
+        ["not", "an", "object"],
+        None,
+    ]:
+        try:
+            validate_intent(bad)
+            assert False, f"should have raised for {bad}"
+        except IntentValidationError:
+            pass
+
+
+def test_action_engine_scope_enforcement(client, user_a):
+    from nexus_core.database import SessionLocal
+    from nexus_core.models import User
+    from nexus_core.workers.action_engine import execute_intent, ActionError
+    from nexus_core.security import create_token
+    from nexus_core.routers.inbox import run_pipeline  # noqa: F401  (import check)
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "a@nexus.example.com").first()
+        # simulate a device-scoped token: capture scope CAN create_task
+        setattr(user, "_token_scope", "capture")
+        result = execute_intent(db, user, {"action": "create_task", "title": "scoped ok"})
+        assert result["kind"] == "task"
+
+        # read-only scope CANNOT
+        user2 = db.query(User).filter(User.email == "a@nexus.example.com").first()
+        setattr(user2, "_token_scope", "read")
+        try:
+            execute_intent(db, user2, {"action": "create_task", "title": "nope"})
+            assert False, "should have raised"
+        except ActionError:
+            pass
+    finally:
+        db.close()
