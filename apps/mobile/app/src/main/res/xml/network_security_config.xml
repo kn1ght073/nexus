@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NEXUS Mobile network policy (plan §5/§6):
+  - dev: cleartext allowed ONLY to the local loopback Core (adb reverse)
+  - LAN: https to nexus.local:8443, self-signed Node CA pinned via the
+    trust-anchors block below (add the exported ca cert to res/raw during
+    pairing and uncomment the block).
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+    <!-- LAN deployment pairing:
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">nexus.local</domain>
+        <trust-anchors>
+            <certificates src="@raw/nexus_node_ca" />
+        </trust-anchors>
+    </domain-config>
+    -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

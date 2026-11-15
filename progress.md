@@ -21,8 +21,8 @@
 
 ## Current state
 
-- **Phase**: Step 4c (Desktop Tauri scaffold) — in progress
-- **Last commit**: `b3f1ed0` (step 3)
+- **Phase**: Step 5 (Mobile scaffold) — in progress
+- **Last commit**: `096ecd4` (step 4c)
 - **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 34 passed
 - **Loop health**: each session = one roadmap step, committed & pushed, ledger updated
 
