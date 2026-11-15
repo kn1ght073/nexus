@@ -148,3 +148,29 @@ List the devices registered against your NEXUS account.
 ### `nexus file roots`
 Show the server's configured storage roots (what the file jail allows).
 - **Example:** `nexus file roots`
+
+---
+
+## Sync & Machine-Readable Output (new, Core v0.2.1)
+
+### `nexus sync`
+Pull server changes (projects/tasks/notes) since your last cursor — the CLI
+half of the metadata sync engine.
+- **Options:**
+  - `--since` (string, optional): ISO timestamp of the last successful pull; omit for a full first pull.
+- **Example:** `nexus sync` · `nexus sync --since 2026-11-15T08:00:00`
+
+### `nexus device token`
+Issue a scoped token bound to one of your devices (validated against the
+device's declared capabilities).
+- **Arguments:** `DEVICE_ID` (integer)
+- **Options:** `--scopes` (comma-separated; default `read`)
+- **Example:** `nexus device token 2 --scopes read,capture`
+
+### `--json` global flag
+Every listing command (`task list`, `task today`, `project list`, `note list`,
+`devices`, `file list`, `search`, `sync`) accepts `--json` and emits
+machine-readable JSON on stdout (tables/panels go to stderr), for pipelines:
+```bash
+nexus task list --json | jq '.[] | select(.status=="pending") | .id'
+```

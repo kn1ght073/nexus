@@ -1,6 +1,7 @@
 import typer
 import warnings
 warnings.filterwarnings("ignore", message=".*urllib3 v2 only supports OpenSSL.*")
+import json as _json
 import requests
 from rich.console import Console
 from rich.table import Table
@@ -15,13 +16,47 @@ task_app = typer.Typer(help="Manage tasks")
 note_app = typer.Typer(help="Manage notes")
 file_app = typer.Typer(help="Access files")
 
+
+console = Console()
+config = load_config()
+
+# --- --json: machine-readable output for pipelines (plan §2.3) ---
+JSON_MODE = {"enabled": False}
+
+
+def output_json(data) -> None:
+    """Print raw JSON when --json is set (single source of truth for all commands)."""
+    if JSON_MODE["enabled"]:
+        print(_json.dumps(data, indent=2, default=str))
+
+
+def _set_json_mode(json_output: bool) -> None:
+    JSON_MODE["enabled"] = json_output
+    if json_output:
+        # keep stdout clean for the JSON stream; rich writes to stderr
+        import sys as _sys
+
+        console.file = _sys.stderr
+
+
+@app.callback()
+def main_callback(
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit machine-readable JSON instead of tables."
+    ),
+):
+    """NEXUS CLI - Power Tools for the NEXUS Ecosystem"""
+    _set_json_mode(json_output)
+
+
+def _json_flag() -> bool:
+    return typer.Option(False, "--json", help="Emit machine-readable JSON instead of tables.")
+
+
 app.add_typer(project_app, name="project")
 app.add_typer(task_app, name="task")
 app.add_typer(note_app, name="note")
 app.add_typer(file_app, name="file")
-
-console = Console()
-config = load_config()
 
 
 def get_headers() -> dict:
@@ -160,8 +195,9 @@ def status():
 
 # --- PROJECTS ---
 @project_app.command("list")
-def list_projects():
+def list_projects(json_output: bool = _json_flag()):
     """List all projects."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -169,6 +205,9 @@ def list_projects():
             response = requests.get(f"{config.api_url}/api/projects", headers=get_headers())
             response.raise_for_status()
             projects = response.json()
+        output_json(projects)
+        if JSON_MODE["enabled"]:
+            return
 
         table = Table(title="[bold]NEXUS Projects[/bold]", box=box.ROUNDED, header_style="bold cyan")
         table.add_column("ID", justify="right", style="dim", width=4)
@@ -218,8 +257,9 @@ def _render_tasks_table(tasks: list):
 
 
 @task_app.command("list")
-def list_tasks():
+def list_tasks(json_output: bool = _json_flag()):
     """List all tasks."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -227,6 +267,9 @@ def list_tasks():
             response = requests.get(f"{config.api_url}/api/tasks", headers=get_headers())
             response.raise_for_status()
             tasks = response.json()
+        output_json(tasks)
+        if JSON_MODE["enabled"]:
+            return
         _render_tasks_table(tasks)
     except Exception as e:
         console.print(Panel(str(e), title="[bold red]Error fetching tasks[/bold red]", border_style="red", expand=False))
@@ -251,8 +294,9 @@ def add_task(title: str, project_id: int = typer.Argument(None)):
 
 
 @task_app.command("today")
-def today_tasks():
+def today_tasks(json_output: bool = _json_flag()):
     """Show tasks created today."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -260,6 +304,9 @@ def today_tasks():
             response = requests.get(f"{config.api_url}/api/tasks/today", headers=get_headers())
             response.raise_for_status()
             tasks = response.json()
+        output_json(tasks)
+        if JSON_MODE["enabled"]:
+            return
         _render_tasks_table(tasks)
     except Exception as e:
         console.print(Panel(str(e), title="[bold red]Error fetching today's tasks[/bold red]", border_style="red", expand=False))
@@ -298,8 +345,9 @@ def add_note(title: str, content: str):
 
 
 @note_app.command("list")
-def list_notes():
+def list_notes(json_output: bool = _json_flag()):
     """List saved notes."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -307,6 +355,9 @@ def list_notes():
             response = requests.get(f"{config.api_url}/api/notes", headers=get_headers())
             response.raise_for_status()
             notes = response.json()
+        output_json(notes)
+        if JSON_MODE["enabled"]:
+            return
         table = Table(title="[bold]NEXUS Notes[/bold]", box=box.ROUNDED, header_style="bold blue")
         table.add_column("ID", justify="right", style="dim", width=4)
         table.add_column("Title")
@@ -321,8 +372,9 @@ def list_notes():
 
 # --- FILES ---
 @file_app.command("list")
-def list_files(path: str = typer.Argument(None, help="Directory path to browse")):
+def list_files(path: str = typer.Argument(None, help="Directory path to browse"), json_output: bool = _json_flag()):
     """List files in a storage root (defaults to the configured root)."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -331,6 +383,9 @@ def list_files(path: str = typer.Argument(None, help="Directory path to browse")
             response = requests.get(f"{config.api_url}/api/files/browse", params=params, headers=get_headers())
             response.raise_for_status()
             files = response.json()
+        output_json(files)
+        if JSON_MODE["enabled"]:
+            return
 
         table = Table(title=f"[bold]NEXUS Files[/bold]", box=box.ROUNDED, header_style="bold yellow")
         table.add_column("Type", width=4)
@@ -348,8 +403,9 @@ def list_files(path: str = typer.Argument(None, help="Directory path to browse")
 
 
 @file_app.command("roots")
-def show_roots():
+def show_roots(json_output: bool = _json_flag()):
     """Show the server's configured storage roots (the file jail)."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -363,8 +419,9 @@ def show_roots():
 
 # --- SEARCH ---
 @app.command("search")
-def search(query: str, path: str = typer.Option(None, help="Directory path to search in")):
+def search(query: str, path: str = typer.Option(None, help="Directory path to search in"), json_output: bool = _json_flag()):
     """Search for text within files inside the storage roots."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
@@ -375,6 +432,9 @@ def search(query: str, path: str = typer.Option(None, help="Directory path to se
             response = requests.get(f"{config.api_url}/api/files/search", params=params, headers=get_headers())
             response.raise_for_status()
             results = response.json()
+        output_json(results)
+        if JSON_MODE["enabled"]:
+            return
 
         if not results:
             console.print(Panel(f"No results found for '{query}'", title="[bold yellow]Search Empty[/bold yellow]", border_style="yellow", expand=False))
@@ -394,14 +454,18 @@ def search(query: str, path: str = typer.Option(None, help="Directory path to se
 
 # --- DEVICES ---
 @app.command()
-def devices():
+def devices(json_output: bool = _json_flag()):
     """List registered devices."""
+    _set_json_mode(json_output)
     if not require_login():
         return
     try:
         response = requests.get(f"{config.api_url}/api/devices", headers=get_headers(), timeout=5)
         response.raise_for_status()
         device_list = response.json()
+        output_json(device_list)
+        if JSON_MODE["enabled"]:
+            return
         if not device_list:
             console.print(Panel("No devices registered yet.", title="NEXUS Devices", border_style="yellow", expand=False))
             return
@@ -418,6 +482,96 @@ def devices():
         console.print(table)
     except Exception as e:
         console.print(Panel(str(e), title="[bold red]Error fetching devices[/bold red]", border_style="red", expand=False))
+
+
+# --- SYNC (step 3) ---
+@app.command()
+def sync(
+    since: str = typer.Option(
+        None, help="ISO timestamp of the last pull; omit for a full first pull."
+    ),
+    json_output: bool = _json_flag()
+):
+    """Pull server changes (projects/tasks/notes) since a cursor."""
+    _set_json_mode(json_output)
+    if not require_login():
+        return
+    try:
+        payload = {"since": since} if since else {}
+        response = requests.post(
+            f"{config.api_url}/api/sync/pull", json=payload, headers=get_headers(), timeout=10
+        )
+        response.raise_for_status()
+        body = response.json()
+        changes = body["changes"]
+        output_json(body)
+        counts = {k: len(v) for k, v in changes.items()}
+        total = sum(counts.values())
+        if JSON_MODE["enabled"]:
+            return
+        lines = "\n".join(
+            f"[cyan]{kind}[/cyan]: {counts[kind]} change(s)" for kind in ("projects", "tasks", "notes")
+        )
+        console.print(
+            Panel(
+                lines + f"\nServer time: [dim]{body['server_time']}[/dim]",
+                title=f"[bold green]Sync pull complete ({total} change(s))[/bold green]",
+                border_style="green",
+                expand=False,
+            )
+        )
+        for t in changes["tasks"]:
+            deleted = t.get("deleted_at") is not None
+            mark = "[red]✝ deleted[/red]" if deleted else f"rev {t['revision']}"
+            console.print(f"  • task #{t['id']} [bold]{t['title']}[/bold] ({mark})")
+    except Exception as e:
+        console.print(Panel(str(e), title="[bold red]Sync failed[/bold red]", border_style="red", expand=False))
+
+
+# --- DEVICE (step 3) ---
+device_app = typer.Typer(help="Manage devices & device tokens")
+
+
+app.add_typer(device_app, name="device")
+
+
+@device_app.command("token")
+def device_token(
+    device_id: int,
+    scopes: str = typer.Option(
+        "read", help="Comma-separated scopes (subset of the device's capabilities)."
+    ),
+    json_output: bool = _json_flag()
+):
+    """Issue a scoped token bound to one of your devices (admin action)."""
+    _set_json_mode(json_output)
+    if not require_login():
+        return
+    try:
+        response = requests.post(
+            f"{config.api_url}/api/devices/{device_id}/token",
+            json={"scopes": [s.strip() for s in scopes.split(",") if s.strip()]},
+            headers=get_headers(),
+            timeout=5,
+        )
+        if response.status_code == 400:
+            console.print(Panel(response.json().get("detail", "invalid scopes"), title="[bold red]Invalid scopes[/bold red]", border_style="red", expand=False))
+            raise typer.Exit(1)
+        response.raise_for_status()
+        body = response.json()
+        output_json(body)
+        console.print(
+            Panel(
+                f"scope: [bold cyan]{body['scope']}[/bold cyan]\n[dim]Store this token on the device; it is not saved by the CLI.[/dim]",
+                title=f"[bold green]Device token for device #{body['device_id']}[/bold green]",
+                border_style="green",
+                expand=False,
+            )
+        )
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(Panel(str(e), title="[bold red]Error issuing token[/bold red]", border_style="red", expand=False))
 
 
 if __name__ == "__main__":

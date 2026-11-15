@@ -21,9 +21,9 @@
 
 ## Current state
 
-- **Phase**: Step 2 (Extend the Core) — in progress
-- **Last commit**: (see `git log -1`)
-- **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 28 passed (as of step 1)
+- **Phase**: Step 3 (Extend the CLI) — in progress
+- **Last commit**: `a4e2c02` (step 2)
+- **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 34 passed (as of step 2)
 - **Loop health**: each session = one roadmap step, committed & pushed, ledger updated
 
 ## Roadmap (from the architecture plan §8)
@@ -31,8 +31,8 @@
 | # | Step | Status | Notes |
 |---|------|--------|-------|
 | 1 | Harden the Node: real auth, ownership-filtered queries, path-jailed files, CORS lockdown, remove nexus.db.bak | ✅ done | `nexus_core/` package; Argon2+JWT; 28 tests; CLI updated to real auth; repo hygiene |
-| 2 | Extend the Core: `updated_at/revision/deleted_at` + `/sync/pull` `/sync/push`; WebSocket event channel; device registry with capabilities + scopes | 🔄 in progress | `updated_at/deleted_at` + `/sync/pull` + WS exist from step 1; remaining: `revision` counters, `/sync/push` with last-writer-wins, device scopes |
-| 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | ⬜ pending | `devices` & `task today` already exist from step 1; remaining: `nexus sync`, `--json` global flag, keyring token store |
+| 2 | Extend the Core: `updated_at/revision/deleted_at` + `/sync/pull` `/sync/push`; WebSocket event channel; device registry with capabilities + scopes | ✅ done | commit `a4e2c02`; revision bumped on all 9 mutation handlers; push LWW + stale-conflict results; device tokens with capability-validated scopes; 34/34 tests |
+| 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | 🔄 in progress | `devices` & `task today` exist from step 1; remaining: `nexus sync`, `--json` global flag |
 | 4 | Desktop Tauri shell: login/pairing, dashboard, projects/tasks/notes, file manager, live events | ⬜ pending | outside sandbox scope — build the static prototype pages instead, document |
 | 4b | Desktop fallback (sandbox-scope): produce design doc + static HTML prototype of the dashboard/login (self-contained, inline CSS/JS) | ⬜ pending | satisfies plan §2.2 for the review milestone |
 | 4c | Desktop fallback: Tauri 2 scaffold — `apps/desktop` with tauri.conf.json, Rust src-tauri skeleton, React+TS frontend skeleton, README on building locally | ⬜ pending | real code users can run locally; no cross-compile in sandbox |
@@ -69,8 +69,34 @@ SQLAlchemy + SQLite WAL):
   live uvicorn smoke (health/register/login/CRUD/jail/WS), CLI e2e vs live
   server — all green. Deliverables exported to `/home/z/my-project/download/`.
 
-**Next session → Step 2.** Add `revision` integer columns + `bump_revision()`
+**Next session → Step 2.** ~~Add `revision` integer columns + `bump_revision()`
 on mutation for Task/Note/Project; add `POST /api/sync/push` accepting client
 changes with revision + last-writer-wins and returning the server revision per
 row; tests for push conflicts (stale revision → 409 or server-wins detail).
-Do not linger: one step, commit, push, update this ledger, stop.
+Do not linger: one step, commit, push, update this ledger, stop.~~
+
+### Step 2 — Extend the Core ✅ (commit: `a4e2c02`)
+
+- `revision` integer column on Project/Task/Note (default 1, indexed);
+  `bump_revision()` called in all 9 mutation handlers (create/update/status/
+  done/tombstone) across projects/tasks/notes routers.
+- `POST /api/sync/push`: accepts creates (id=None), updates and deletes
+  (deleted=true → tombstone). Last-writer-wins: writes with
+  `revision >= server_revision` are applied; stale writers get
+  `accepted=false, conflict=true, server_revision=<current>` so clients can
+  rebase. Cross-user ids → "not found" (isolation tested).
+- Device tokens: `POST /api/devices/{id}/token` validates requested scopes
+  against the device's declared capabilities (undeclared scope → 400),
+  issues a JWT bound to the device id with the granted scope list.
+  `require_scope()` dependency: interactive tokens (scope="user") pass
+  everything; device tokens must intersect the route's allowed set —
+  files need read/filesystem, sync/pull needs read/sync, sync/push needs
+  sync/automation/filesystem, device-token issuance needs admin/devices.
+- Tests: 34/34 (6 new) + live uvicorn smoke (push create; read-scoped token
+  pulls 200, pushes 403).
+
+**Next session → Step 3.** Add `nexus sync` (pull to table output, `--json`
+optional), a global `--json` flag on the CLI for machine-readable output of
+task/project/note/device lists, and a `nexus device token` passthrough if
+cheap. Keep Typer structure; do not touch the TUI beyond what --json needs.
+One step, commit, push, update this ledger, stop.
