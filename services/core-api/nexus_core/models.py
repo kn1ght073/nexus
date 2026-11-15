@@ -60,6 +60,7 @@ class Project(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     deleted_at = Column(DateTime, nullable=True)  # tombstone for sync
+    revision = Column(Integer, default=1, nullable=False, index=True)  # sync: bumped on every mutation
 
     owner = relationship("User", back_populates="projects")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
@@ -79,6 +80,7 @@ class Task(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
+    revision = Column(Integer, default=1, nullable=False, index=True)  # sync: bumped on every mutation
 
     project = relationship("Project", back_populates="tasks")
     owner = relationship("User", back_populates="tasks")
@@ -95,6 +97,7 @@ class Note(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
+    revision = Column(Integer, default=1, nullable=False, index=True)  # sync: bumped on every mutation
 
     project = relationship("Project", back_populates="notes")
     owner = relationship("User", back_populates="notes")

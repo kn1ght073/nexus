@@ -233,3 +233,134 @@ def test_ws_rejects_bad_token(client):
         ws.send_text("mock-token-123")
         error = ws.receive_json()
         assert error["type"] == "error"
+
+
+# --- Step 2: revisions ---
+def test_revision_bumps_on_mutation(client, user_a):
+    task = client.post("/api/tasks", json={"title": "rev test"}, headers=user_a["headers"]).json()
+    assert task["revision"] == 1
+    updated = client.patch(f"/api/tasks/{task['id']}/status", json={"status": "in_progress"}, headers=user_a["headers"]).json()
+    assert updated["revision"] == 2
+    done = client.post(f"/api/tasks/{task['id']}/done", headers=user_a["headers"]).json()
+    assert done["revision"] == 3
+    project = client.post("/api/projects", json={"title": "rev proj"}, headers=user_a["headers"]).json()
+    assert project["revision"] == 1
+    client.patch(f"/api/projects/{project['id']}/status", json={"status": "completed"}, headers=user_a["headers"])
+    listed = client.get("/api/projects", headers=user_a["headers"]).json()
+    assert [p for p in listed if p["id"] == project["id"]][0]["revision"] == 2
+
+
+# --- Step 2: /sync/push ---
+def test_sync_push_create_and_update(client, user_a):
+    # push a create (id=None)
+    r = client.post(
+        "/api/sync/push",
+        json={"tasks": [{"title": "pushed task", "revision": 1}], "notes": [], "projects": []},
+        headers=user_a["headers"],
+    )
+    assert r.status_code == 200, r.text
+    res = r.json()["results"]["tasks"]
+    assert res[0]["accepted"] is True and res[0]["id"] is not None
+
+    # server row now exists; update via push with correct revision
+    task_id = res[0]["id"]
+    r2 = client.post(
+        "/api/sync/push",
+        json={"tasks": [{"id": task_id, "title": "pushed task v2", "status": "completed", "revision": 1}], "notes": [], "projects": []},
+        headers=user_a["headers"],
+    )
+    res2 = r2.json()["results"]["tasks"]
+    assert res2[0]["accepted"] is True
+    assert res2[0]["server_revision"] == 2
+
+    # normal GET reflects the pushed change
+    tasks = client.get("/api/tasks", headers=user_a["headers"]).json()
+    mine = [t for t in tasks if t["id"] == task_id][0]
+    assert mine["title"] == "pushed task v2" and mine["status"] == "completed" and mine["revision"] == 2
+
+
+def test_sync_push_conflict_stale_revision(client, user_a):
+    task = client.post("/api/tasks", json={"title": "conflict base"}, headers=user_a["headers"]).json()
+    # server bumps to rev 2
+    client.patch(f"/api/tasks/{task['id']}/status", json={"status": "in_progress"}, headers=user_a["headers"])
+    # stale client still thinks rev 1 and tries to write
+    r = client.post(
+        "/api/sync/push",
+        json={"tasks": [{"id": task["id"], "title": "stale write", "revision": 1}], "notes": [], "projects": []},
+        headers=user_a["headers"],
+    )
+    res = r.json()["results"]["tasks"]
+    assert res[0]["accepted"] is False and res[0]["conflict"] is True
+    assert res[0]["server_revision"] == 2
+    # title unchanged on server
+    tasks = client.get("/api/tasks", headers=user_a["headers"]).json()
+    mine = [t for t in tasks if t["id"] == task["id"]][0]
+    assert mine["title"] == "conflict base"
+
+
+def test_sync_push_delete_tombstones(client, user_a):
+    task = client.post("/api/tasks", json={"title": "to tombstone"}, headers=user_a["headers"]).json()
+    r = client.post(
+        "/api/sync/push",
+        json={"tasks": [{"id": task["id"], "deleted": True, "revision": task["revision"]}], "notes": [], "projects": []},
+        headers=user_a["headers"],
+    )
+    assert r.json()["results"]["tasks"][0]["accepted"] is True
+    assert client.get("/api/tasks", headers=user_a["headers"]).json() == []
+
+
+def test_sync_push_isolation(client, user_a, user_b):
+    task = client.post("/api/tasks", json={"title": "A's task"}, headers=user_a["headers"]).json()
+    r = client.post(
+        "/api/sync/push",
+        json={"tasks": [{"id": task["id"], "title": "hijack", "revision": 1}], "notes": [], "projects": []},
+        headers=user_b["headers"],
+    )
+    res = r.json()["results"]["tasks"]
+    assert res[0]["accepted"] is False and res[0]["reason"] == "not found"
+
+
+# --- Step 2: device tokens with scopes ---
+def test_device_token_scopes(client, user_a):
+    device = client.post(
+        "/api/devices/register",
+        json={"name": "Android", "platform": "android", "capabilities": ["notifications", "capture"]},
+        headers=user_a["headers"],
+    ).json()
+
+    # request a scope the device does not declare -> 400
+    bad = client.post(
+        f"/api/devices/{device['id']}/token",
+        json={"scopes": ["filesystem"]},
+        headers=user_a["headers"],
+    )
+    assert bad.status_code == 400
+
+    # request declared scopes -> token with "capture,notifications"
+    ok = client.post(
+        f"/api/devices/{device['id']}/token",
+        json={"scopes": ["notifications", "capture"]},
+        headers=user_a["headers"],
+    )
+    assert ok.status_code == 200
+    body = ok.json()
+    assert body["scope"] == "capture,notifications"
+
+    # that scoped token CANNOT read files (no read/filesystem scope)
+    files_r = client.get("/api/files/browse", headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert files_r.status_code == 403
+
+    # but CAN pull sync (read allowed? scope lacks read -> 403)
+    pull_r = client.post("/api/sync/pull", json={}, headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert pull_r.status_code == 403
+
+    # a read-scoped token CAN pull
+    read_tok = client.post(
+        f"/api/devices/{device['id']}/token",
+        json={"scopes": ["read"]},
+        headers=user_a["headers"],
+    ).json()
+    pull2 = client.post("/api/sync/pull", json={}, headers={"Authorization": f"Bearer {read_tok['access_token']}"})
+    assert pull2.status_code == 200
+    browse2 = client.get("/api/files/browse", headers={"Authorization": f"Bearer {read_tok['access_token']}"})
+    assert browse2.status_code == 200

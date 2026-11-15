@@ -15,7 +15,7 @@ from ..database import get_db
 from ..deps import log_activity
 from ..models import User
 from ..schemas import FileInfo, SearchResult
-from ..security import get_current_user
+from ..security import get_current_user, require_scope
 from ..settings import get_settings
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -50,7 +50,7 @@ def storage_roots(current_user: User = Depends(get_current_user)):
 @router.get("/browse", response_model=list[FileInfo])
 def browse_files(
     path: str | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_scope("read", "filesystem")),
 ):
     target_dir = _resolve_jailed_path(path)
     if not target_dir.exists() or not target_dir.is_dir():
@@ -85,7 +85,7 @@ def browse_files(
 def search_files(
     query: str,
     path: str | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_scope("read", "filesystem")),
 ):
     # Validate the path BEFORE any early return: a jail escape attempt must
     # be rejected even when the query itself is too short to search for.

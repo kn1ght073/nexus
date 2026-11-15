@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..deps import log_activity, owned_project_or_404, publish_event
+from ..deps import bump_revision, log_activity, owned_project_or_404, publish_event
 from ..database import get_db
 from ..models import Task, User
 from ..schemas import StatusUpdate, TaskCreate, TaskOut
@@ -36,6 +36,7 @@ def create_task(
         owned_project_or_404(db, current_user, task_in.project_id)
     task = Task(**task_in.model_dump(), owner_id=current_user.id)
     db.add(task)
+    bump_revision(task)  # sync: revision +1
     db.commit()
     db.refresh(task)
     log_activity(db, user_id=current_user.id, action="task.created", detail=task.title)
@@ -97,6 +98,7 @@ def update_task_status(
 ):
     task = _owned_task_or_404(db, current_user, task_id)
     task.status = status_update.status
+    bump_revision(task)  # sync: revision +1
     db.commit()
     db.refresh(task)
     log_activity(db, user_id=current_user.id, action="task.status_changed", detail=f"{task.title} -> {task.status}")
@@ -114,6 +116,7 @@ def complete_task(
     """Convenience endpoint backing `nexus task done <id>`."""
     task = _owned_task_or_404(db, current_user, task_id)
     task.status = "completed"
+    bump_revision(task)  # sync: revision +1
     db.commit()
     db.refresh(task)
     log_activity(db, user_id=current_user.id, action="task.completed", detail=task.title)
@@ -132,6 +135,7 @@ def delete_task(
     from ..models import utcnow
 
     task.deleted_at = utcnow()  # tombstone for sync
+    bump_revision(task)  # sync: revision +1
     db.commit()
     log_activity(db, user_id=current_user.id, action="task.deleted", detail=task.title)
     publish_event("TASK_DELETED", current_user.id, {"task_id": task.id})

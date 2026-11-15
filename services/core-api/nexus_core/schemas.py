@@ -77,6 +77,18 @@ class DeviceOut(BaseModel):
         return data
 
 
+
+# --- Device tokens (step 2: per-device scopes) ---
+class DeviceTokenRequest(BaseModel):
+    scopes: list[str] = Field(default_factory=list)  # subset of device capabilities (+ read)
+
+
+class DeviceTokenResponse(BaseModel):
+    access_token: str
+    scope: str
+    device_id: int
+
+
 # --- Projects ---
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
@@ -92,6 +104,7 @@ class ProjectOut(BaseModel):
     owner_id: int
     created_at: datetime
     updated_at: datetime
+    revision: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -118,6 +131,7 @@ class TaskOut(BaseModel):
     owner_id: int
     created_at: datetime
     updated_at: datetime
+    revision: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -137,6 +151,7 @@ class NoteOut(BaseModel):
     owner_id: int
     created_at: datetime
     updated_at: datetime
+    revision: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -149,6 +164,38 @@ class ActivityOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+
+# --- Sync push (step 2) ---
+class PushItem(BaseModel):
+    """One client-side change. id must be None for creates."""
+    id: int | None = None
+    title: str | None = None
+    description: str | None = None
+    status: TaskStatus | None = None
+    content: str | None = None
+    project_id: int | None = None
+    revision: int = Field(ge=1, description="client's last-known revision of this row")
+    deleted: bool = False
+
+
+class SyncPushRequest(BaseModel):
+    tasks: list[PushItem] = []
+    notes: list[PushItem] = []
+    projects: list[PushItem] = []
+
+
+class PushResult(BaseModel):
+    id: int | None
+    accepted: bool
+    server_revision: int
+    conflict: bool = False
+    reason: str | None = None
+
+
+class SyncPushResponse(BaseModel):
+    results: dict[str, list[PushResult]]
 
 
 # --- Files ---

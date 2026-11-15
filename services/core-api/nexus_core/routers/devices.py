@@ -1,12 +1,12 @@
-"""Device registry: register, list, heartbeat, remove."""
+"""Device registry: register, list, heartbeat, remove, scoped device tokens."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..deps import log_activity, publish_event
 from ..database import get_db
 from ..models import Device, User
-from ..schemas import DeviceCreate, DeviceOut
-from ..security import get_current_user
+from ..schemas import DeviceCreate, DeviceOut, DeviceTokenRequest, DeviceTokenResponse
+from ..security import create_token, get_current_user, require_scope
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -81,3 +81,47 @@ def remove_device(
     log_activity(db, user_id=current_user.id, action="device.removed", detail=device.name)
     db.delete(device)
     db.commit()
+
+
+@router.post("/{device_id}/token", response_model=DeviceTokenResponse)
+def issue_device_token(
+    device_id: int,
+    request: DeviceTokenRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_scope("admin", "devices")),
+):
+    """Issue a scoped token bound to one of the user's devices.
+
+    The token carries the requested capability subset (validated against the
+    device's declared capabilities) plus the device id, so activity entries
+    and sync pushes can be attributed to the device. Tokens without the
+    `admin` scope are rejected by admin-only routes (see security.py).
+    """
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.owner_id == current_user.id)
+        .first()
+    )
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    declared = {c for c in device.capabilities.split(",") if c}
+    requested = set(request.scopes)
+    unknown = requested - declared - {"read"}
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"scopes not declared by device: {sorted(unknown)}",
+        )
+
+    scope = ",".join(sorted(requested)) if requested else "read"
+    token = create_token(current_user.id, "access", device_id=device.id, scope=scope)
+    log_activity(
+        db,
+        user_id=current_user.id,
+        action="device.token_issued",
+        detail=f"{device.name} scope={scope}",
+        device_id=device.id,
+    )
+    db.commit()
+    return DeviceTokenResponse(access_token=token, scope=scope, device_id=device.id)

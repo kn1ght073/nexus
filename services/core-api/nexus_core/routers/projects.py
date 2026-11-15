@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..deps import log_activity, owned_project_or_404, publish_event
+from ..deps import bump_revision, log_activity, owned_project_or_404, publish_event
 from ..database import get_db
 from ..models import Project, User
 from ..schemas import ProjectCreate, ProjectOut, StatusUpdate
@@ -19,6 +19,7 @@ def create_project(
 ):
     project = Project(**project_in.model_dump(), owner_id=current_user.id)
     db.add(project)
+    bump_revision(project)  # sync: revision +1
     db.commit()
     db.refresh(project)
     log_activity(db, user_id=current_user.id, action="project.created", detail=project.title)
@@ -57,6 +58,7 @@ def update_project_status(
 ):
     project = owned_project_or_404(db, current_user, project_id)
     project.status = status_update.status
+    bump_revision(project)  # sync: revision +1
     db.commit()
     db.refresh(project)
     log_activity(db, user_id=current_user.id, action="project.status_changed", detail=f"{project.title} -> {project.status}")
@@ -75,6 +77,7 @@ def delete_project(
     from ..models import utcnow
 
     project.deleted_at = utcnow()  # tombstone, not row deletion (sync §3)
+    bump_revision(project)  # sync: revision +1
     db.commit()
     log_activity(db, user_id=current_user.id, action="project.deleted", detail=project.title)
     publish_event("PROJECT_DELETED", current_user.id, {"project_id": project.id})

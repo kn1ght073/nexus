@@ -113,4 +113,30 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    # attach token claims so scoped dependencies can reason about them
+    setattr(user, "_token_scope", payload.get("scope", "user"))
+    setattr(user, "_token_device_id", payload.get("dev"))
     return user
+
+
+def require_scope(*allowed: str):
+    """Dependency factory: require the token's scope to intersect `allowed`.
+
+    Plain user tokens carry scope="user" (full access). Device tokens carry a
+    comma-separated capability list (e.g. "read,filesystem"); they are only
+    accepted if one of their capabilities is in `allowed`.
+    """
+
+    def checker(current_user: User = Depends(get_current_user)) -> User:
+        scope = getattr(current_user, "_token_scope", "user")
+        if scope == "user":
+            return current_user  # full-trust interactive token
+        granted = {s for s in scope.split(",") if s}
+        if not granted.intersection(allowed):
+            raise HTTPException(
+                status_code=403,
+                detail=f"token scope '{scope}' lacks required scope {sorted(allowed)}",
+            )
+        return current_user
+
+    return checker

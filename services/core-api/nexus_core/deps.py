@@ -17,6 +17,16 @@ def publish_event(event_type: str, user_id: int, data: dict | None = None) -> No
     publish(DomainEvent(type=event_type, user_id=user_id, data=data or {}))
 
 
+def bump_revision(obj) -> None:
+    """Bump the sync revision on a mutable row (Project/Task/Note).
+
+    Call right before commit on every mutation path (create starts at 1);
+    the revision lets /sync/push detect stale writers (last-writer-wins).
+    """
+    current = getattr(obj, "revision", None)
+    obj.revision = (current or 0) + 1
+
+
 def owned_project_or_404(db: Session, user: User, project_id: int):
     from fastapi import HTTPException
 

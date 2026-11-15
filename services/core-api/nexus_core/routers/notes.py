@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..deps import log_activity, owned_project_or_404, publish_event
+from ..deps import bump_revision, log_activity, owned_project_or_404, publish_event
 from ..database import get_db
 from ..models import Note, User
 from ..schemas import NoteCreate, NoteOut
@@ -33,6 +33,7 @@ def create_note(
         owned_project_or_404(db, current_user, note_in.project_id)
     note = Note(**note_in.model_dump(), owner_id=current_user.id)
     db.add(note)
+    bump_revision(note)  # sync: revision +1
     db.commit()
     db.refresh(note)
     log_activity(db, user_id=current_user.id, action="note.created", detail=note.title)
@@ -73,6 +74,7 @@ def delete_note(
     from ..models import utcnow
 
     note.deleted_at = utcnow()
+    bump_revision(note)  # sync: revision +1
     db.commit()
     log_activity(db, user_id=current_user.id, action="note.deleted", detail=note.title)
     publish_event("NOTE_DELETED", current_user.id, {"note_id": note.id})
