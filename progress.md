@@ -31,13 +31,13 @@
 | # | Step | Status | Notes |
 |---|------|------|--------|-------|
 | 1 | Harden the Node: real auth, ownership-filtered queries, path-jailed files, CORS lockdown, remove nexus.db.bak | ✅ done | `nexus_core/` package; Argon2+JWT; 28 tests; CLI updated to real auth; repo hygiene |
-| 2 | Extend the Core: `updated_at/revision/deleted_at` + `/sync/pull` `/sync/push`; WebSocket event channel; device registry with capabilities + scopes | ✅ done | commit `a4e2c02`; revision bumped on all 9 mutation handlers; push LWW + stale-conflict results; device tokens with capability-validated scopes; 34/34 tests |
-| 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | ✅ done | commit `b3f1ed0`; `nexus sync`, `--json` on all 8/8 parse OK; keyring store deferred (documented) |
-| 4 | Desktop Tauri shell: login/pairing, dashboard, projects/tasks/notes, file manager, live events | ✅ done (scaffold) | commit `096ecd4`; Tauri 2 + React/TS: login/register, dashboard, tasks/devices/activity views, live WS refresh, CSP scoped to Core origins; keychain token store + file manager = next milestone; no build toolchain in sandbox |
+| 2 | Extend the Core: `updated_at/revision/deleted_at` + `/sync/pull` `/sync/push`; WebSocket event channel; device registry with capabilities + scopes | ✅ done | commit `713f6ba`; revision bumped on all 9 mutation handlers; push LWW + stale-conflict results; device tokens with capability-validated scopes; 34/34 tests |
+| 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | ✅ done | commit `0a03afd`; `nexus sync`, `--json` on all 8/8 parse OK; keyring store deferred (documented) |
+| 4 | Desktop Tauri shell: login/pairing, dashboard, projects/tasks/notes, file manager, live events | ✅ done (scaffold) | commit `0ddd61d`; Tauri 2 + React/TS: login/register, dashboard, tasks/devices/activity views, live WS refresh, CSP scoped to Core origins; keychain token store + file manager = next milestone; no build toolchain in sandbox |
 | 4b | Desktop fallback (sandbox-scope): produce design doc + static HTML prototype of the dashboard/login (self-contained, inline CSS/JS) | ✅ merged into 4c | the React app IS the prototype; extra static HTML would duplicate — skipped deliberately |
 | 4c | Desktop fallback: Tauri 2 scaffold — `apps/desktop` with tauri.conf.json, Rust src-tauri skeleton, React+TS frontend skeleton, README on building locally | ✅ done | as above |
-| 5 | Mobile: pairing, capture, tasks, upload, notifications; Room cache + background sync | ✅ done (scaffold) | commit `33d1ce7`; Compose login + quick-capture tasks + done, Retrofit client, EncryptedSharedPreferences tokens, loopback/LAN network policy; Room cache + voice capture = next milestone |
-| 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | ✅ done (skeleton) | commit `d077cac`; mock + Ollama backends, strict intent schema, permission-checked action engine, /inbox text+audio with 202 background pipeline; 40/40 tests |
+| 5 | Mobile: pairing, capture, tasks, upload, notifications; Room cache + background sync | ✅ done (scaffold) | commit `32d9703`; Compose login + quick-capture tasks + done, Retrofit client, EncryptedSharedPreferences tokens, loopback/LAN network policy; Room cache + voice capture = next milestone |
+| 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | ✅ done (skeleton) | commit `617d3c5`; mock + Ollama backends, strict intent schema, permission-checked action engine, /inbox text+audio with 202 background pipeline; 40/40 tests |
 | 7 | Media/downloads/automation | ⬜ deferred | plan says: only after core ecosystem works; needs real backends (download clients, media servers) — next phase, after LAN TLS + Room cache land |
 | 8 | Online access: hosted control plane (auth+node registry, no personal data) + node promotion + deploy guide | 🔄 in progress | control-plane mode, Node model + /api/nodes, CLI cp/node/services, Dockerfile+render.yaml+CI, docs/deploy/online-access.md; 45/45 tests |
 
@@ -76,7 +76,7 @@ changes with revision + last-writer-wins and returning the server revision per
 row; tests for push conflicts (stale revision → 409 or server-wins detail).
 Do not linger: one step, commit, push, update this ledger, stop.~~
 
-### Step 2 — Extend the Core ✅ (commit: `a4e2c02`)
+### Step 2 — Extend the Core ✅ (commit: `713f6ba`)
 
 - `revision` integer column on Project/Task/Note (default 1, indexed);
   `bump_revision()` called in all 9 mutation handlers (create/update/status/
@@ -102,7 +102,7 @@ task/project/note/device lists, and a `nexus device token` passthrough if
 cheap. Keep Typer structure; do not touch the TUI beyond what --json needs.
 One step, commit, push, update this ledger, stop.~~
 
-### Step 3 — Extend the CLI ✅ (commit: `b3f1ed0`)
+### Step 3 — Extend the CLI ✅ (commit: `0a03afd`)
 
 - `nexus sync [--since ISO]`: pulls `/api/sync/pull`, renders a summary panel
   + per-task change lines, or full JSON with `--json`.
@@ -125,7 +125,7 @@ module hitting the Core's REST endpoints), and a README with local build
 instructions. Do not attempt to build (no Rust/npm toolchain in the sandbox);
 commit source only. One step, commit, push, update this ledger, stop.~~
 
-### Step 4c — Desktop Tauri scaffold ✅ (commit: `096ecd4`)
+### Step 4c — Desktop Tauri scaffold ✅ (commit: `0ddd61d`)
 
 - `apps/desktop/src-tauri/`: tauri.conf.json (1200×800 window, CSP allowing
   only 127.0.0.1:8000 + nexus.local:8443 REST/WS), Cargo.toml (tauri 2),
@@ -141,7 +141,7 @@ commit source only. One step, commit, push, update this ledger, stop.~~
 - Verified: all JSON configs parse, all relative imports resolve, file tree
   complete. Source-only (no npm/Rust in sandbox) — builds locally.
 
-### Step 5 — Mobile scaffold ✅ (commit: `33d1ce7`)
+### Step 5 — Mobile scaffold ✅ (commit: `32d9703`)
 
 - `apps/mobile/`: Gradle version catalog (AGP 8.5.2, Kotlin 2.0.20, Compose
   BOM 2024.09, Retrofit 2.11 + Moshi, OkHttp 4.12, Room 2.6.1,
@@ -170,7 +170,7 @@ job queue on the existing event bus, wired as FastAPI background tasks. Tests
 with the mock pipeline (no model downloads in sandbox). One step, commit,
 push, update this ledger, stop.~~
 
-### Step 6 — AI layer skeleton ✅ (commit: `d077cac`)
+### Step 6 — AI layer skeleton ✅ (commit: `617d3c5`)
 
 - `workers/stt.py`: faster-whisper when installed; deterministic mock
   (sha256-derived pseudo-transcript) otherwise — pipeline testable without
@@ -199,7 +199,7 @@ push, update this ledger, stop.~~
 
 ## Completion summary — basic build finished
 
-The roadmap's basic scope (steps 1–6) is **complete** as of commit `d077cac`
+The roadmap's basic scope (steps 1–6) is **complete** as of commit `617d3c5`
 (2026-11-15). What exists:
 
 - **Core API** (`services/core-api/nexus_core/`): real auth (Argon2+JWT),
@@ -224,7 +224,7 @@ milestones — pick them up one at a time with the same step discipline.
 **Loop note**: the Z.ai scheduled-task tool was unavailable in this sandbox
 (cron tool errored "No such tool available" twice). The loop ran as a single
 continuous session instead: one roadmap step per iteration, each committed
-and pushed (bb718a3 → a4e2c02 → b3f1ed0 → 096ecd4 → 33d1ce7 → d077cac),
+and pushed (3ea9525 → 713f6ba → 0a03afd → 0ddd61d → 32d9703 → 617d3c5),
 ledger updated after each. All state is durable in this file + git history,
 so any future session can resume from `git log` + this file even without the
 scheduler.
