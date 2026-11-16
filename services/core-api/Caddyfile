@@ -1,0 +1,11 @@
+# Caddy reverse proxy for the NEXUS control plane.
+# CADDY_DOMAIN comes from .env via docker compose; TLS is automatic
+# (Let's Encrypt). WebSockets (the relay sockets) are proxied by default.
+{$CADDY_DOMAIN} {
+	reverse_proxy nexus-control-plane:8000
+}
+
+# LAN-only (no domain) alternative: comment the block above and use:
+# :80 {
+# 	reverse_proxy nexus-control-plane:8000
+# }

@@ -57,6 +57,33 @@ nexus ui                     # full-screen TUI
 cd services/core-api && python -m pytest tests/ -q
 ```
 
+## Online access (control plane + secure relay)
+
+Log in from anywhere, promote any machine as your main server, and pair
+phones with **zero open ports** — full guide:
+[`docs/deploy/online-access.md`](docs/deploy/online-access.md).
+
+```bash
+# control plane (hosted on Render free tier, or self-hosted via docker compose)
+nexus cp set https://<control-plane-url>      # then: nexus cp login
+
+# promote THIS machine as the main server (any user, any OS)
+nexus node claim --name "My Windows Box"     # claim + api_key + secure bridge
+
+# pair a phone (shows a 6-digit code; type it into the app)
+nexus node pair
+
+# optional local AI services
+nexus services status
+nexus services install stt                   # faster-whisper (voice notes)
+```
+
+The control plane holds accounts and coordination only — never tasks,
+notes, files, or transcripts. Devices reach the node through an
+end-to-end-sealed relay (X25519 ECDH); the relay host cannot read
+frames. Public-internet hardening: login throttling, account lockout,
+hidden API docs, security headers, request-size caps.
+
 ## Architecture
 
 Three interfaces (Desktop, CLI, Android) consume one **NEXUS Core API** hosted

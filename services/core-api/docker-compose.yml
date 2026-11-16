@@ -1,0 +1,59 @@
+# NEXUS control plane — self-hosted stack (open source, zero vendor dependency)
+# Usage:
+#   cp .env.example .env   # edit values, generate NEXUS_JWT_SECRET
+#   docker compose up -d
+# Then point clients at https://<CADDY_DOMAIN> (or http://<server>:8000 without Caddy).
+services:
+  nexus-control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXUS_CONTROL_PLANE_MODE: "true"
+      NEXUS_DATABASE_URL: ${NEXUS_DATABASE_URL}
+      NEXUS_JWT_SECRET: ${NEXUS_JWT_SECRET}
+      NEXUS_CORS_ORIGINS: ${NEXUS_CORS_ORIGINS}
+      NEXUS_STORAGE_ROOTS: "[]"
+      NEXUS_NODE_BRIDGE_CP_URL: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Caddy fronts this with TLS; without Caddy expose 8000 directly.
+    expose:
+      - "8000"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: nexus
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nexus-control-plane
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

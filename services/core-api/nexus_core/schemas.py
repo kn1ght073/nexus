@@ -255,3 +255,52 @@ class NodeOut(BaseModel):
 class NodeOutWithSecret(NodeOut):
     """Claim response: includes the node api_key exactly once, at claim time."""
     api_key: str
+
+
+# --- Pairing (device <-> node via the control plane; see pairing.py) ---
+class PairingCodeRequest(BaseModel):
+    """Owner asks for a fresh pairing code (shows it on their screen)."""
+    device_name: str = Field(default="", max_length=100)
+
+
+class PairingCodeResponse(BaseModel):
+    """The code itself + where to enter it. Plaintext appears exactly once."""
+    pairing_id: int
+    code: str
+    expires_at: datetime
+    relay_url: str  # wss://<control-plane>/relay/attach — where the device connects
+
+
+class PairingCompleteRequest(BaseModel):
+    """Device side of the handshake: prove code knowledge + name yourself."""
+    pairing_id: int
+    code: str = Field(pattern="^[0-9]{6}$")
+    device_name: str = Field(default="", max_length=100)
+    platform: str = Field(default="android", pattern="^(android|ios|windows|macos|linux|web|cli)$")
+
+
+class PairingCompleteResponse(BaseModel):
+    """What a successfully paired device receives: a scoped token + node info."""
+    device_id: int
+    token: str  # scoped device token (scopes: capture, read, sync)
+    node: NodeOut | None  # where to relay through (null until the node dials in)
+
+
+# --- Node services (installable STT/LLM; node-side only) ---
+class ServiceStatusResponse(BaseModel):
+    installed: dict[str, str] = {}          # {"stt": "faster-whisper"}
+    available: dict[str, str] = {}          # human-readable descriptions
+
+
+class ServiceInstallRequest(BaseModel):
+    service: str = Field(pattern="^(stt|llm)$")
+    model: str | None = None               # base|small for stt; llama3.2|qwen2.5:3b for llm
+
+
+class ServiceInstallStatus(BaseModel):
+    id: int
+    service: str
+    model: str
+    status: str                            # running | completed | failed
+    steps: list[str] = []
+    error: str | None = None

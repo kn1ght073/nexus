@@ -266,3 +266,56 @@ User request: "log in from anywhere,3 .8/45/45 tests" — implemented as:
 **Next session →** step 8 is code-complete; remaining: the user follows
 docs/deploy/online-access.md to deploy (needs their Render/Neon accounts);
 step 7 (media/downloads/automation) stays deferred per plan build order.
+
+### Step 8b — Any-device promotion + secure relay + public-internet hardening ✅ (this session)
+
+User request: "any device can act as the main server; the app securely
+links the phone to the CLI on any OS without opening ports; global and
+public; render the API private with proper authorization so no one can
+access another user's data; in-app prompts to install STT/LLM" —
+implemented as (priorities per the user's four):
+
+1. **User security / authorization**: every relay/pairing/devices query
+   owner-filtered; pairing codes bind devices to the code OWNER only;
+   relayed requests run through the node's real FastAPI stack (device
+   token scopes enforced on-node); locked/unknown accounts answer
+   identically (no probing); Argon2 timing equalizer on unknown emails.
+2. **Control-plane hardening** (routers/auth.py + ratelimit.py + main.py):
+   sliding-window login/register throttle per (IP,email) with
+   Retry-After; account lockout 5×5min (bounded, expiring); /docs +
+   /openapi.json hidden unless NEXUS_EXPOSE_DOCS=true; OWASP security
+   headers on every response; 10 MB body cap (413); /health minimal
+   (status+mode only, no version).
+3. **Any-device main server + zero-port relay**: models
+   PairingSession/RelayLink; routers/relay.py (owner mints 6-digit code,
+   10-min TTL, salted-HMAC stored, single-use; device attach WS; node
+   outbound WS keyed by node api_key; plane pipes sealed bytes both
+   ways); nexus_core/pairing.py (pure-Python X25519 RFC 7748 —
+   cross-verified against `cryptography` in tests — + HMAC-SHA256
+   frame sealing with per-frame nonces and replay windows);
+   nexus_core/node_bridge.py (node half: ECDH handshake, unwrap,
+   execute via the node's own ASGI app, seal response, ping
+   super-heartbeat 25 s, reconnect with backoff). CLI: node pair, claim
+   now writes nexus_node.json + offers foreground bridge.
+4. **In-app installs**: routers/services.py (GET /api/services/status,
+   POST /api/services/install {service,model} as background job,
+   GET /api/services/install/{id}; install requires admin/devices
+   scope — a capture-only paired phone gets 403).
+- **Self-hosted option** (user recommendation, open source over free
+  tiers): services/core-api/docker-compose.yml (control plane +
+  postgres:16 + caddy:2 TLS), .env.example, Caddyfile; docs add Option B
+  + Headscale as direct-link alternative.
+- **Tests**: 63/63 green (18 new in tests/test_online_access.py:
+  lockout+expiry, throttle+Retry-After, hidden docs/headers/body cap,
+  pairing lifecycle/5-strike/isolation/auth-to-mint, X25519 vs lib,
+  seal tamper/base64-crash rejection, relay e2e incl. replay + 401
+  through relay + socket 4401s, attach socket pipe both directions,
+  services scope enforcement).
+- **Docs**: online-access.md rewritten (new architecture diagram, data
+  policy + relay rows, security-posture table, self-hosted Option B,
+  Parts 2-4 rewritten for any-device claim + pair + in-app installs);
+  README gains an "Online access" quick section.
+
+**Next session →** step 7 (media/downloads/automation) stays deferred
+per plan build order; desktop app UI wiring for Machines/pairing/
+install prompts; optional account export/import between tiers; LAN TLS.

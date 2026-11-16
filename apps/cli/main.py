@@ -655,6 +655,7 @@ def node_claim(
     platform: str = typer.Option(None, help="macos | windows | linux (auto-detected if omitted)."),
     endpoint: str = typer.Option(None, help="How clients reach this node (host:port / Tailscale name / tunnel URL)."),
     watch: bool = typer.Option(False, help="Stay in the foreground and heartbeat every 30s."),
+    bridge: bool = typer.Option(True, help="Also start the secure relay bridge (no open ports; phone can attach from anywhere)."),
 ):
     """Register this machine as the active NEXUS node (main server)."""
     base = _cp_url()
@@ -679,10 +680,22 @@ def node_claim(
         config.node_id = node["id"]
         config.node_api_key = node["api_key"]
         save_config(config)
+        # standalone bridge config: python -m nexus_core.node_bridge reads this
+        import json as _j
+        from pathlib import Path as _Path
+
+        _Path("nexus_node.json").write_text(
+            _j.dumps({
+                "control_plane_url": base,
+                "node_id": node["id"],
+                "api_key": node["api_key"],
+            }, indent=2), encoding="utf-8",
+        )
         console.print(
             Panel(
                 f"Node [bold cyan]{node['name']}[/bold cyan] (#{node['id']}) is now the [bold green]active main server[/bold green].\n"
-                f"[dim]api_key stored in ~/.nexus-cli.json — keep it private.[/dim]",
+                f"[dim]api_key stored in ~/.nexus-cli.json — keep it private.[/dim]\n"
+                + ("[dim]bridge config written to nexus_node.json[/dim]" if bridge else ""),
                 title="[bold green]Node claimed[/bold green]",
                 border_style="green",
                 expand=False,
@@ -699,8 +712,87 @@ def node_claim(
                 except requests.exceptions.RequestException:
                     console.print("[red]heartbeat failed (offline?) — retrying[/red]")
                 time.sleep(30)
+        elif bridge:
+            _run_bridge_foreground(base, node)
     except requests.exceptions.RequestException as e:
         console.print(Panel(str(e), title="[bold red]Claim failed[/bold red]", border_style="red", expand=False))
+
+
+def _run_bridge_foreground(base: str, node: dict) -> None:
+    """Run the secure relay bridge (outbound WS to the control plane) until Ctrl-C."""
+    console.print(
+        Panel(
+            "Starting the secure bridge: this machine opens ONE outbound connection to the "
+            "control plane. No inbound ports, no port forwarding, no public exposure. "
+            "Pair your phone with [bold cyan]nexus node pair[/bold cyan] (on any machine logged in as you) "
+            "and it can reach this node from anywhere.",
+            title="[bold green]Secure bridge[/bold green]",
+            border_style="green",
+            expand=False,
+        )
+    )
+    try:
+        import asyncio
+
+        import sys as _sys
+        from pathlib import Path as _Path
+
+        _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "services" / "core-api"))
+        from nexus_core.node_bridge import NodeBridge
+        from nexus_core.main import app as _core_app  # the full node app to serve relayed calls
+
+        async def _go():
+            b = NodeBridge(base, node["id"], node["api_key"], app=_core_app)
+            await b.run()
+
+        asyncio.run(_go())
+    except KeyboardInterrupt:
+        console.print("[dim]bridge stopped[/dim]")
+    except ImportError as e:
+        console.print(
+            Panel(
+                f"The bridge needs the core-api package on sys.path (run from the repo).\n[dim]{e}[/dim]",
+                title="[bold red]Bridge unavailable[/bold red]",
+                border_style="red",
+                expand=False,
+            )
+        )
+
+
+@node_app.command("pair")
+def node_pair(json_output: bool = _json_flag()):
+    """Mint a pairing code: type it into the phone/desktop app to link it to this node (secure relay, no open ports)."""
+    _set_json_mode(json_output)
+    base = _cp_url()
+    if not base:
+        return
+    if not config.token:
+        console.print(Panel("Run [bold cyan]nexus cp login[/bold cyan] first.", title="[bold red]Not logged in[/bold red]", border_style="red", expand=False))
+        return
+    try:
+        response = requests.post(
+            f"{base}/api/relay/pair",
+            json={"device_name": "phone"},
+            headers=_cp_headers(),
+            timeout=10,
+        )
+        response.raise_for_status()
+        body = response.json()
+        output_json(body)
+        console.print(
+            Panel(
+                f"[bold green]{body['code']}[/bold green]\n"
+                f"[dim]valid until {body['expires_at']}[/dim]\n"
+                "Enter this code in the NEXUS app on the device you want to link. "
+                "The connection runs through the control plane over an end-to-end "
+                "encrypted relay — your machine opens no ports.",
+                title="[bold green]Pairing code[/bold green]",
+                border_style="green",
+                expand=False,
+            )
+        )
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Pairing failed[/bold red]", border_style="red", expand=False))
 
 
 @node_app.command("resolve")

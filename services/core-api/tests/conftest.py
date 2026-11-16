@@ -40,6 +40,12 @@ def env(storage_root, tmp_path_factory):
         "NEXUS_JWT_SECRET_FILE": str(db_dir / "jwt_secret"),
         # list[str] fields are JSON-decoded from env by pydantic-settings
         "NEXUS_STORAGE_ROOTS": json.dumps([str(storage_root)]),
+        # Every test re-registers user_a/user_b from the same TestClient IP;
+        # relax (but do not disable) the register/login limits for the suite.
+        "NEXUS_AUTH_RATE_LIMIT": "1000",
+        # Account lockout would poison later tests after the lockout test
+        # runs; the limiter itself is reset between tests via the reset hook.
+        "NEXUS_AUTH_LOCKOUT_SECONDS": "1",
     }
     saved = {k: os.environ.get(k) for k in overrides}
     os.environ.update(overrides)
@@ -73,6 +79,18 @@ def fresh_tables(env):
 
     Base.metadata.drop_all(bind=env["engine"])
     Base.metadata.create_all(bind=env["engine"])
+    # auth hardening state is in-memory; reset it so one test's lockout /
+    # throttling cannot bleed into the next test's logins.
+    from nexus_core.routers import auth as auth_router
+
+    auth_router._login_limiter._events.clear()
+    auth_router._register_limiter._events.clear()
+    auth_router._account_lockout._failed.clear()
+    auth_router._account_lockout._locked_at.clear()
+    from nexus_core.routers import relay as relay_router
+
+    relay_router._pairing_limiter._events.clear()
+    relay_router._attach_limiter._events.clear()
     yield
 
 

@@ -170,3 +170,47 @@ class Node(Base):
             return json.loads(self.services_json) if self.services_json else {}
         except ValueError:
             return {}
+
+
+class PairingSession(Base):
+    """A short-lived device-pairing handshake on the control plane.
+
+    Flow (nexus_core/pairing.py): the owner (logged in on the phone/desktop
+    app) asks the control plane for a pairing code; a new device proves
+    knowledge of the code during the relay handshake and receives a scoped
+    device token. Only the salted HMAC challenge is stored — the plaintext
+    code exists nowhere but the owner's screen and the device's keypad for
+    ten minutes.
+    """
+    __tablename__ = "pairing_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    node_id = Column(Integer, ForeignKey("nodes.id", ondelete="CASCADE"), nullable=True)
+    salt = Column(String, nullable=False)
+    challenge = Column(String, nullable=False)            # HMAC(salt, code)
+    device_name = Column(String, default="")
+    attempts = Column(Integer, default=0, nullable=False) # wrong-code counter
+    status = Column(String, default="pending", nullable=False)  # pending | completed | expired
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+    owner = relationship("User", backref="pairing_sessions")
+
+
+class RelayLink(Base):
+    """Persistent device→node attachment served by the control plane.
+
+    Written once when a paired device attaches to the node's relay socket,
+    so the activity log can answer "which devices ever relayed through my
+    account" — coordination metadata, not content. Relay frame bodies
+    never touch the database.
+    """
+    __tablename__ = "relay_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    node_id = Column(Integer, ForeignKey("nodes.id", ondelete="CASCADE"), nullable=False)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    attached_at = Column(DateTime, default=utcnow, nullable=False)
+    detached_at = Column(DateTime, nullable=True)

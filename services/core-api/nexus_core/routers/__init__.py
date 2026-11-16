@@ -1,5 +1,5 @@
 """Router registry."""
-from . import activity, auth, devices, files, inbox, nodes, notes, projects, sync, tasks
+from . import activity, auth, devices, files, inbox, nodes, notes, projects, relay, services, sync, tasks
 
 all_routers = [
     auth.router,
@@ -12,4 +12,6 @@ all_routers = [
     inbox.router,
     nodes.router,
     sync.router,
+    relay.router,
+    services.router,
 ]
