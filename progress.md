@@ -368,3 +368,69 @@ the app, with appropriate links" — implemented as:
 **Next session →** desktop app first-run UI wiring to
 GET /api/services/packages + POST bootstrap job polling; step 7
 (media/downloads/automation) still deferred per plan build order.
+
+### Step 9 — GitHub linking + highlights + QoL install prompt (this session)
+
+**User request**: how popular GitHub-hosted apps connect users (linking +
+OAuth), how to view their GitHub highlights, an install-time prompt with
+guidance, and demo setups on Windows + macOS with checks running
+alongside development (not after committing).
+
+**Research (primary sources, all fetched)**: gh CLI's default auth is the
+OAuth **device flow** (user code at github.com/login/device + polling
+login/oauth/access_token; token in the system credential store) —
+cli.github.com/manual/gh_auth_login. Authorize-code flow with
+single-use user-bound state for desktop apps; GitHub Apps preferred over
+OAuth apps for fine-grained permissions, but minimal-scope (read:user)
+OAuth is right for profile-only — docs.github.com authorizing-oauth-apps +
+differences page. Highlights data: /users/{u}, /users/{u}/repos,
+/users/{u}/events/public — docs.github.com/en/rest/users. Rate limits:
+60/hr unauthenticated (per-IP, shared) vs 5,000/hr token-authenticated —
+docs.github.com rate-limits page. The node therefore links once, proxies,
+and caches 5 minutes.
+
+**Shipped (feature-by-feature, tests running alongside each)**:
+- **Core** (e1d01ef): `routers/github.py` — device start/poll, authorize
+  url/callback with single-use user-bound state, status (token never
+  exposed), unlink (+ server-side revocation), highlights (profile + slim
+  repos + one-line event summaries, 5-min cache, refresh=true bypass).
+  `GithubLink` model; settings NEXUS_GITHUB_*; router registered. 13 tests
+  against a loopback GitHub stub over the exact production code paths.
+- **CLI** (e629706): `nexus github connect` (device flow, live polling,
+  slow_down respected, browser opened), `status`, `highlights` (repo
+  table + activity feed, --json), `unlink`. NEXUS_CLI_CONFIG override
+  for the CLI's config path. e2e harness `scripts/e2e_github_cli.py`
+  driving the REAL CLI against the REAL node: 17 checks × 3 consecutive
+  hermetic runs (fresh temp DB + JWT each run — caught and fixed a
+  state-leak where reruns hit "email already registered").
+- **Install interview** (3f870c2): `nexus bootstrap` now interviews on
+  first run — asks what to install, offers the mirror picker for slow
+  PyPI links, explains venv/uv/per-user guidance, confirms the plan;
+  `--yes` for CI; decline path is guidance-only. Two live-demo-caught
+  fixes in the same commit: the managed venv now installs nexus_core
+  **editable** from the repo (bare dir installs nothing under uv — added
+  a minimal pyproject.toml), and `python-multipart==0.0.20` is pinned
+  (FastAPI refuses to import the inbox Form/File routers without it).
+  New test locks both. 82/82.
+- **Demo** (92f81ec): `scripts/demo_setup.py` — the full first-run
+  journey in 24 checks: bootstrap → node booted FROM the managed venv →
+  register/login → device flow (pending → linked) → authorize flow →
+  highlights cache/refresh → the interactive interview (mirror
+  propagates into the plan) → unlink. Windows venv layout
+  (Scripts\python.exe) and the shared macOS/Linux posix layout verified
+  at the source level; the POSIX path executed live. 24/24 × 3 runs.
+- **Docs**: online-access.md Part 5 (research with citations + the
+  shipped surface + config), cheat sheet gains the github commands,
+  verified-tests list updated (82/82 + demo 24 + CLI e2e 17);
+  .env.example gains the NEXUS_GITHUB_* keys; download copy synced.
+
+**Checks alongside development — the discipline this step**: every
+feature was committed only after its own test run; three real bugs were
+caught live by running instead of trusting (harness config deletion,
+non-hermetic reruns, and the two venv bugs). Final: 82/82 pytest, 24/24
+demo, 17/17 CLI e2e.
+
+**Next session →** desktop app first-run UI wiring to
+GET /api/services/packages + POST bootstrap job polling; GitHub
+linking buttons in the desktop app hitting /api/github/authorize-url;
+step 7 (media/downloads/automation) still deferred per plan build order.

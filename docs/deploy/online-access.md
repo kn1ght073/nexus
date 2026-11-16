@@ -275,16 +275,102 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 After that, everything else (venv, pins, services) is handled by the
 app as above — uv is a transparent accelerator, never a manual step.
 
+## Part 5 — Connect GitHub: linking, OAuth, and highlights
+
+How popular GitHub-hosted apps connect with their users (what NEXUS
+modeled itself on — every claim below from the linked primary source):
+
+**gh CLI** (github.com/cli/cli, the canonical example) defaults to a
+*web-based browser flow* that is really the **OAuth device flow**: the CLI
+posts its client id to `github.com/login/device/code`, shows a one-time
+user code plus `github.com/login/device`, then polls
+`login/oauth/access_token` with
+`grant_type=urn:ietf:params:oauth:grant-type:device_code` until the user
+approves; the token is stored in the system credential store with a
+plain-text fallback. No localhost redirect, no port forwarding — which is
+exactly why it also works over SSH. Source:
+[gh auth login manual](https://cli.github.com/manual/gh_auth_login).
+
+**Desktop apps** use the **authorize-code flow**: open
+`github.com/login/oauth/authorize?client_id=…&state=…`, receive
+`code`+`state` at the callback, exchange for a token. `state` must be
+single-use and user-bound (CSRF); token exchange returns JSON when asked
+via the `Accept: application/json` header. Source:
+[Authorizing OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps).
+
+**Scope discipline**: GitHub recommends GitHub Apps over OAuth apps for
+fine-grained permissions, but an OAuth app requesting the minimal
+`read:user` scope is the least-privilege choice for profile-only use
+(sources: [Differences between GitHub Apps and OAuth
+apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/differences-between-github-apps-and-oauth-apps),
+[Deciding when to build a GitHub
+App](https://docs.github.com/en/apps/creating-github-apps/about-creating-github-apps/deciding-when-to-build-a-github-app)).
+
+### Viewing GitHub highlights (the data surface)
+
+The REST endpoints behind any "highlights" view (source:
+[users API](https://docs.github.com/en/rest/users/users?apiVersion=2026-03-10)):
+
+| Endpoint | What it provides |
+| --- | --- |
+| `GET /users/{username}` | login, avatar, name, bio, company, location, `public_repos`, `public_gists`, `followers`, `following` |
+| `GET /users/{username}/repos?sort=updated` | repositories (stars, language, last push) |
+| `GET /users/{username}/events/public` | recent public activity feed (pushes, stars, forks…) |
+
+**Why the node proxies and caches**: unauthenticated REST is limited to
+**60 requests/hour, associated with the originating IP** (a shared pool —
+everyone behind one NAT/VPN draws from the same budget), while
+token-authenticated requests get **5,000/hour**. Source:
+[Rate limits for the REST API](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+So the NEXUS node links the account once (token never leaves the node),
+then serves every device's dashboard from a 5-minute cache inside the
+5,000/hour budget.
+
+### How NEXUS implements it (shipped, tested)
+
+The node is the OAuth app; accounts link two ways, both ending in a
+`github_links` row whose token is **never returned by any API**:
+
+```bash
+nexus github connect      # device flow: code + github.com/login/device, live polling
+nexus github status       # linked? which login, which scopes — never the token
+nexus github highlights   # profile + top repos + activity feed (cached 5 min)
+nexus github unlink       # removes the row AND asks GitHub to revoke the token
+```
+
+- Device flow: `POST /api/github/device/start` → user code →
+  `POST /api/github/device/poll` until `linked` (pending / slow_down /
+  expired / denied translated to stable statuses; a second user's poll
+  is refused — the code belongs to the session that started it).
+- Authorize flow (desktop): `GET /api/github/authorize-url` returns a
+  user-bound single-use `state` (10-minute TTL); the app posts
+  `code`+`state` to `POST /api/github/authorize/callback`. Replayed or
+  cross-user states are rejected.
+- Unlink: `DELETE /api/github/link` also revokes the token server-side
+  through GitHub's application-token endpoint (best-effort — local
+  unlink proceeds even if GitHub is unreachable).
+- Highlights: `GET /api/github/highlights?refresh=true` bypasses the
+  cache; events are summarized to one line each ("pushed 2 commit(s) to
+  octocat/Spoon-Knife").
+
+Config on the node (`services/core-api/.env` — see `.env.example`):
+`NEXUS_GITHUB_CLIENT_ID`, `NEXUS_GITHUB_CLIENT_SECRET` (from an OAuth app
+you own, scope `read:user`), optionally `NEXUS_GITHUB_REDIRECT_URI`.
+`NEXUS_GITHUB_CACHE_SECONDS` (default 300) tunes the cache.
+
 ## Operations cheat sheet
 
 ```bash
 curl https://<cp>/health                          # mode: control-plane|node
 nexus bootstrap --mirror tuna                     # one-time setup (uv/pip)
 nexus node resolve                                # active node (or null)
-nexus node list                                   # all your nodes
+nexus node list                                    # all your nodes
 nexus node claim --name "..."                     # rotate key + re-activate
-nexus node pair                                   # mint a pairing code
+nexus node pair                                    # mint a pairing code
 nexus services status                             # STT/LLM present?
+nexus github connect                               # link GitHub (device flow)
+nexus github highlights                            # profile/repo/activity feed
+nexus github unlink                                # revoke + remove the link
 ```
 
 - **Node offline?** A connected bridge socket counts as fresh; if the
@@ -294,7 +380,7 @@ nexus services status                             # STT/LLM present?
 - **Multi-worker scaling**: move rate-limit/lockout/relay tables to the
   shared store (interfaces are already isolated in `ratelimit.py`).
 
-## What was verified (tests: 68/68 green)
+## What was verified (tests: 82/82 green)
 
 - Control-plane isolation: personal-data endpoints 404 in control-plane
   mode (subprocess-level fresh-boot test).
@@ -318,3 +404,22 @@ nexus services status                             # STT/LLM present?
   machine-readable plan (links, sizes, uv flag, mirror propagation,
   auth required), `bootstrap` install service accepted with mirror
   validation (installer stubbed — tests never spawn subprocesses).
+- Bootstrap (0.4.0): the managed venv installs nexus_core itself
+  EDITABLE from the repo (flag as its own argv entry, path validated) —
+  a venv with deps but no package dies at `uvicorn nexus_core.main:app`;
+  `python-multipart` pinned (FastAPI refuses to import Form/File
+  routers without it).
+- GitHub linking: device flow happy path, pending/slow_down/denied
+  statuses, cross-user device-code refusal, authorize-code flow with
+  single-use user-bound state, garbage state rejected, status never
+  exposes the token, unlink revokes + cleans up, link visibility
+  isolated per user — all against a local GitHub stub over the exact
+  production code paths.
+- GitHub highlights: profile/repos/events shapes, event summarization,
+  cache hit on second call, `refresh=true` bypass, 409 when unlinked.
+- Demo (`scripts/demo_setup.py`, 24 checks): the full first-run journey
+  end-to-end — bootstrap → node from managed venv → register/login →
+  device flow (pending → linked) → authorize flow → highlights cache →
+  interactive install interview (mirror propagates) → unlink. Also the
+  CLI e2e (`scripts/e2e_github_cli.py`, 17 checks × 3 consecutive runs)
+  driving the real CLI binary against the real node.
