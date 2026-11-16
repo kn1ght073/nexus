@@ -21,24 +21,25 @@
 
 ## Current state
 
-- **Phase**: ✅ BASIC BUILD COMPLETE (steps 1–6 done; step 7 deliberately deferred)
-- **Last commit**: `d077cac` (step 6)
-- **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 40 passed
-- **Loop health**: basic work finished — see "Completion summary" at the end of the step log
+- **Phase**: Step 8 (online access: control plane + node promotion) — in progress
+- **Last commit**: (see `git log -1`)
+- **Tests**: `cd services/core-api && python -m pytest tests/ -q` → 45 passed
+- **Loop health**: basic build (1–6) done; step 8 requested by the user: log in from anywhere, node becomes main server
 
 ## Roadmap (from the architecture plan §8)
 
 | # | Step | Status | Notes |
-|---|------|--------|-------|
+|---|------|------|--------|-------|
 | 1 | Harden the Node: real auth, ownership-filtered queries, path-jailed files, CORS lockdown, remove nexus.db.bak | ✅ done | `nexus_core/` package; Argon2+JWT; 28 tests; CLI updated to real auth; repo hygiene |
 | 2 | Extend the Core: `updated_at/revision/deleted_at` + `/sync/pull` `/sync/push`; WebSocket event channel; device registry with capabilities + scopes | ✅ done | commit `a4e2c02`; revision bumped on all 9 mutation handlers; push LWW + stale-conflict results; device tokens with capability-validated scopes; 34/34 tests |
-| 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | ✅ done | commit `b3f1ed0`; `nexus sync`, `--json` on all 8 listing commands (stdout JSON, stderr rich), `nexus device token`; e2e 8/8 parse OK; keyring store deferred (documented) |
+| 3 | Extend the CLI in place: `devices`, `sync`, `task today`, `--json`, config token store; keep Typer structure and TUI | ✅ done | commit `b3f1ed0`; `nexus sync`, `--json` on all 8/8 parse OK; keyring store deferred (documented) |
 | 4 | Desktop Tauri shell: login/pairing, dashboard, projects/tasks/notes, file manager, live events | ✅ done (scaffold) | commit `096ecd4`; Tauri 2 + React/TS: login/register, dashboard, tasks/devices/activity views, live WS refresh, CSP scoped to Core origins; keychain token store + file manager = next milestone; no build toolchain in sandbox |
 | 4b | Desktop fallback (sandbox-scope): produce design doc + static HTML prototype of the dashboard/login (self-contained, inline CSS/JS) | ✅ merged into 4c | the React app IS the prototype; extra static HTML would duplicate — skipped deliberately |
 | 4c | Desktop fallback: Tauri 2 scaffold — `apps/desktop` with tauri.conf.json, Rust src-tauri skeleton, React+TS frontend skeleton, README on building locally | ✅ done | as above |
 | 5 | Mobile: pairing, capture, tasks, upload, notifications; Room cache + background sync | ✅ done (scaffold) | commit `33d1ce7`; Compose login + quick-capture tasks + done, Retrofit client, EncryptedSharedPreferences tokens, loopback/LAN network policy; Room cache + voice capture = next milestone |
 | 6 | AI layer: faster-whisper + Ollama + embeddings behind validation/action engine; Universal Inbox pipeline | ✅ done (skeleton) | commit `d077cac`; mock + Ollama backends, strict intent schema, permission-checked action engine, /inbox text+audio with 202 background pipeline; 40/40 tests |
 | 7 | Media/downloads/automation | ⬜ deferred | plan says: only after core ecosystem works; needs real backends (download clients, media servers) — next phase, after LAN TLS + Room cache land |
+| 8 | Online access: hosted control plane (auth+node registry, no personal data) + node promotion + deploy guide | 🔄 in progress | control-plane mode, Node model + /api/nodes, CLI cp/node/services, Dockerfile+render.yaml+CI, docs/deploy/online-access.md; 45/45 tests |
 
 ## Step log (append-only)
 
@@ -227,3 +228,41 @@ and pushed (bb718a3 → a4e2c02 → b3f1ed0 → 096ecd4 → 33d1ce7 → d077cac)
 ledger updated after each. All state is durable in this file + git history,
 so any future session can resume from `git log` + this file even without the
 scheduler.
+
+### Step 8 — Online access: control plane + node promotion 🔄→✅ (this session)
+
+User request: "log in from anywhere,3 .8/45/45 tests" — implemented as:
+
+- **Control-plane mode** (`NEXUS_CONTROL_PLANE_MODE=true`): create_app mounts
+  only auth/devices/activity/nodes; personal-data routers (tasks/projects/notes
+  files/inbox/sync) are NOT mounted — enforced by a test that fails if any
+  of those endpoints respond non-404.
+- **Node registry** (models.py Node + routers/nodes.py): claim (single-active
+  policy, api_key rotation on re-claim, computed is_online from heartbeat
+  age), heartbeat (revives stale nodes), /nodes/active (null when offline),
+  services reporting, delete. Isolation tested (user B sees []).
+- **Deployment**: NEXUS_DATABASE_URL (Postgres via psycopg2-binary,
+  postgres:// → postgresql:// normalization, pool_pre_ping/ping + recycle
+  300s), NEXUS_JWT_SECRET (env-precedence over file), control_plane_mode,
+  node_heartbeat_timeout=90s. Dockerfile (python:3.12-slim, uvicorn 0.0.0.0),
+  render.yaml (blueprint, free plan, healthcheck /health, envVars with
+  sync:false for secrets), .github/workflows/ci.yml (pytest on push/PR).
+- **CLI**: config.py(.control_plane_url/.node_id/.node_api_key.
+- **CLI commands**: cp set/login (login against control plane, works
+  anywhere), node claim --watch (30s heartbeat, foreground), resolve
+  (active node or null, --json), list (table), services status (local
+  detection: faster-whisper import probe, Ollama port probe), services
+  install stt|llm (pip install faster-whisper; Ollama manual instructions;
+  reports detected services to control plane). e2e green: cp set → cp login
+  → claim → list → resolve --json (pure JSON on stdout) → services status;
+  /api/tasks on control plane → 404.
+- **Docs**: docs/deploy/online-access.md (architecture diagram, data policy
+  table, Render+Neon/Supabase step-by-step, Tailscale/Cloudflare/ngrok
+  endpoint options, free-tier caveats, CLI README section (command table).
+- **Tests**: 45/45 green (5 new: claim/demote/re-claim, heartbeat + stale
+  resolution + revival, services reporting + isolation, control-plane
+  subprocess test, DATABASE_URL normalization).
+
+**Next session →** step 8 is code-complete; remaining: the user follows
+docs/deploy/online-access.md to deploy (needs their Render/Neon accounts);
+step 7 (media/downloads/automation) stays deferred per plan build order.

@@ -574,5 +574,296 @@ def device_token(
         console.print(Panel(str(e), title="[bold red]Error issuing token[/bold red]", border_style="red", expand=False))
 
 
+# --- CONTROL PLANE (step 8: log in from anywhere) ---
+cp_app = typer.Typer(help="Control-plane (hosted) account & node coordination")
+node_app = typer.Typer(help="Manage this machine's node registration")
+app.add_typer(cp_app, name="cp")
+app.add_typer(node_app, name="node")
+
+
+def _cp_headers() -> dict:
+    """Auth headers against the control plane (stored token works for both)."""
+    h = get_headers()
+    if config.control_plane_url:
+        h["X-Nexus-Node-Key"] = config.node_api_key or ""
+    return h
+
+
+def _cp_url() -> str:
+    if not config.control_plane_url:
+        console.print(
+            Panel(
+                "No control plane configured.\nRun [bold cyan]nexus cp set <url>[/bold cyan] first "
+                "(e.g. https://nexus-control.onrender.com).",
+                title="[bold red]Control plane not configured[/bold red]",
+                border_style="red",
+                expand=False,
+            )
+        )
+        return ""
+    return config.control_plane_url.rstrip("/")
+
+
+@cp_app.command("set")
+def cp_set(url: str):
+    """Point the CLI at the hosted control plane (Render URL)."""
+    config.control_plane_url = url.rstrip("/")
+    save_config(config)
+    console.print(
+        Panel(f"Control plane: [bold cyan]{config.control_plane_url}[/bold cyan]", title="[bold green]Control plane set[/bold green]", border_style="green", expand=False)
+    )
+
+
+@cp_app.command("login")
+def cp_login(
+    email: str = typer.Option(..., prompt=True),
+    password: str = typer.Option(..., prompt=True, hide_input=True),
+):
+    """Log in against the control plane (works from anywhere)."""
+    base = _cp_url()
+    if not base:
+        return
+    try:
+        response = requests.post(f"{base}/api/auth/login", json={"email": email, "password": password}, timeout=10)
+        if response.status_code == 401:
+            console.print(Panel("Invalid email or password.", title="[bold red]Login failed[/bold red]", border_style="red", expand=False))
+            raise typer.Exit(1)
+        response.raise_for_status()
+        tokens = response.json()
+        config.token = tokens["access_token"]
+        config.refresh_token = tokens.get("refresh_token")
+        config.email = email
+        save_config(config)
+        health = requests.get(f"{base}/health", timeout=10).json()
+        console.print(
+            Panel(
+                f"Logged in as [bold cyan]{email}[/bold cyan] (mode: {health.get('mode', '?')})\n"
+                "[dim]The control plane stores accounts + node registry only — "
+                "personal data lives on your node.[/dim]",
+                title="[bold green]Control-plane login successful[/bold green]",
+                border_style="green",
+                expand=False,
+            )
+        )
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(f"Could not reach {base}.\n[dim]{e}[/dim]", title="[bold red]Login failed[/bold red]", border_style="red", expand=False))
+
+
+@node_app.command("claim")
+def node_claim(
+    name: str = typer.Option("My Node", help="Display name for this machine."),
+    platform: str = typer.Option(None, help="macos | windows | linux (auto-detected if omitted)."),
+    endpoint: str = typer.Option(None, help="How clients reach this node (host:port / Tailscale name / tunnel URL)."),
+    watch: bool = typer.Option(False, help="Stay in the foreground and heartbeat every 30s."),
+):
+    """Register this machine as the active NEXUS node (main server)."""
+    base = _cp_url()
+    if not base:
+        return
+    if not config.token:
+        console.print(Panel("Run [bold cyan]nexus cp login[/bold cyan] first.", title="[bold red]Not logged in[/bold red]", border_style="red", expand=False))
+        return
+    if platform is None:
+        import platform as _p
+
+        platform = {"Darwin": "macos", "Windows": "windows"}.get(_p.system(), "linux")
+    try:
+        response = requests.post(
+            f"{base}/api/nodes/claim",
+            json={"name": name, "platform": platform, "endpoint": endpoint},
+            headers=_cp_headers(),
+            timeout=10,
+        )
+        response.raise_for_status()
+        node = response.json()
+        config.node_id = node["id"]
+        config.node_api_key = node["api_key"]
+        save_config(config)
+        console.print(
+            Panel(
+                f"Node [bold cyan]{node['name']}[/bold cyan] (#{node['id']}) is now the [bold green]active main server[/bold green].\n"
+                f"[dim]api_key stored in ~/.nexus-cli.json — keep it private.[/dim]",
+                title="[bold green]Node claimed[/bold green]",
+                border_style="green",
+                expand=False,
+            )
+        )
+        if watch:
+            import time
+
+            console.print("[dim]heartbeating every 30s — Ctrl-C to stop[/dim]")
+            while True:
+                try:
+                    requests.post(f"{base}/api/nodes/{config.node_id}/heartbeat", headers=_cp_headers(), timeout=10)
+                    console.print("[dim]♥ heartbeat[/dim]")
+                except requests.exceptions.RequestException:
+                    console.print("[red]heartbeat failed (offline?) — retrying[/red]")
+                time.sleep(30)
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Claim failed[/bold red]", border_style="red", expand=False))
+
+
+@node_app.command("resolve")
+def node_resolve(json_output: bool = _json_flag()):
+    """Show the currently active node (where personal data is served from)."""
+    _set_json_mode(json_output)
+    base = _cp_url()
+    if not base:
+        return
+    if not config.token:
+        console.print(Panel("Run [bold cyan]nexus cp login[/bold cyan] first.", title="[bold red]Not logged in[/bold red]", border_style="red", expand=False))
+        return
+    try:
+        response = requests.get(f"{base}/api/nodes/active", headers=_cp_headers(), timeout=10)
+        response.raise_for_status()
+        node = response.json()
+        output_json(node)
+        if JSON_MODE["enabled"]:
+            return
+        if node is None:
+            console.print(
+                Panel(
+                    "No active node online.\n[dim]Start one with [bold cyan]nexus node claim --watch[/bold cyan] "
+                    "on your Mac/Windows machine.[/dim]",
+                    title="[bold yellow]No active node[/bold yellow]",
+                    border_style="yellow",
+                    expand=False,
+                )
+            )
+        else:
+            console.print(
+                Panel(
+                    f"[bold green]{node['name']}[/bold green] ({node['platform']}) at {node.get('endpoint') or 'unknown endpoint'}\n"
+                    f"[dim]services: {node.get('services') or {}} · last seen {node['last_seen']}[/dim]",
+                    title="Active node",
+                    border_style="green",
+                    expand=False,
+                )
+            )
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Resolve failed[/bold red]", border_style="red", expand=False))
+
+
+@node_app.command("list")
+def node_list(json_output: bool = _json_flag()):
+    """List all registered nodes with liveness."""
+    _set_json_mode(json_output)
+    base = _cp_url()
+    if not base:
+        return
+    try:
+        response = requests.get(f"{base}/api/nodes", headers=_cp_headers(), timeout=10)
+        response.raise_for_status()
+        nodes = response.json()
+        output_json(nodes)
+        if not nodes:
+            console.print(Panel("No nodes registered yet.", title="Nodes", border_style="cyan", expand=False))
+            return
+        table = Table(title="[bold]NEXUS Nodes[/bold]", box=box.ROUNDED, header_style="bold cyan")
+        table.add_column("ID", width=4)
+        table.add_column("Name")
+        table.add_column("Platform")
+        table.add_column("Active")
+        table.add_column("Online")
+        for n in nodes:
+            table.add_row(str(n["id"]), n["name"], n["platform"], "★" if n["is_active"] else "", "●" if n["is_online"] else "○")
+        console.print(table)
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Error fetching nodes[/bold red]", border_style="red", expand=False))
+
+
+# --- NODE SERVICES (installable on the node) ---
+services_app = typer.Typer(help="Install/inspect optional node services (stt, ...)")
+app.add_typer(services_app, name="services")
+
+
+@services_app.command("status")
+def services_status(json_output: bool = _json_flag()):
+    """Show which optional services this machine's node has installed."""
+    _set_json_mode(json_output)
+    if config.node_id and config.control_plane_url:
+        try:
+            response = requests.get(
+                f"{config.control_plane_url.rstrip('/')}/api/nodes", headers=_cp_headers(), timeout=10
+            )
+            response.raise_for_status()
+            mine = [n for n in response.json() if n["id"] == config.node_id]
+            services = mine[0]["services"] if mine else {}
+        except requests.exceptions.RequestException:
+            services = {}
+    else:
+        services = _detect_local_services()
+    output_json(services)
+    rows = "\n".join(f"[cyan]{k}[/cyan]: {v}" for k, v in services.items()) or "[dim]none installed[/dim]"
+    console.print(Panel(rows, title="Node services", border_style="cyan", expand=False))
+
+
+def _detect_local_services() -> dict:
+    """Probe the local machine for installable services (no network)."""
+    services = {}
+    try:
+        import faster_whisper  # noqa: F401
+
+        services["stt"] = "faster-whisper"
+    except ImportError:
+        pass
+    try:
+        import requests as _r  # noqa: F401
+
+        try:
+            _r.get("http://127.0.0.1:11434/api/version", timeout=0.5)
+            services["llm"] = "ollama"
+        except Exception:
+            pass
+    except ImportError:
+        pass
+    return services
+
+
+@services_app.command("install")
+def services_install(
+    service: str = typer.Argument(..., help="Service to install: stt | llm"),
+):
+    """Install an optional service on this machine (the main node)."""
+    if service == "stt":
+        console.print(Panel("Installing [bold cyan]faster-whisper[/bold cyan] (reliable local transcription)…", border_style="cyan", expand=False))
+        import subprocess
+        import sys
+
+        result = subprocess.run([sys.executable, "-m", "pip", "install", "faster-whisper"])
+        if result.returncode != 0:
+            console.print(Panel("pip failed — see output above.", title="[bold red]Install failed[/bold red]", border_style="red", expand=False))
+            raise typer.Exit(1)
+        console.print(Panel("faster-whisper installed.\n[dim]Model weights download on first use (base ≈ 150MB).[/dim]", title="[bold green]STT installed[/bold green]", border_style="green", expand=False))
+    elif service == "llm":
+        console.print(
+            Panel(
+                "Ollama is a native app, not a pip package.\n"
+                "Install from https://ollama.com/download then:\n"
+                "  ollama pull llama3.2\n"
+                "The node auto-detects it at http://127.0.0.1:11434.",
+                title="Install Ollama (manual)",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+    else:
+        console.print(Panel(f"Unknown service '{service}'. Available: stt, llm.", title="[bold red]Unknown service[/bold red]", border_style="red", expand=False))
+        raise typer.Exit(1)
+
+    # report to the control plane if this machine is a claimed node
+    if config.node_id and config.control_plane_url:
+        detected = _detect_local_services()
+        try:
+            requests.post(
+                f"{config.control_plane_url.rstrip('/')}/api/nodes/{config.node_id}/services",
+                json={"services": detected},
+                headers=_cp_headers(),
+                timeout=10,
+            )
+        except requests.exceptions.RequestException:
+            pass
+
+
 if __name__ == "__main__":
     app()

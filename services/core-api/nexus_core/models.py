@@ -9,6 +9,8 @@ Fixes vs. the previous flat models.py (per the Errors & Fixes file):
 """
 from datetime import datetime, timezone
 
+import json
+
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
@@ -134,3 +136,37 @@ class InboxItem(Base):
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class Node(Base):
+    """A machine that can become the main NEXUS server (Mac/Windows node).
+
+    The hosted control plane stores only this coordination record — never
+    personal data. `is_active` marks the node currently serving the user;
+    `last_seen` older than the heartbeat timeout means it went offline.
+    services_json is configuration only: which optional services (stt, ...)
+    are installed on the node.
+    """
+    __tablename__ = "nodes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)                 # e.g. "Karthik's MacBook"
+    platform = Column(String, nullable=False)             # macos | windows | linux
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    is_active = Column(Boolean, default=False, nullable=False)
+    services_json = Column(String, default="{}")          # {"stt": "faster-whisper", ...}
+    # How clients reach the node: LAN host[:port], Tailscale name/MagicDNS,
+    # or a tunnel URL (cloudflared/ngrok). Plain config, not personal data.
+    endpoint = Column(String, nullable=True)
+    api_key = Column(String, nullable=True)               # token the node presents on claim
+    registered_at = Column(DateTime, default=utcnow, nullable=False)
+    last_seen = Column(DateTime, default=utcnow, nullable=False)
+
+    owner = relationship("User", backref="nodes")
+
+    @property
+    def services(self) -> dict:
+        try:
+            return json.loads(self.services_json) if self.services_json else {}
+        except ValueError:
+            return {}

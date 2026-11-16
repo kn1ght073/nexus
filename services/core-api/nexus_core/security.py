@@ -26,7 +26,16 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def _load_or_create_secret() -> str:
-    """Load the persisted JWT secret or generate one at first boot."""
+    """Resolve the JWT secret.
+
+    Precedence: NEXUS_JWT_SECRET env var (hosted control plane — a pinned
+    secret survives Render's ephemeral filesystem; a random one would log
+    everyone out on every deploy), then the persisted file (local node),
+    then generate + persist.
+    """
+    if _settings.jwt_secret:
+        return _settings.jwt_secret
+
     path = _settings.jwt_secret_file
     if path.exists():
         stored = path.read_text(encoding="utf-8").strip()

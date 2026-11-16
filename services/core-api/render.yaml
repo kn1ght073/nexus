@@ -1,0 +1,26 @@
+# Render blueprint: NEXUS control plane (free tier).
+# Deploy: Render dashboard -> New -> Blueprint -> select this repo.
+# Render reads services/core-api/render.yaml and provisions the web service;
+# add the env vars below in the dashboard after the first deploy.
+services:
+  - type: web
+    name: nexus-control-plane
+    runtime: docker
+    dockerfilePath: ./Dockerfile           # context: services/core-api/
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # --- set these in the Render dashboard (values are secrets) ---
+      - key: NEXUS_CONTROL_PLANE_MODE
+        value: "true"
+      - key: NEXUS_DATABASE_URL
+        sync: false                        # paste your Neon/Supabase Postgres URL
+      - key: NEXUS_JWT_SECRET
+        sync: false                        # e.g. output of: python -c "import secrets; print(secrets.token_hex(32))"
+      - key: NEXUS_CORS_ORIGINS
+        sync: false                        # e.g. ["https://nexus-control.onrender.com", "tauri://localhost"]
+      - key: NEXUS_STORAGE_ROOTS
+        value: "[]"                        # control plane never serves files
+      - key: NEXUS_NODE_HEARTBEAT_TIMEOUT
+        value: "90"

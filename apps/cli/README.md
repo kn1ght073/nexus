@@ -174,3 +174,22 @@ machine-readable JSON on stdout (tables/panels go to stderr), for pipelines:
 ```bash
 nexus task list --json | jq '.[] | select(.status=="pending") | .id'
 ```
+
+---
+
+## Control Plane & Node Commands (online access)
+
+Log in from anywhere while personal data stays on your machine. The full
+walkthrough (Render + Neon/Supabase free tiers, Tailscale) is in
+[docs/deploy/online-access.md](../../docs/deploy/online-access.md).
+
+| Command | What it does |
+| --- | --- |
+| `nexus cp set <url>` | Point the CLI at the hosted control plane |
+| `nexus cp login` | Log in against the control plane (any network) |
+| `nexus node claim [--name N] [--platform p] [--endpoint e] [--watch]` | Make this machine the active main server; `--watch` heartbeats every 30 s |
+| `nexus node resolve [--json]` | Show the current active node + endpoint (null if offline) |
+| `nexus node list` | All your nodes with online/offline status |
+| `nexus services status` | Which optional services are installed (stt, llm) |
+| `nexus services install stt` | Install faster-whisper (reliable local transcription) |
+| `nexus services install llm` | Instructions for Ollama |

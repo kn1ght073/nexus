@@ -25,9 +25,24 @@ class Settings(BaseSettings):
 
     # --- Database ---
     database_path: Path = Path("nexus.db")
+    # Full SQLAlchemy URL (postgresql://...) — takes precedence over the path.
+    # Used by the hosted control plane (Render + Neon/Supabase free tiers).
+    database_url: str | None = None
+
+    # --- Deployment mode ---
+    # True on the hosted control plane: only auth/devices/activity/nodes
+    # routers mount (no personal-data endpoints). See create_app().
+    control_plane_mode: bool = False
+
+    # A node counts as active while its heartbeat is younger than this.
+    node_heartbeat_timeout: int = 90  # seconds
 
     # --- Security ---
     # Generated once at first boot and persisted so tokens survive restarts.
+    # On ephemeral hosts (Render) set NEXUS_JWT_SECRET explicitly — a random
+    # secret would otherwise be regenerated on every deploy and log everyone
+    # out.
+    jwt_secret: str | None = None
     jwt_secret_file: Path = Path("nexus_jwt_secret")
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30

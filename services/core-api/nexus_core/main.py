@@ -3,6 +3,13 @@
 Replaces the flat main.py: app factory, locked-down CORS (was
 allow_origins=["*"] with credentials — invalid and unsafe), WebSocket
 event channel, and the /health probe the CLI pings.
+
+Two deployment modes (see docs/deploy/online-access.md):
+- full node (default): every router; runs on your own machine, holds
+  personal data on its own disks.
+- control plane (NEXUS_CONTROL_PLANE_MODE=true): mounts ONLY auth, devices,
+  activity and nodes — the coordination surface for "log in from anywhere".
+  Personal data (projects/tasks/notes/files/inbox/sync) never mounts there.
 """
 from contextlib import asynccontextmanager
 
@@ -17,6 +24,9 @@ from .settings import get_settings
 
 settings = get_settings()
 
+# Routers safe for the hosted control plane: identity + coordination only.
+CONTROL_PLANE_ROUTES = ("auth", "devices", "activity", "nodes")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,10 +36,14 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    mode = "control-plane" if settings.control_plane_mode else "node"
     app = FastAPI(
         title="NEXUS Core API",
-        description="Central API Node for the NEXUS Personal Digital Infrastructure",
-        version="0.2.0",
+        description=(
+            "Central API Node for the NEXUS Personal Digital Infrastructure"
+            + (" (control plane: auth + coordination only)" if settings.control_plane_mode else "")
+        ),
+        version="0.3.0",
         lifespan=lifespan,
     )
 
@@ -45,10 +59,27 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"])
     def health_check():
-        return {"status": "ok", "service": "nexus-core", "version": "0.2.0"}
+        return {
+            "status": "ok",
+            "service": "nexus-core",
+            "version": "0.3.0",
+            "mode": mode,
+        }
 
-    for router in all_routers:
-        app.include_router(router, prefix="/api")
+    if settings.control_plane_mode:
+        # Coordination surface only: filter to the safe routers by prefix.
+        mounted = []
+        for router in all_routers:
+            prefix = (router.prefix or "").strip("/")
+            if prefix in CONTROL_PLANE_ROUTES:
+                app.include_router(router, prefix="/api")
+                mounted.append(prefix)
+        assert set(mounted) == set(CONTROL_PLANE_ROUTES), (
+            f"control-plane mount mismatch: {mounted} vs {CONTROL_PLANE_ROUTES}"
+        )
+    else:
+        for router in all_routers:
+            app.include_router(router, prefix="/api")
 
     @app.websocket("/ws")
     async def websocket_events(websocket: WebSocket):

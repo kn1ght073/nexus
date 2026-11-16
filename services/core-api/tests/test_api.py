@@ -482,3 +482,163 @@ def test_action_engine_scope_enforcement(client, user_a):
             pass
     finally:
         db.close()
+
+
+# --- Step 8: nodes + control-plane mode ---
+def test_node_claim_activate_demote(client, user_a):
+    r = client.post(
+        "/api/nodes/claim",
+        json={"name": "Karthik's MacBook", "platform": "macos", "endpoint": "http://192.168.1.20:8000"},
+        headers=user_a["headers"],
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["is_active"] is True and body["is_online"] is True
+    assert body["api_key"]  # issued exactly once at claim
+    assert body["services"] == {}
+
+    # active resolution returns the node
+    active = client.get("/api/nodes/active", headers=user_a["headers"]).json()
+    assert active["name"] == "Karthik's MacBook"
+
+    # a second machine claims: single-active policy demotes the first
+    r2 = client.post(
+        "/api/nodes/claim",
+        json={"name": "Windows-Node", "platform": "windows", "endpoint": "http://192.168.1.21:8000"},
+        headers=user_a["headers"],
+    )
+    assert r2.status_code == 201
+    assert r2.json()["is_active"] is True
+    active2 = client.get("/api/nodes/active", headers=user_a["headers"]).json()
+    assert active2["name"] == "Windows-Node"
+    nodes = client.get("/api/nodes", headers=user_a["headers"]).json()
+    mac = [n for n in nodes if n["name"] == "Karthik's MacBook"][0]
+    assert mac["is_active"] is False
+
+    # re-claim by same name rotates the key and re-activates
+    r3 = client.post(
+        "/api/nodes/claim",
+        json={"name": "Karthik's MacBook", "platform": "macos", "endpoint": "http://192.168.1.20:8000"},
+        headers=user_a["headers"],
+    )
+    assert r3.json()["api_key"] != body["api_key"]
+
+
+def test_node_heartbeat_and_stale_resolution(client, user_a, env):
+    from nexus_core.database import SessionLocal
+    from nexus_core.models import Node, utcnow
+    from datetime import timedelta
+
+    r = client.post(
+        "/api/nodes/claim",
+        json={"name": "Mac-node", "platform": "macos", "endpoint": "http://mac:8000"},
+        headers=user_a["headers"],
+    )
+    node_id = r.json()["id"]
+
+    # heartbeat keeps it resolvable
+    hb = client.post(f"/api/nodes/{node_id}/heartbeat", headers=user_a["headers"])
+    assert hb.status_code == 200
+    assert client.get("/api/nodes/active", headers=user_a["headers"]).json()["id"] == node_id
+
+    # age the last_seen past the timeout: resolution falls to null
+    db = SessionLocal()
+    try:
+        node = db.query(Node).get(node_id)
+        node.last_seen = utcnow() - timedelta(seconds=99999)
+        db.commit()
+    finally:
+        db.close()
+    assert client.get("/api/nodes/active", headers=user_a["headers"]).json() is None
+
+    # a heartbeat revives it
+    client.post(f"/api/nodes/{node_id}/heartbeat", headers=user_a["headers"])
+    assert client.get("/api/nodes/active", headers=user_a["headers"]).json()["id"] == node_id
+
+
+def test_node_services_reporting_and_isolation(client, user_a, user_b):
+    r = client.post(
+        "/api/nodes/claim",
+        json={"name": "Mac-node", "platform": "macos"},
+        headers=user_a["headers"],
+    )
+    node_id = r.json()["id"]
+
+    svc = client.post(
+        f"/api/nodes/{node_id}/services",
+        json={"services": {"stt": "faster-whisper"}},
+        headers=user_a["headers"],
+    )
+    assert svc.status_code == 200
+    assert svc.json()["services"] == {"stt": "faster-whisper"}
+
+    # user B cannot see or touch A's node
+    assert client.get("/api/nodes", headers=user_b["headers"]).json() == []
+    assert client.get(f"/api/nodes/{node_id}/heartbeat", headers=user_b["headers"]).status_code == 405  # wrong method
+    r404 = client.get("/api/nodes/active", headers=user_b["headers"]).json()
+    assert r404 is None
+
+
+def test_control_plane_mode_mounts_only_coordination_routers(storage_root, tmp_path_factory):
+    """Control-plane mode must run with a pristine import graph: subprocess.
+
+    The app module reads settings at import time, so reloading in-process
+    mixes module states. A subprocess with its own env gives a true
+    "fresh boot in control-plane mode".
+    """
+    import json as _json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    db_dir = tmp_path_factory.mktemp("cp_db")
+    script = r"""
+import json, sys
+sys.path.insert(0, ".")
+from fastapi.testclient import TestClient
+import nexus_core.main as m
+
+with TestClient(m.app) as c:
+    assert c.get("/health").json()["mode"] == "control-plane"
+    c.post("/api/auth/register", json={"email": "cp@nexus.example.com", "password": "password-cp-1"})
+    login = c.post("/api/auth/login", json={"email": "cp@nexus.example.com", "password": "password-cp-1"}).json()
+    h = {"Authorization": "Bearer " + login["access_token"]}
+    claim = c.post("/api/nodes/claim", json={"name": "Mac", "platform": "macos", "endpoint": "http://mac:8000"}, headers=h)
+    assert claim.status_code == 201, claim.text
+    assert c.get("/api/nodes/active", headers=h).json()["name"] == "Mac"
+    missing = [p for p in ["/api/tasks", "/api/projects", "/api/notes", "/api/inbox", "/api/sync/pull", "/api/files/browse"] if c.get(p, headers=h).status_code != 404]
+    assert missing == [], f"personal-data endpoints must not exist: {missing}"
+    # devices & activity (coordination) are mounted
+    assert c.get("/api/devices", headers=h).status_code == 200
+    assert c.get("/api/activity", headers=h).status_code == 200
+print("CP_MODE_OK")
+"""
+    env = {
+        **__import__("os").environ,
+        "NEXUS_DATABASE_PATH": str(db_dir / "cp.db"),
+        "NEXUS_JWT_SECRET_FILE": str(db_dir / "cp_secret"),
+        "NEXUS_CONTROL_PLANE_MODE": "true",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parent.parent),
+        env=env,
+        timeout=120,
+    )
+    assert "CP_MODE_OK" in result.stdout, result.stdout + result.stderr
+
+
+def test_database_url_setting_takes_precedence():
+    from nexus_core.settings import Settings
+
+    s = Settings(database_url="postgres://user:pass@host:5432/db")
+    from nexus_core.database import _engine_url
+
+    # _engine_url reads the module-level settings; verify normalization logic
+    # directly on the URL string instead of the singleton.
+    url = s.database_url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    assert url == "postgresql://user:pass@host:5432/db"

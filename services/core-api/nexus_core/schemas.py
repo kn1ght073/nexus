@@ -225,3 +225,33 @@ class ChangedItems(BaseModel):
 class SyncPullResponse(BaseModel):
     server_time: datetime
     changes: ChangedItems
+
+
+# --- Nodes (control plane coordination; config only, no personal data) ---
+class NodeClaimRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)          # e.g. "Karthik's MacBook"
+    platform: str = Field(pattern="^(macos|windows|linux)$")
+    endpoint: str | None = Field(default=None, max_length=300)  # host:port / tailscale name / tunnel URL
+
+
+class NodeServicesRequest(BaseModel):
+    services: dict[str, str] = Field(default_factory=dict)   # {"stt": "faster-whisper", ...}
+
+
+class NodeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    platform: str
+    is_active: bool
+    is_online: bool = False                                   # computed from heartbeat age
+    services: dict[str, str] = {}
+    endpoint: str | None = None
+    registered_at: datetime
+    last_seen: datetime
+
+
+class NodeOutWithSecret(NodeOut):
+    """Claim response: includes the node api_key exactly once, at claim time."""
+    api_key: str
