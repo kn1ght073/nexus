@@ -72,6 +72,22 @@ class Settings(BaseSettings):
     pairing_code_ttl: int = 600        # seconds a pairing code stays valid
     pairing_max_attempts: int = 5     # wrong codes before the session dies
 
+    # --- GitHub linking (routers/github.py) ---
+    # The node acts as an OAuth "app" and links the user's GitHub account
+    # (gh-CLI-style device flow for the CLI, authorize-code flow for the
+    # desktop app). Defaults point at real GitHub; tests and the demo
+    # harness point them at a local stub. Scopes stay MINIMAL — read-only
+    # profile access is all "highlights" needs (least privilege, same
+    # principle as the GitHub Apps guidance in the GitHub docs).
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    github_scopes: str = "read:user"
+    github_login_base: str = "https://github.com"      # device/code + token endpoints
+    github_api_base: str = "https://api.github.com"    # user/repos/events endpoints
+    github_redirect_uri: str | None = None             # authorize-code callback (app default if unset)
+    github_state_ttl: int = 600                        # seconds an OAuth `state` stays valid
+    github_cache_seconds: int = 300                    # highlights cache (rate-limit QoL)
+
     # --- Node bridge (nexus_core/node_bridge.py) ---
     # Set by the CLI/desktop app when the user picks "this machine as main
     # server"; standalone runs may prefer the nexus_node.json file.

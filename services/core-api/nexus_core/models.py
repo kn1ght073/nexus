@@ -198,6 +198,30 @@ class PairingSession(Base):
     owner = relationship("User", backref="pairing_sessions")
 
 
+class GithubLink(Base):
+    """A user's linked GitHub account (see routers/github.py).
+
+    Flow: the node (as an OAuth app) walks the user through GitHub's
+    device or authorize-code flow and keeps ONE access token here so the
+    node can render "GitHub highlights" with the 5000/hr authenticated
+    rate limit instead of the 60/hr per-IP public one. Minimal scope
+    ("read:user") is requested; the token is revocable at any time via
+    unlink, which also asks GitHub to revoke it server-side.
+    """
+    __tablename__ = "github_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    github_id = Column(Integer, nullable=False, index=True)
+    github_login = Column(String, nullable=False, index=True)
+    access_token = Column(String, nullable=False)      # never returned by the API
+    scopes = Column(String, default="", nullable=False)
+    linked_at = Column(DateTime, default=utcnow, nullable=False)
+    last_refreshed_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    owner = relationship("User", backref="github_link")
+
+
 class RelayLink(Base):
     """Persistent device→node attachment served by the control plane.
 
