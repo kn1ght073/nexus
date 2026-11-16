@@ -921,6 +921,193 @@ def node_list(json_output: bool = _json_flag()):
         console.print(Panel(str(e), title="[bold red]Error fetching nodes[/bold red]", border_style="red", expand=False))
 
 
+# --- GITHUB (linking + highlights, gh-CLI-style) ---
+github_app = typer.Typer(help="Link a GitHub account and view its highlights")
+app.add_typer(github_app, name="github")
+
+
+@github_app.command("connect")
+def github_connect(
+    scopes: str = typer.Option(None, help="Override OAuth scopes (default: read:user — profile-only)."),
+):
+    """Link your GitHub account using the device flow (like gh auth login).
+
+    A one-time code opens at github.com/login/device — no redirect servers,
+    no port forwarding, works over SSH and on any platform.
+    """
+    if not require_login():
+        return
+    try:
+        r = requests.post(
+            f"{config.api_url}/api/github/device/start",
+            json={"scopes": scopes} if scopes else {},
+            headers=get_headers(),
+            timeout=15,
+        )
+        if r.status_code == 503:
+            console.print(Panel("This node has no GitHub OAuth app configured.\n[dim]Set NEXUS_GITHUB_CLIENT_ID/SECRET on the node.[/dim]", title="[bold red]GitHub linking unavailable[/bold red]", border_style="red", expand=False))
+            raise typer.Exit(1)
+        r.raise_for_status()
+        start = r.json()
+
+        console.print(
+            Panel(
+                f"Open [bold cyan]{start['verification_uri']}[/bold cyan]\n"
+                f"and enter code: [bold green]{start['user_code']}[/bold green]\n"
+                f"[dim]valid for {start['expires_in'] // 60} minutes — this window polls until you approve.[/dim]",
+                title="[bold cyan]Link GitHub[/bold cyan]",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+        try:
+            import webbrowser
+
+            webbrowser.open(start["verification_uri"])
+        except Exception:
+            pass  # headless — the URL above is the fallback
+
+        import time as _time
+
+        interval = max(int(start.get("interval", 5)), 1)
+        deadline = _time.monotonic() + int(start.get("expires_in", 900))
+        with console.status("[bold cyan]Waiting for approval at github.com/login/device…[/bold cyan]") as st:
+            while _time.monotonic() < deadline:
+                _time.sleep(interval)
+                st.update(f"[bold cyan]Polling (every {interval}s)… code {start['user_code']}[/bold cyan]")
+                pr = requests.post(
+                    f"{config.api_url}/api/github/device/poll",
+                    json={"device_code": start["device_code"]},
+                    headers=get_headers(),
+                    timeout=15,
+                )
+                pr.raise_for_status()
+                body = pr.json()
+                if body["status"] == "linked":
+                    p = body["profile"]
+                    console.print(
+                        Panel(
+                            f"GitHub account [bold cyan]{p['login']}[/bold cyan] linked (scopes: {p['scopes']}).\n"
+                            "Try [bold cyan]nexus github highlights[/bold cyan].",
+                            title="[bold green]GitHub linked[/bold green]",
+                            border_style="green",
+                            expand=False,
+                        )
+                    )
+                    return
+                if body["status"] == "slow_down":
+                    interval += 5
+                elif body["status"] == "pending":
+                    continue
+                else:  # denied | expired | error
+                    console.print(Panel(f"[bold red]{body['status']}[/bold red]\n[dim]{body.get('detail', '')}[/dim]", title="[bold red]Link failed[/bold red]", border_style="red", expand=False))
+                    raise typer.Exit(1)
+            console.print(Panel("Timed out waiting for approval — run [bold cyan]nexus github connect[/bold cyan] again.", title="[bold yellow]Expired[/bold yellow]", border_style="yellow", expand=False))
+            raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(f"Could not reach NEXUS at {config.api_url}.\n[dim]{e}[/dim]", title="[bold red]GitHub link failed[/bold red]", border_style="red", expand=False))
+
+
+@github_app.command("status")
+def github_status_cmd(json_output: bool = _json_flag()):
+    """Show whether a GitHub account is linked (and to which login)."""
+    _set_json_mode(json_output)
+    if not require_login():
+        return
+    try:
+        r = requests.get(f"{config.api_url}/api/github/status", headers=get_headers(), timeout=10)
+        r.raise_for_status()
+        body = r.json()
+        output_json(body)
+        if not body["linked"]:
+            console.print(Panel("No GitHub account linked.\nRun [bold cyan]nexus github connect[/bold cyan].", title="GitHub", border_style="yellow", expand=False))
+            return
+        p = body["profile"]
+        console.print(Panel(f"[bold cyan]{p['login']}[/bold cyan] (id {p['github_id']})\nlinked {p['linked_at'][:10]} · scopes: {p['scopes']}", title="GitHub linked", border_style="green", expand=False))
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Error[/bold red]", border_style="red", expand=False))
+
+
+@github_app.command("highlights")
+def github_highlights(
+    refresh: bool = typer.Option(False, help="Bypass the node's 5-minute cache."),
+    json_output: bool = _json_flag(),
+):
+    """Show your GitHub highlights: profile, top repos, recent activity."""
+    _set_json_mode(json_output)
+    if not require_login():
+        return
+    try:
+        with console.status("[bold cyan]Fetching GitHub highlights…[/bold cyan]"):
+            r = requests.get(
+                f"{config.api_url}/api/github/highlights",
+                params={"refresh": "true"} if refresh else {},
+                headers=get_headers(),
+                timeout=20,
+            )
+        if r.status_code == 409:
+            console.print(Panel("No GitHub account linked yet.\nRun [bold cyan]nexus github connect[/bold cyan] first.", title="[bold yellow]Not linked[/bold yellow]", border_style="yellow", expand=False))
+            raise typer.Exit(1)
+        r.raise_for_status()
+        h = r.json()
+        output_json(h)
+        if JSON_MODE["enabled"]:
+            return
+
+        p = h["profile"]
+        cache_note = " [dim](cached)[/dim]" if h.get("cached") else ""
+        console.print(
+            Panel(
+                f"[bold]{h['login']}[/bold] — {p.get('name') or ''}\n"
+                + (f"[dim]{p.get('bio') or ''}[/dim]\n" if p.get("bio") else "")
+                + f"repos {p.get('public_repos')} · followers {p.get('followers')} · following {p.get('following')}"
+                + (f" · {p.get('company')}" if p.get("company") else "")
+                + (f" · {p.get('location')}" if p.get("location") else ""),
+                title=f"GitHub highlights{cache_note}",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+        if h.get("repos"):
+            table = Table(title="Recent repositories", box=box.ROUNDED, header_style="bold cyan")
+            table.add_column("Repo", style="cyan")
+            table.add_column("★", justify="right")
+            table.add_column("Lang")
+            table.add_column("Last push")
+            for repo in h["repos"]:
+                table.add_row(
+                    repo["name"] or "?",
+                    str(repo.get("stars", 0)),
+                    repo.get("language") or "-",
+                    (repo.get("pushed_at") or "")[:10] or "-",
+                )
+            console.print(table)
+        for e in h.get("events", []):
+            console.print(f"  • [dim]{(e.get('created_at') or '')[:10]}[/dim] {e['detail']}")
+    except typer.Exit:
+        raise
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Error[/bold red]", border_style="red", expand=False))
+
+
+@github_app.command("unlink")
+def github_unlink():
+    """Remove the linked GitHub account (revokes the token server-side too)."""
+    if not require_login():
+        return
+    try:
+        r = requests.delete(f"{config.api_url}/api/github/link", headers=get_headers(), timeout=15)
+        if r.status_code == 404:
+            console.print(Panel("No GitHub account was linked.", title="[bold yellow]Nothing to unlink[/bold yellow]", border_style="yellow", expand=False))
+            return
+        r.raise_for_status()
+        console.print(Panel("GitHub account unlinked and token revoked.", title="[bold green]Unlinked[/bold green]", border_style="green", expand=False))
+    except requests.exceptions.RequestException as e:
+        console.print(Panel(str(e), title="[bold red]Error[/bold red]", border_style="red", expand=False))
+
+
 # --- NODE SERVICES (installable on the node) ---
 services_app = typer.Typer(help="Install/inspect optional node services (stt, ...)")
 app.add_typer(services_app, name="services")

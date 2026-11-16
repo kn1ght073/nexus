@@ -1,10 +1,13 @@
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
 
-CONFIG_FILE_PATH = Path.home() / ".nexus-cli.json"
+# Overridable per environment (tests, demo setups, shared machines);
+# defaults to the per-user home config.
+CONFIG_FILE_PATH = Path(os.environ.get("NEXUS_CLI_CONFIG", Path.home() / ".nexus-cli.json"))
 
 
 class CLIConfig(BaseModel):
