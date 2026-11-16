@@ -40,3 +40,10 @@ nexus_jwt_secret*
 *.egg-info/
 build/
 dist/
+
+# demo/e2e scratch artifacts
+scripts/demo.db*
+scripts/demo_cli_config.json
+scripts/e2e_cli_config.json
+scripts/demo_node.log
+scripts/demo-venv/
