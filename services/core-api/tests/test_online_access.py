@@ -386,3 +386,103 @@ def test_services_install_requires_admin_scope(client, user_a):
     ).json()["access_token"]
     r2 = client.post("/api/services/install", json={"service": "stt"}, headers={"Authorization": f"Bearer {tok}"})
     assert r2.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# 6. Bootstrap: in-app environment setup (uv/venv, mirrors, plan-only)
+# ---------------------------------------------------------------------------
+def test_bootstrap_plan_defaults_and_mirror(tmp_path):
+    from nexus_core.bootstrap import PIP_MIRRORS, plan_bootstrap, resolve_mirror
+
+    # hermetic: a venv dir that cannot exist on this machine
+    plan = plan_bootstrap(venv_dir=tmp_path / "fresh-venv", prefer_uv=False)
+    assert not plan.use_uv
+    assert plan.venv_dir.name == "fresh-venv"
+    # the full pinned stack is in the plan (core + CLI)
+    joined = " ".join(plan.requirements)
+    for pin in ("fastapi==", "uvicorn", "sqlalchemy==", "typer==", "rich=="):
+        assert pin in joined, f"missing {pin}"
+    # pip path: venv create, then pip self-upgrade, then the requirements install
+    assert plan.commands[0][:3] == [plan.commands[0][0], "-m", "venv"]
+    upgrade = [c for c in plan.commands if "--upgrade" in c]
+    assert upgrade and upgrade[0][2:4] == ["pip", "install"]
+    install = [c for c in plan.commands if c[-1] not in ("pip",) and "install" in c][-1]
+    assert install[2] == "pip" and install[3] == "install"  # python -m pip install <reqs...>
+
+    # mirror: known name resolves to URL and lands in the install command
+    plan_tuna = plan_bootstrap(venv_dir=tmp_path / "fresh-venv", mirror="tuna", prefer_uv=False)
+    assert plan_tuna.index_url == PIP_MIRRORS["tuna"]
+    install_tuna = [c for c in plan_tuna.commands if c[-1] not in ("pip",) and "install" in c][-1]
+    assert PIP_MIRRORS["tuna"] in install_tuna
+
+    # raw https URLs pass; garbage raises
+    assert resolve_mirror("https://mirror.example/simple") == "https://mirror.example/simple"
+    try:
+        plan_bootstrap(mirror="not-a-mirror")
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+
+
+def test_bootstrap_uv_detection_and_pip_fallback(tmp_path):
+    from nexus_core.bootstrap import _which_uv, plan_bootstrap
+
+    uv = _which_uv()
+    if uv is not None:  # uv exists in this sandbox
+        plan = plan_bootstrap(venv_dir=tmp_path / "fresh-venv", prefer_uv=True)
+        assert plan.use_uv and plan.uv_path == uv
+        assert plan.commands[0][0] == uv  # uv venv first
+        install = [c for c in plan.commands if "install" in c][-1]
+        assert install[0] == uv and install[1] == "pip"
+        assert "--python" in install  # targets the venv python
+    # explicit fallback always works
+    plan2 = plan_bootstrap(venv_dir=tmp_path / "fresh-venv", prefer_uv=False)
+    assert not plan2.use_uv and plan2.uv_path is None
+
+
+def test_packages_endpoint_serves_install_plan(client, user_a):
+    r = client.get("/api/services/packages", headers=user_a["headers"])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["services"]["stt"]["docs"].startswith("https://")
+    assert body["services"]["llm"]["docs"] == "https://ollama.com/download"
+    env = body["environment"]
+    assert isinstance(env["uv_available"], bool)
+    assert env["requirements"] and env["commands"]
+    assert "pypi.org" in body["mirrors"]["default"]
+    assert body["docs"]["uv"] == "https://docs.astral.sh/uv/"
+    # mirror filter propagates into the plan
+    r2 = client.get("/api/services/packages?mirror=tuna", headers=user_a["headers"])
+    assert r2.status_code == 200
+    assert "tuna" in r2.json()["environment"]["index_url"]
+    # bad mirror -> 400
+    r3 = client.get("/api/services/packages?mirror=garbage", headers=user_a["headers"])
+    assert r3.status_code == 400
+
+
+def test_packages_requires_auth(client):
+    assert client.get("/api/services/packages").status_code == 401
+
+
+def test_install_accepts_bootstrap_service(client, user_a, monkeypatch):
+    # accepted + job shape only — the background task is stubbed so the
+    # test never spawns pip/uv subprocesses or writes a real venv
+    from nexus_core.routers import services as services_router
+
+    monkeypatch.setattr(services_router, "_INSTALLERS", {**services_router._INSTALLERS, "bootstrap": lambda model: ["stubbed"]})
+    r = client.post(
+        "/api/services/install",
+        json={"service": "bootstrap", "model": "tuna"},
+        headers=user_a["headers"],
+    )
+    assert r.status_code == 202, r.text
+    job = r.json()
+    assert job["service"] == "bootstrap"
+    # unknown mirror is rejected up front
+    r2 = client.post(
+        "/api/services/install",
+        json={"service": "bootstrap", "model": "nope"},
+        headers=user_a["headers"],
+    )
+    assert r2.status_code == 400

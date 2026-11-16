@@ -128,17 +128,23 @@ the same need without any third-party coordination at all.
 ## Part 2 — Any user, any machine: promote a main server
 
 Each user does this on their own machine (all tools are built in — CLI
-or desktop app; no port forwarding, no technical prerequisites):
+or desktop app; no port forwarding, no technical prerequisites). **The
+environment sets itself up** (`nexus bootstrap` / the app's first-run
+screen — see Part 4); the commands below are what it automates:
 
 ```bash
-# on the machine that should hold personal data
-cd services/core-api
-pip install -r requirements.txt
-python -m uvicorn nexus_core.main:app --host 127.0.0.1 --port 8000   # node mode
+# 0. one-time, in-app setup: venv + every pinned dependency (uv when
+#    available, pip otherwise, mirror optional) — no manual pip/uv
+nexus bootstrap
+#    → tells you the start command it prepared, e.g.:
+#    ~/.nexus-venv/bin/python -m uvicorn nexus_core.main:app ...
 
-# point at the control plane and claim the slot (multi-tenant: your slot only)
-cd ../../apps/cli
-nexus cp set https://<control-plane-url>
+# 1. run the full Core locally (node mode = default)
+~/.nexus-venv/bin/python -m uvicorn nexus_core.main:app --host 127.0.0.1 --port 8000
+#    (the desktop app's "Make this the main server" does both steps)
+
+# 2. point at the control plane and claim the slot (multi-tenant: your slot only)
+cd apps/cli && nexus cp set https://<control-plane-url>
 nexus cp login --email you@example.com
 nexus node claim --name "My Windows Box"     # auto: platform, api_key, bridge
 ```
@@ -194,7 +200,43 @@ endpoint — the relay is the universal fallback that needs nothing.
 | Cloudflare Tunnel | `cloudflared tunnel --url http://localhost:8000` | public URL, rotates on restart |
 | LAN | `http://<lan-ip>:8000` | at home |
 
-## Part 4 — Install services in-app (STT, LLM)
+## Part 4 — Everything installs from inside the app (no terminal required)
+
+**You never hand-type `pip install`, manage venvs, or set up uv.** The
+app prepares its own environment and every optional service — the
+terminal commands below are the same engine, shown for completeness.
+
+### One-time environment setup (in-app)
+
+The first-run screen (or `nexus bootstrap` from the CLI) does all of it:
+
+- creates a private, per-user environment at `~/.nexus-venv`
+- installs **every pinned dependency** (the API + CLI stack) into it
+- uses **[uv](https://docs.astral.sh/uv/)** automatically when available
+  (~10× faster installs), otherwise plain
+  [pip](https://pip.pypa.io/en/stable/) — either way, unattended
+- offers **PyPI mirrors** for slow or blocked links:
+  [TUNA](https://pypi.tuna.tsinghua.edu.cn/simple) ·
+  [Aliyun](https://mirrors.aliyun.com/pypi/simple) ·
+  [USTC](https://mirrors.ustc.edu.cn/pypi/simple) ·
+  [SJTU](https://mirror.sjtu.edu.cn/pypi/web/simple)
+- shows the exact commands *before* running them (`--dry-run` / the
+  plan panel) — no surprises, nothing elevated, everything as your user
+
+```bash
+# what the app does for you (CLI equivalent, for reference):
+nexus bootstrap --mirror tuna        # uv if present, pip otherwise
+nexus bootstrap --dry-run            # just show the plan
+```
+
+The same flow is drivable over the API, which is how the desktop app's
+first-run screen and the node itself do it:
+`GET /api/services/packages` returns the machine-readable plan (links,
+sizes, mirrors, whether uv exists, the exact commands), and
+`POST /api/services/install {"service": "bootstrap", "model": "tuna"}`
+runs it as a background job with progress polling.
+
+### Optional AI services (in-app prompts)
 
 When the node is promoted, the app checks what is installed and prompts
 for the rest:
@@ -205,17 +247,39 @@ nexus services install stt     # pip faster-whisper (base ~150 MB on first use)
 nexus services install llm     # Ollama manual steps (native app)
 ```
 
-The same endpoints drive the desktop app's prompts
-(`GET /api/services/status`, `POST /api/services/install {service,
-model}`): the UI asks "Install transcription? ~150 MB on first use" and
-the node runs the install as its own user. Installs require the
-`admin`/`devices` scope — a paired phone (capture-only) can never
-install software.
+| Service | What it gives you | Size (first use) | Link |
+| --- | --- | --- | --- |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (stt) | voice-note transcription into the Universal Inbox | ~150 MB base · ~460 MB small | installed by the app |
+| [Ollama](https://ollama.com/download) (llm) | local intent extraction for the inbox pipeline | ~2 GB (llama3.2 3B) | native app — the app opens the download page and detects it automatically at `127.0.0.1:11434` |
+
+The UI asks "Install transcription? ~150 MB on first use" and the node
+runs the install as its own user. Installs require the `admin`/`devices`
+scope — a paired phone (capture-only) can never install software.
+
+### Where Python itself comes from
+
+The app needs a Python 3.11+ interpreter, nothing more. If the machine
+has none, the setup screen links
+[python.org/downloads](https://www.python.org/downloads/) (Windows/macOS
+installers) — or, on any machine with a terminal,
+[uv](https://docs.astral.sh/uv/getting-started/installation) can fetch a
+managed Python on its own:
+
+```bash
+# Windows (PowerShell):
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# macOS / Linux:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+After that, everything else (venv, pins, services) is handled by the
+app as above — uv is a transparent accelerator, never a manual step.
 
 ## Operations cheat sheet
 
 ```bash
 curl https://<cp>/health                          # mode: control-plane|node
+nexus bootstrap --mirror tuna                     # one-time setup (uv/pip)
 nexus node resolve                                # active node (or null)
 nexus node list                                   # all your nodes
 nexus node claim --name "..."                     # rotate key + re-activate
@@ -226,11 +290,11 @@ nexus services status                             # STT/LLM present?
 - **Node offline?** A connected bridge socket counts as fresh; if the
   machine sleeps, resolution returns null until it returns.
 - **Deploy an update**: `git push` — Render auto-deploys; CI runs the
-  test suite (63 tests) first.
+  test suite (68 tests) first.
 - **Multi-worker scaling**: move rate-limit/lockout/relay tables to the
   shared store (interfaces are already isolated in `ratelimit.py`).
 
-## What was verified (tests: 63/63 green)
+## What was verified (tests: 68/68 green)
 
 - Control-plane isolation: personal-data endpoints 404 in control-plane
   mode (subprocess-level fresh-boot test).
@@ -248,3 +312,9 @@ nexus services status                             # STT/LLM present?
   socket handshake (4401).
 - Services: status endpoint; install guarded by admin/devices scope
   (capture-only device token → 403); unknown service refused.
+- Bootstrap: plan-only computation (venv create + pip upgrade + pinned
+  install command shapes), uv detection with pip fallback, mirror
+  resolution (named + https URL + garbage rejected), `/api/services/packages`
+  machine-readable plan (links, sizes, uv flag, mirror propagation,
+  auth required), `bootstrap` install service accepted with mirror
+  validation (installer stubbed — tests never spawn subprocesses).

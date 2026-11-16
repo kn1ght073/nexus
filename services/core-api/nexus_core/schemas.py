@@ -293,8 +293,8 @@ class ServiceStatusResponse(BaseModel):
 
 
 class ServiceInstallRequest(BaseModel):
-    service: str = Field(pattern="^(stt|llm)$")
-    model: str | None = None               # base|small for stt; llama3.2|qwen2.5:3b for llm
+    service: str = Field(pattern="^(stt|llm|bootstrap)$")
+    model: str | None = None               # base|small (stt) | llama3.2|qwen2.5:3b (llm) | mirror name (bootstrap)
 
 
 class ServiceInstallStatus(BaseModel):

@@ -64,6 +64,10 @@ phones with **zero open ports** — full guide:
 [`docs/deploy/online-access.md`](docs/deploy/online-access.md).
 
 ```bash
+# one-time setup — the app sets up its own environment (uv when present,
+# pip otherwise; mirrors for slow links). No manual pip/venv/uv steps.
+nexus bootstrap                    # or: nexus bootstrap --mirror tuna
+
 # control plane (hosted on Render free tier, or self-hosted via docker compose)
 nexus cp set https://<control-plane-url>      # then: nexus cp login
 

@@ -176,7 +176,64 @@ def launch_tui():
         tui_app = NexusTUI()
         tui_app.run()
     except ImportError as e:
-        console.print(Panel(f"Could not load TUI module.\n[dim]{e}[/dim]", title="[bold red]ERROR[/bold red]", border_style="red"))
+        console.print(Panel(f"Could not load TUI module.\n[dim]{e}[/dim]", title="[bold red]ERROR[/bold red]", border_style="red", expand=False))
+
+
+# --- BOOTSTRAP (one-time setup, all inside the app) ---
+@app.command()
+def bootstrap(
+    mirror: str = typer.Option(
+        "default",
+        help="PyPI mirror: default | tuna | aliyun | ustc | sjtu | any https:// URL (QoL for slow links).",
+    ),
+    dry_run: bool = typer.Option(False, help="Show the plan without running anything."),
+    venv_dir: str = typer.Option(None, help="Custom venv location (default: ~/.nexus-venv)."),
+):
+    """One-time setup: create the managed venv and install every pinned dependency.
+
+    Uses uv automatically when available (fast), falls back to plain
+    python -m venv + pip otherwise. No manual pip/uv/venv steps — the app
+    sets itself up and tells you the exact command to start the node.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "services" / "core-api"))
+    try:
+        from nexus_core.bootstrap import plan_bootstrap, run_bootstrap
+    except ImportError as e:
+        console.print(Panel(f"Run from the repo (services/core-api not found).\n[dim]{e}[/dim]", title="[bold red]Bootstrap unavailable[/bold red]", border_style="red", expand=False))
+        raise typer.Exit(1)
+
+    try:
+        plan = plan_bootstrap(
+            venv_dir=_Path(venv_dir).expanduser() if venv_dir else None,
+            mirror=mirror,
+        )
+    except ValueError as e:
+        console.print(Panel(str(e), title="[bold red]Bad mirror[/bold red]", border_style="red", expand=False))
+        raise typer.Exit(1)
+
+    console.print(Panel(plan.describe(), title="[bold cyan]Setup plan[/bold cyan]", border_style="cyan", expand=False))
+    if dry_run:
+        console.print("[dim]--dry-run: nothing was executed[/dim]")
+        return
+    console.print()
+    ok = run_bootstrap(plan, echo=lambda line: console.print(f"[dim]{line}[/dim]"))
+    if not ok:
+        console.print(Panel("Setup failed — the lines above show the exact failing step.", title="[bold red]Setup failed[/bold red]", border_style="red", expand=False))
+        raise typer.Exit(1)
+    console.print(
+        Panel(
+            f"Environment ready.\n"
+            f"Start the node (main server):\n"
+            f"  [bold cyan]{plan.python_bin} -m uvicorn nexus_core.main:app --host 127.0.0.1 --port 8000[/bold cyan]\n"
+            f"Then, from this CLI: [bold cyan]nexus node claim --name <machine>[/bold cyan]",
+            title="[bold green]Setup complete[/bold green]",
+            border_style="green",
+            expand=False,
+        )
+    )
 
 
 @app.command()
@@ -914,9 +971,32 @@ def _detect_local_services() -> dict:
 
 @services_app.command("install")
 def services_install(
-    service: str = typer.Argument(..., help="Service to install: stt | llm"),
+    service: str = typer.Argument(..., help="Service to install: stt | llm | bootstrap (full environment setup)"),
+    mirror: str = typer.Option(
+        "default",
+        help="PyPI mirror for this install: default | tuna | aliyun | ustc | sjtu | https:// URL.",
+    ),
 ):
     """Install an optional service on this machine (the main node)."""
+    if service == "bootstrap":
+        # full environment self-setup — same engine as `nexus bootstrap`
+        import sys as _sys
+        from pathlib import Path as _Path
+
+        _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "services" / "core-api"))
+        from nexus_core.bootstrap import plan_bootstrap, run_bootstrap
+
+        try:
+            plan = plan_bootstrap(mirror=mirror)
+        except ValueError as e:
+            console.print(Panel(str(e), title="[bold red]Bad mirror[/bold red]", border_style="red", expand=False))
+            raise typer.Exit(1)
+        console.print(Panel(plan.describe(), title="[bold cyan]Setup plan[/bold cyan]", border_style="cyan", expand=False))
+        if not run_bootstrap(plan, echo=lambda line: console.print(f"[dim]{line}[/dim]")):
+            console.print(Panel("Setup failed — see the failing step above.", title="[bold red]Setup failed[/bold red]", border_style="red", expand=False))
+            raise typer.Exit(1)
+        console.print(Panel(f"Environment ready. Node start command:\n  {plan.python_bin} -m uvicorn nexus_core.main:app", title="[bold green]Setup complete[/bold green]", border_style="green", expand=False))
+        return
     if service == "stt":
         console.print(Panel("Installing [bold cyan]faster-whisper[/bold cyan] (reliable local transcription)…", border_style="cyan", expand=False))
         import subprocess

@@ -319,3 +319,52 @@ implemented as (priorities per the user's four):
 **Next session →** step 7 (media/downloads/automation) stays deferred
 per plan build order; desktop app UI wiring for Machines/pairing/
 install prompts; optional account export/import between tiers; LAN TLS.
+
+### Step 8c — In-app setup (bootstrap) + guide QoL pass ✅ (this session)
+
+User request: "commit to GitHub; update online-access.md after part 3 so
+all pip installations, uv, and other setup steps are performed inside
+the app, with appropriate links" — implemented as:
+
+- **nexus_core/bootstrap.py**: the self-setup engine. plan_bootstrap()
+  computes the exact commands WITHOUT running (inspectable plan; --dry-run
+  shows it): per-user venv (~/.nexus-venv), uv auto-detected and probed
+  (`uv --version` must succeed), plain `python -m venv` + pip fallback
+  with pip self-upgrade; all core+CLI pins as the default requirement
+  list; named PyPI mirrors (tuna/aliyun/ustc/sjtu + default) or raw
+  https URLs, validated (garbage rejected); run_bootstrap() executes
+  with live echo, failure tail, and a bounded timeout (900 s);
+  write_uv_config() persists the mirror for future uv runs.
+- **API**: GET /api/services/packages — machine-readable setup plan for
+  first-run screens (services with labels/sizes/docs links, environment:
+  uv_available/venv/python/index/requirements/commands, mirrors list,
+  docs links incl. uv/pip/python.org); POST /api/services/install
+  accepts service "bootstrap" (model field = mirror name, validated).
+  Schema pattern extended ^(stt|llm|bootstrap)$.
+- **CLI**: new `nexus bootstrap [--mirror] [--dry-run] [--venv-dir]`
+  command (plan panel, live progress, final "how to start the node"
+  panel); `nexus services install bootstrap [--mirror]` runs the same
+  engine. Verified live in the sandbox: uv detected, tuna mirror flowed
+  into the install command, dry-run printed only the plan.
+- **Docs**: online-access.md Part 2 rewritten (bootstrap first, manual
+  steps framed as "what it automates"), Part 4 renamed "Everything
+  installs from inside the app" — one-time environment setup section
+  with uv/pip/mirror links, services table with sizes+links
+  (faster-whisper, ollama), "Where Python itself comes from" with
+  python.org + uv install one-liners for Windows/macOS/Linux; operations
+  cheat sheet gains bootstrap; verified-tests list updated (68/68).
+  download/online-access.md synced from the repo copy.
+- **Tests**: 68/68 green — 5 new (bootstrap plan shapes incl. pip
+  upgrade/venv create/mirror propagation, uv detection + fallback,
+  packages endpoint auth/links/mirror-propagation/400-on-garbage,
+  bootstrap install service accepted + mirror validation with the
+  installer stubbed so tests never spawn subprocesses or write real
+  venvs — hermetic via tmp_path venv dirs after catching a real
+  ~/.nexus-venv leak from the un-stubbed first version).
+- **Push**: sandbox has no git remote and no gh CLI — commits made
+  locally (nexus repo + outer my-project repo); push commands left for
+  the user (git remote add + push).
+
+**Next session →** desktop app first-run UI wiring to
+GET /api/services/packages + POST bootstrap job polling; step 7
+(media/downloads/automation) still deferred per plan build order.
