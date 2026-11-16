@@ -188,22 +188,75 @@ def bootstrap(
     ),
     dry_run: bool = typer.Option(False, help="Show the plan without running anything."),
     venv_dir: str = typer.Option(None, help="Custom venv location (default: ~/.nexus-venv)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the interactive prompts (CI, scripted installs)."),
 ):
     """One-time setup: create the managed venv and install every pinned dependency.
 
     Uses uv automatically when available (fast), falls back to plain
     python -m venv + pip otherwise. No manual pip/uv/venv steps — the app
     sets itself up and tells you the exact command to start the node.
+
+    First run is INTERACTIVE by default: the app asks what to install and
+    provides guidance for each choice (skip with --yes).
     """
     import sys as _sys
     from pathlib import Path as _Path
 
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "services" / "core-api"))
     try:
-        from nexus_core.bootstrap import plan_bootstrap, run_bootstrap
+        from nexus_core.bootstrap import PIP_MIRRORS, plan_bootstrap, run_bootstrap
     except ImportError as e:
         console.print(Panel(f"Run from the repo (services/core-api not found).\n[dim]{e}[/dim]", title="[bold red]Bootstrap unavailable[/bold red]", border_style="red", expand=False))
         raise typer.Exit(1)
+
+    # ---- interactive first-run interview (what to install + guidance) ----
+    if not yes:
+        console.print(
+            Panel(
+                "This is the one-time NEXUS setup. I'll ask a few questions, then\n"
+                "show the exact plan before anything runs on your machine.",
+                title="[bold cyan]NEXUS first-run setup[/bold cyan]",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+        install_all = typer.confirm(
+            "Install the full NEXUS stack now? (FastAPI node + CLI deps, pinned versions)",
+            default=True,
+        )
+        if not install_all:
+            console.print(
+                Panel(
+                    "Skipped the stack install.\n"
+                    "Guidance: you can re-run [bold cyan]nexus bootstrap[/bold cyan] any time — nothing\n"
+                    "partial was installed, and the plan is always shown before execution.",
+                    title="[bold yellow]Setup deferred[/bold yellow]",
+                    border_style="yellow",
+                    expand=False,
+                )
+            )
+            raise typer.Exit(0)
+        if mirror == "default":
+            slow_link = typer.confirm(
+                "Is your PyPI link slow or unreliable? (choose a nearby mirror — helps a lot)",
+                default=False,
+            )
+            if slow_link:
+                console.print("[dim]Known mirrors:[/dim]")
+                for name in ("tuna", "aliyun", "ustc", "sjtu"):
+                    console.print(f"  [cyan]{name}[/cyan] — {PIP_MIRRORS[name]}")
+                mirror = typer.prompt("Mirror to use (name or leave blank for default)", default="default")
+        console.print(
+            Panel(
+                "Guidance while the install runs:\n"
+                "• venv — a private Python environment in ~/.nexus-venv; nothing global is touched\n"
+                "• uv — a faster installer the app uses automatically when present\n"
+                "• everything runs as your user; no admin/sudo needed",
+                title="[dim]What's happening[/dim]",
+                border_style="dim",
+                expand=False,
+            )
+        )
 
     try:
         plan = plan_bootstrap(
@@ -217,6 +270,9 @@ def bootstrap(
     console.print(Panel(plan.describe(), title="[bold cyan]Setup plan[/bold cyan]", border_style="cyan", expand=False))
     if dry_run:
         console.print("[dim]--dry-run: nothing was executed[/dim]")
+        return
+    if not yes and not typer.confirm("Run this plan now?", default=True):
+        console.print("[dim]Aborted — nothing was executed[/dim]")
         return
     console.print()
     ok = run_bootstrap(plan, echo=lambda line: console.print(f"[dim]{line}[/dim]"))

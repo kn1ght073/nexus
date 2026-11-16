@@ -126,11 +126,27 @@ def plan_bootstrap(
             "PyJWT==2.12.1",
             "websockets==16.0",
             "psycopg2-binary==2.9.10",
+            # inbox router declares Form/File endpoints; FastAPI refuses to
+            # even import those without python-multipart (RuntimeError at
+            # boot — caught live in the managed-venv demo)
+            "python-multipart==0.0.20",
             "typer==0.23.1",
             "rich==14.3.3",
             "requests==2.32.5",
             "textual==8.2.8",
         ]
+
+    # The venv must also be able to import nexus_core itself: install the
+    # package editable from the repo this bootstrap lives in. Caught live
+    # while demoing "uvicorn nexus_core.main:app from the managed venv"
+    # (ModuleNotFoundError) — a venv with deps but no package is useless.
+    # EDITABLE so the venv always runs the repo's current code instead of a
+    # stale copy (pip/uv both accept a bare directory as editable with -e).
+    core_root = Path(__file__).resolve().parent.parent
+    if core_root.exists() and (core_root / "nexus_core" / "main.py").exists():
+        editable = str(core_root)
+        if editable not in requirements:
+            requirements = ["--editable", editable] + requirements
 
     venv_dir = venv_dir or DEFAULT_VENV_DIR
     index_url = resolve_mirror(mirror)

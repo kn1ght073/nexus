@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+# Minimal PEP 621 metadata so `uv pip install --editable .` (and plain pip)
+# can install the package into the managed venv. Without it uv installs
+# NOTHING for a bare directory — caught live while demoing the bootstrap
+# ("uvicorn nexus_core.main:app" from the managed venv failed).
+[project]
+name = "nexus-core"
+version = "0.3.0"
+description = "NEXUS Central API Node (personal digital infrastructure)"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["nexus_core", "nexus_core.routers", "nexus_core.workers"]

@@ -441,6 +441,27 @@ def test_bootstrap_uv_detection_and_pip_fallback(tmp_path):
     assert not plan2.use_uv and plan2.uv_path is None
 
 
+def test_bootstrap_installs_core_editable(tmp_path):
+    """The venv must import nexus_core (caught live in the demo: a venv with
+    deps but no package fails at `uvicorn nexus_core.main:app`). The plan
+    therefore installs the core-api package EDITABLE from the repo, with
+    the flag as a separate argv entry (not glued into one spec string)."""
+    from pathlib import Path
+
+    from nexus_core.bootstrap import plan_bootstrap
+
+    plan = plan_bootstrap(venv_dir=tmp_path / "fresh-venv", prefer_uv=False)
+    assert plan.requirements[0] == "--editable"
+    core_root = plan.requirements[1]
+    assert (Path(core_root) / "nexus_core" / "main.py").exists(), "editable path must be the real package"
+    # the install command carries the flag + path verbatim (pip and uv both)
+    install = [c for c in plan.commands if "install" in c][-1]
+    assert "--editable" in install and core_root in install
+    # pins still present alongside the editable install
+    joined = " ".join(plan.requirements)
+    assert "fastapi==" in joined and "typer==" in joined
+
+
 def test_packages_endpoint_serves_install_plan(client, user_a):
     r = client.get("/api/services/packages", headers=user_a["headers"])
     assert r.status_code == 200
