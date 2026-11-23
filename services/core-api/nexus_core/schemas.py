@@ -5,7 +5,7 @@ project_id) so apps/cli keeps working unchanged, while adding the fields the
 architecture plan requires: ids, timestamps, capabilities and sync metadata.
 """
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -56,12 +56,70 @@ class SessionOut(BaseModel):
     device_id: int | None = None
     created_via: str
     last_used_ip: str | None = None
+    user_agent: str | None = None
     issued_at: datetime
     expires_at: datetime
     rotated_at: datetime | None = None
     revoked_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Client Console / Account Schemas ---
+class GoogleIdentityOut(BaseModel):
+    linked: bool = False
+    email: str | None = None
+    name: str | None = None
+    picture_url: str | None = None
+    email_verified: bool = False
+    linked_at: datetime | None = None
+    last_login_at: datetime | None = None
+
+
+class DeviceStatsOut(BaseModel):
+    total: int = 0
+    active: int = 0
+
+
+class SessionStatsOut(BaseModel):
+    total: int = 0
+    active: int = 0
+
+
+class AccountOverviewOut(BaseModel):
+    id: int
+    email: str
+    display_name: str | None = None
+    role: str = "user"
+    is_active: bool = True
+    created_at: datetime
+    google_identity: GoogleIdentityOut
+    device_stats: DeviceStatsOut
+    session_stats: SessionStatsOut
+
+
+class ServerStatusOut(BaseModel):
+    control_plane: str = "operational"
+    api_version: str = "v0.3.0"
+    mode: str = "control-plane"
+    database: str = "healthy"
+    relay_mesh: str = "operational"
+    auth_provider: str = "Google OIDC (PKCE S256)"
+    checked_at: datetime
+    features: dict[str, bool] = {
+        "device_registration": True,
+        "relay_pairing": True,
+        "session_revocation": True,
+        "audit_logging": True,
+        "cloud_file_storage": False,
+    }
+
+
+class AccountDataSummaryOut(BaseModel):
+    profile: dict[str, Any]
+    stats: dict[str, int]
+    storage: dict[str, Any]
+    capabilities: dict[str, str]
 
 
 class GoogleStartRequest(BaseModel):
@@ -204,6 +262,13 @@ class ActivityOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ActivityPageOut(BaseModel):
+    items: list[ActivityOut]
+    total: int
+    limit: int
+    offset: int
 
 
 

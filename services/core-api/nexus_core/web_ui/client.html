@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS | Sovereign Client Console</title>
+  <meta name="description" content="Personal Sovereign Client Console for NEXUS account holders.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+  <style>
+    .client-avatar-img {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid rgba(56, 189, 248, 0.4);
+      object-fit: cover;
+    }
+    .client-notice-box {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+    .client-notice-box strong { color: #f8fafc; }
+    .client-data-metric {
+      background: #080b11;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .client-data-metric .val {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .client-data-metric .lbl {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+    .filter-btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .filter-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      color: #94a3b8;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      transition: all 0.2s ease;
+    }
+    .filter-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body data-theme="dark">
+  <canvas id="control-canvas" aria-hidden="true"></canvas>
+  <div class="ambient-mesh" aria-hidden="true"></div>
+
+  <!-- Master App Shell Container -->
+  <div class="app-layout">
+    <!-- Left Navigation Sidebar -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <a href="/client" class="brand-link">
+          <div class="brand-hexagon">⬡</div>
+          <div class="brand-info">
+            <span class="brand-title">NEXUS</span>
+            <span class="brand-sub" style="color: #34d399;">CLIENT CONSOLE</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- User Quick Card -->
+      <div style="padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;">
+          <div id="c-avatar-container">
+            <div id="c-avatar-placeholder" style="width: 32px; height: 32px; border-radius: 50%; background: rgba(56,189,248,0.2); color: #38bdf8; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: center; text-transform: uppercase;">
+              NX
+            </div>
+          </div>
+          <div style="min-width: 0; flex: 1;">
+            <div id="c-user-name" style="font-size: 12px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Loading...</div>
+            <div style="font-size: 10px; font-family: monospace; color: #34d399;" id="c-user-id">ACCOUNT #--</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Hierarchy -->
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">MY SOVEREIGN CLIENT</div>
+        <button class="nav-link active" data-view="client-overview">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Account Overview</span>
+        </button>
+        <button class="nav-link" data-view="client-devices">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="12" rx="2"/><line x1="12" y1="20" x2="12" y2="16"/><line x1="8" y1="20" x2="16" y2="20"/></svg>
+          <span>Devices &amp; Sessions</span>
+        </button>
+        <button class="nav-link" data-view="client-activity">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Account Activity</span>
+        </button>
+        <button class="nav-link" data-view="client-server">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <span>Server Information</span>
+        </button>
+        <button class="nav-link" data-view="client-data">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <span>Account Data</span>
+        </button>
+
+        <div class="nav-group-label">PORTAL</div>
+        <a href="/" class="nav-link" style="text-decoration: none;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>Client Downloads</span>
+        </a>
+        <a href="/admin" id="link-operator-console" class="nav-link hidden" style="text-decoration: none; color: #fbbf24;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Operator Console ↗</span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button class="logout-btn" id="client-logout-btn" style="width: 100%;" title="Sign Out">Sign Out</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Stage Area -->
+    <div class="app-main">
+      <header class="top-header">
+        <div class="top-header-left">
+          <button class="sidebar-toggle" id="sidebar-toggle-btn" aria-label="Toggle Sidebar">☰</button>
+          <div class="breadcrumb-trail">
+            <span class="bc-root">NEXUS</span>
+            <span class="bc-sep">/</span>
+            <span class="bc-current" id="c-bc-title">Account Overview</span>
+          </div>
+        </div>
+
+        <div class="top-header-right">
+          <div class="live-telemetry-badge">
+            <span class="pulse-dot-live"></span>
+            <span class="telemetry-host">CONTROL PLANE</span>
+            <span class="telemetry-ping" id="c-live-ping">-- ms</span>
+          </div>
+          <a href="/" class="top-icon-btn" title="View Public Downloads Showcase" style="width: auto; padding: 0 10px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(255,255,255,0.03);">
+            <span>Client Downloads</span>
+            <span style="font-size: 10px;">↗</span>
+          </a>
+        </div>
+      </header>
+
+      <!-- View Containers -->
+      <main class="content-viewport">
+        <!-- 1. ACCOUNT OVERVIEW VIEW -->
+        <section class="view-panel active" id="view-client-overview">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Account Overview</h1>
+              <p class="view-lead">Your sovereign identity credentials, Google linkage, and hardware metrics.</p>
+            </div>
+          </div>
+
+          <!-- Hero Profile Card -->
+          <div class="card" style="padding: 24px; margin-bottom: 24px; border-color: rgba(56, 189, 248, 0.2); background: linear-gradient(135deg, rgba(56, 189, 248, 0.05) 0%, rgba(13, 19, 34, 0.7) 100%);">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px;">
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <div id="c-hero-avatar-box">
+                  <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(56,189,248,0.2); border: 2px solid rgba(56,189,248,0.4); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #38bdf8; font-weight: bold;" id="c-hero-avatar-fallback">
+                    NX
+                  </div>
+                </div>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <h2 style="font-size: 18px; font-weight: 700; color: #fff; margin: 0;" id="c-hero-name">Loading Profile...</h2>
+                    <span class="badge" style="background: rgba(52, 211, 153, 0.1); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);">ACTIVE</span>
+                  </div>
+                  <div style="font-size: 12px; color: #94a3b8; font-family: monospace; margin-top: 4px;" id="c-hero-email">--</div>
+                  <div style="display: flex; gap: 16px; margin-top: 10px; font-size: 11px; color: #64748b;">
+                    <span id="c-hero-id">ID: #--</span>
+                    <span id="c-hero-created">Joined: --</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); padding: 12px 18px; border-radius: 8px; text-align: right;">
+                <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">AUTH IDENTITY</div>
+                <div style="font-size: 13px; font-weight: 600; color: #38bdf8; margin-top: 2px;" id="c-hero-provider">Sovereign Account</div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 2px;" id="c-hero-linked">PKCE Guarded</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metrics Row -->
+          <div class="metrics-grid" style="margin-bottom: 24px;">
+            <div class="metric-card">
+              <span class="metric-label">LINKED HARDWARE NODES</span>
+              <span class="metric-value" id="c-metric-devices">0</span>
+              <span class="metric-change" style="color: #34d399;" id="c-metric-devices-sub">0 online</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">ACTIVE SESSIONS</span>
+              <span class="metric-value" id="c-metric-sessions">0</span>
+              <span class="metric-change" id="c-metric-sessions-sub">Token lineage active</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">CLOUD STORAGE POLICY</span>
+              <span class="metric-value" style="color: #34d399; font-size: 18px;">0 BYTES</span>
+              <span class="metric-change">Zero Cloud Retention Guarantee</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. DEVICES & SESSIONS VIEW -->
+        <section class="view-panel" id="view-client-devices">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Linked Devices &amp; Login Sessions</h1>
+              <p class="view-lead">Manage hardware node pairings and inspect active cryptographic session tokens.</p>
+            </div>
+          </div>
+
+          <div class="client-notice-box">
+            <strong>Google OAuth Notice:</strong> The sessions listed below represent cryptographic access tokens issued
+            specifically for this NEXUS sovereign account. In adherence to privacy boundaries, Google OAuth does not grant
+            NEXUS permission or capability to manage your third-party Google sessions across Gmail or Google devices.
+          </div>
+
+          <!-- Devices Table -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 class="card-title">Registered Client Hardware Nodes</h3>
+                <p class="card-desc">Hardware clients permitted to sync and dial into the encrypted relay.</p>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="data-table" id="c-devices-table">
+                <thead>
+                  <tr>
+                    <th>Device Name</th>
+                    <th>Platform</th>
+                    <th>Status</th>
+                    <th>Registered</th>
+                    <th>Last Active</th>
+                    <th style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="c-devices-tbody">
+                  <tr><td colspan="6" style="text-align:center; padding: 24px; color: #64748b;">Loading devices...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sessions Table -->
+          <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 class="card-title">Nexus Login Sessions</h3>
+                <p class="card-desc">Active token families tracked with automatic replay invalidation.</p>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="data-table" id="c-sessions-table">
+                <thead>
+                  <tr>
+                    <th>Client / Browser</th>
+                    <th>Method</th>
+                    <th>IP Address</th>
+                    <th>Status</th>
+                    <th>Issued</th>
+                    <th>Expires</th>
+                    <th style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="c-sessions-tbody">
+                  <tr><td colspan="7" style="text-align:center; padding: 24px; color: #64748b;">Loading sessions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. ACCOUNT ACTIVITY VIEW -->
+        <section class="view-panel" id="view-client-activity">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Account Activity Timeline</h1>
+              <p class="view-lead">Append-only audit stream of authentication events, hardware bindings, and session lifecycles.</p>
+            </div>
+          </div>
+
+          <div class="filter-btn-group">
+            <button class="filter-btn active" data-cat="all">All Events</button>
+            <button class="filter-btn" data-cat="auth">Authentication &amp; Logins</button>
+            <button class="filter-btn" data-cat="device">Hardware Nodes</button>
+            <button class="filter-btn" data-cat="session">Session Tokens</button>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Audit Log Entries</h3>
+              <p class="card-desc" id="c-activity-count">Loading activity...</p>
+            </div>
+            <div id="c-activity-stream" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+              <div style="text-align:center; color:#64748b;">Loading events...</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. SERVER INFORMATION VIEW -->
+        <section class="view-panel" id="view-client-server">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Server Information</h1>
+              <p class="view-lead">User-safe infrastructure telemetry and security enforcement status.</p>
+            </div>
+          </div>
+
+          <div class="metrics-grid" style="margin-bottom: 24px;">
+            <div class="metric-card">
+              <span class="metric-label">CONTROL PLANE</span>
+              <span class="metric-value" style="color: #34d399;" id="c-srv-cp">OPERATIONAL</span>
+              <span class="metric-change">Sovereign Cloud Mesh</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">DATABASE STATE</span>
+              <span class="metric-value" style="color: #34d399;" id="c-srv-db">HEALTHY</span>
+              <span class="metric-change">Encrypted Storage</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">RELAY MESH</span>
+              <span class="metric-value" style="color: #34d399;" id="c-srv-relay">ACTIVE</span>
+              <span class="metric-change">WebSocket wss://</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">RELEASE VERSION</span>
+              <span class="metric-value" id="c-srv-ver">v0.3.0</span>
+              <span class="metric-change">Production Build</span>
+            </div>
+          </div>
+
+          <div class="card" style="padding: 20px;">
+            <h3 style="font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 12px;">Security Enforcements</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; font-size: 12px; color: #94a3b8;">
+              <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                <strong style="color: #38bdf8; display: block; margin-bottom: 4px;">PKCE S256 Code Challenge</strong>
+                Mitigates authorization code injection and interception attacks.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                <strong style="color: #34d399; display: block; margin-bottom: 4px;">Token Family Rotation</strong>
+                Automatic detection and immediate invalidation of reused token lineages.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                <strong style="color: #a78bfa; display: block; margin-bottom: 4px;">ChaCha20-Poly1305 Nonces</strong>
+                Monotonically increasing directional counter replay cache defense.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                <strong style="color: #fbbf24; display: block; margin-bottom: 4px;">Zero Cloud Custody</strong>
+                No personal documents, files, or notes stored on central servers.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. ACCOUNT DATA VIEW -->
+        <section class="view-panel" id="view-client-data">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Account Data &amp; Sovereign Storage</h1>
+              <p class="view-lead">Breakdown of personal datasets and local edge storage architecture.</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div class="client-data-metric">
+              <span class="lbl">Projects &amp; Workspaces</span>
+              <span class="val" id="c-dt-projects">0</span>
+            </div>
+            <div class="client-data-metric">
+              <span class="lbl">Personal Notes</span>
+              <span class="val" id="c-dt-notes">0</span>
+            </div>
+            <div class="client-data-metric">
+              <span class="lbl">Tracked Tasks</span>
+              <span class="val" id="c-dt-tasks">0</span>
+            </div>
+            <div class="client-data-metric">
+              <span class="lbl">Smart Inbox Items</span>
+              <span class="val" id="c-dt-inbox">0</span>
+            </div>
+          </div>
+
+          <div class="card" style="padding: 24px;">
+            <h3 style="font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 12px;">Storage Transparency Matrix</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 12px;">
+              <div>
+                <h4 style="color: #34d399; font-family: monospace; margin-bottom: 8px;">ACTIVE CAPABILITIES</h4>
+                <ul style="list-style: none; padding: 0; margin: 0; space-y: 8px; color: #94a3b8;">
+                  <li style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);"><strong style="color: #fff;">Device Federation:</strong> Pair and authorize unlimited cross-platform edge nodes.</li>
+                  <li style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);"><strong style="color: #fff;">Relay Routing:</strong> End-to-end encrypted tunnels between devices.</li>
+                  <li style="padding: 8px 0;"><strong style="color: #fff;">Identity Management:</strong> Single-sign-on identity binding with cryptographic token families.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 style="color: #38bdf8; font-family: monospace; margin-bottom: 8px;">SOVEREIGN BOUNDARIES</h4>
+                <ul style="list-style: none; padding: 0; margin: 0; space-y: 8px; color: #94a3b8;">
+                  <li style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);"><strong style="color: #fff;">Cloud Storage:</strong> Disabled by design (0 bytes stored).</li>
+                  <li style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);"><strong style="color: #fff;">Offline STT / LLM:</strong> Executes strictly on local hardware (Whisper / Ollama).</li>
+                  <li style="padding: 8px 0;"><strong style="color: #fff;">File Ingestion:</strong> Point-to-point transfer directly between your nodes.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/client.js" defer></script>
+</body>
+</html>
