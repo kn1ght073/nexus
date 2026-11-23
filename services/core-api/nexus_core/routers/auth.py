@@ -37,6 +37,7 @@ from ..schemas import (
     UserCreate,
     UserLogin,
     UserOut,
+    UserRoleUpdate,
 )
 from ..security import (
     create_token,
@@ -44,6 +45,7 @@ from ..security import (
     get_current_user,
     hash_password,
     hash_token,
+    require_role,
     verify_password,
 )
 from ..settings import get_settings
@@ -290,45 +292,37 @@ def revoke_session(
     return {"ok": True, "detail": "Session revoked"}
 
 
-@router.get("/sessions", response_model=list[SessionOut])
-def list_sessions(
-    current_user: User = Depends(get_current_user),
+@router.get("/users", response_model=list[UserOut])
+def list_users(
+    current_user: User = Depends(require_role("owner", "operator")),
     db: Session = Depends(get_db),
 ):
-    """List active sessions for the current user."""
-    now = utcnow()
-    return (
-        db.query(SessionRecord)
-        .filter(
-            SessionRecord.user_id == current_user.id,
-            SessionRecord.revoked_at.is_(None),
-            SessionRecord.rotated_at.is_(None),
-            SessionRecord.expires_at > now,
-        )
-        .all()
-    )
+    """List all registered identities and operator roles (accessible by owner or operator)."""
+    return db.query(User).order_by(User.id.asc()).all()
 
 
-@router.delete("/sessions/{session_id}")
-def revoke_session(
-    session_id: int,
-    current_user: User = Depends(get_current_user),
+@router.patch("/users/{user_id}/role", response_model=UserOut)
+def update_user_role(
+    user_id: int,
+    role_update: UserRoleUpdate,
+    current_user: User = Depends(require_role("owner")),
     db: Session = Depends(get_db),
 ):
-    """Revoke an active session by ID."""
-    sess = (
-        db.query(SessionRecord)
-        .filter(SessionRecord.id == session_id, SessionRecord.user_id == current_user.id)
-        .first()
-    )
-    if sess is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+    """Update role for a user/operator. Restricted to owners."""
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    db.query(SessionRecord).filter(SessionRecord.family_id == sess.family_id).update(
-        {"revoked_at": utcnow()}, synchronize_session=False
-    )
+    if target_user.id == current_user.id and role_update.role != "owner":
+        other_owners = db.query(User).filter(User.role == "owner", User.id != current_user.id).count()
+        if other_owners == 0:
+            raise HTTPException(status_code=400, detail="Cannot demote the sole owner of the system")
+
+    target_user.role = role_update.role
+    log_activity(db, user_id=current_user.id, action="user.role_updated", detail=f"user_id={user_id} role={role_update.role}")
     db.commit()
-    return {"ok": True}
+    db.refresh(target_user)
+    return target_user
 
 
 # ---------------------------------------------------------------------------

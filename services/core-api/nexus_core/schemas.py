@@ -33,6 +33,10 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserRoleUpdate(BaseModel):
+    role: Literal["user", "operator", "owner"]
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str
