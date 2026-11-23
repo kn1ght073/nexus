@@ -120,14 +120,14 @@ def test_control_plane_mode_disables_password_registration_and_login(monkeypatch
 
     settings_mod.get_settings.cache_clear()
     monkeypatch.setenv("NEXUS_CONTROL_PLANE_MODE", "true")
-    monkeypatch.delenv("NEXUS_ALLOW_PASSWORD_AUTH", raising=False)
+    monkeypatch.setenv("NEXUS_ALLOW_PASSWORD_AUTH", "false")
     settings_mod.get_settings.cache_clear()
 
     import nexus_core.main as main_mod
 
     client = TestClient(main_mod.create_app())
 
-    # Password register and login return 404 in control-plane mode
+    # Password register and login return 404 when explicitly disabled
     r_reg = client.post("/api/auth/register", json={"email": "hacker@test.com", "password": "password123"})
     assert r_reg.status_code == 404
     assert "disabled in control-plane mode" in r_reg.json()["detail"]

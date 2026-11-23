@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS Client Apps | Downloads & Showcase</title>
+  <meta name="description" content="Official showcase and download portal for NEXUS cross-platform clients: Windows, macOS, Android, and Python CLI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="glow-bg" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="nav-container">
+      <a href="#" class="brand" aria-label="NEXUS Home">
+        <span class="brand-icon" aria-hidden="true">⬡</span>
+        <span class="brand-text">NEXUS</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#platforms">Clients</a>
+        <a href="#cli">CLI</a>
+        <a href="#architecture">Architecture</a>
+        <a href="https://github.com/kn1ght073/nexus" target="_blank" rel="noopener noreferrer" class="nav-gh">GitHub ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero-section">
+      <div class="badge-pill">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span>SECURITY AUDIT REMEDIATION ACTIVE • PREVIEW BUILDS</span>
+      </div>
+      <h1 class="hero-title">
+        Sovereign compute, unified across your hardware.
+      </h1>
+      <p class="hero-desc">
+        End-to-end encrypted relay, zero cloud lock-in, and instant local orchestration. Connect your desktop, workstation, mobile nodes, and terminal environments with mutual authentication.
+      </p>
+      <div class="hero-actions">
+        <a href="#platforms" class="btn btn-primary">Browse Client Builds</a>
+        <a href="https://github.com/kn1ght073/nexus" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Source Code Repository</a>
+      </div>
+    </section>
+
+    <section id="platforms" class="showcase-section">
+      <div class="section-header">
+        <h2 class="section-title">Client Platforms</h2>
+        <p class="section-desc">Hardware-accelerated native clients built for resilient, low-latency node pairing and peer-to-peer control.</p>
+      </div>
+
+      <div class="card-grid">
+        <!-- Windows Card -->
+        <article class="platform-card" id="card-windows">
+          <header class="card-header">
+            <div class="platform-tag">
+              <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="3" y="3" width="8" height="8" rx="1"/>
+                <rect x="13" y="3" width="8" height="8" rx="1"/>
+                <rect x="3" y="13" width="8" height="8" rx="1"/>
+                <rect x="13" y="13" width="8" height="8" rx="1"/>
+              </svg>
+              <span class="platform-name">Windows</span>
+            </div>
+            <span class="status-chip chip-preview">Preview Build</span>
+          </header>
+
+          <h3 class="client-title">NEXUS Desktop for Windows</h3>
+          
+          <div class="card-body">
+            <p class="client-summary">
+              Native desktop shell powered by Tauri v2 and Rust. Provides background node pairing, system tray telemetry, and DirectStorage inbox synchronization.
+            </p>
+            <dl class="specs-list">
+              <dt>Targets</dt>
+              <dd>x64 (MSI / EXE), ARM64 (Snapdragon X)</dd>
+              <dt>Security</dt>
+              <dd>DPAPI Credential Isolation, HVCI Compliant</dd>
+              <dt>OS Support</dt>
+              <dd>Windows 11 (22H2+) / Windows 10 (21H2+)</dd>
+            </dl>
+          </div>
+
+          <footer class="card-footer">
+            <button type="button" class="btn btn-download-stub" disabled aria-disabled="true">
+              <span class="lock-icon" aria-hidden="true">🔒</span>
+              <span>Download .msi (Pending Signer)</span>
+            </button>
+            <span class="footnote">Client binaries will unlock once HSM release-signing workflows complete.</span>
+          </footer>
+        </article>
+
+        <!-- macOS Card -->
+        <article class="platform-card" id="card-mac">
+          <header class="card-header">
+            <div class="platform-tag">
+              <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                <path d="M12 6a6 6 0 0 0-6 6c0 2.21 1.2 4.14 3 5.19"/>
+              </svg>
+              <span class="platform-name">macOS</span>
+            </div>
+            <span class="status-chip chip-preview">Preview Build</span>
+          </header>
+
+          <h3 class="client-title">NEXUS Desktop for macOS</h3>
+
+          <div class="card-body">
+            <p class="client-summary">
+              Optimized for Apple Silicon unified memory. Runs zero-friction local node bridges, Apple Keychain session persistence, and menu bar telemetry.
+            </p>
+            <dl class="specs-list">
+              <dt>Targets</dt>
+              <dd>Universal Binary (Apple Silicon M1-M4 &amp; Intel x86_64)</dd>
+              <dt>Security</dt>
+              <dd>Hardened Runtime, App Sandbox, Secure Enclave</dd>
+              <dt>OS Support</dt>
+              <dd>macOS 13.0 Ventura or later</dd>
+            </dl>
+          </div>
+
+          <footer class="card-footer">
+            <button type="button" class="btn btn-download-stub" disabled aria-disabled="true">
+              <span class="lock-icon" aria-hidden="true">🔒</span>
+              <span>Download .dmg (Pending Signer)</span>
+            </button>
+            <span class="footnote">Requires Apple Developer ID notarization gate completion.</span>
+          </footer>
+        </article>
+
+        <!-- Android Card -->
+        <article class="platform-card" id="card-mobile">
+          <header class="card-header">
+            <div class="platform-tag">
+              <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="5" y="2" width="14" height="20" rx="3"/>
+                <path d="M12 18h.01"/>
+              </svg>
+              <span class="platform-name">Mobile (Android)</span>
+            </div>
+            <span class="status-chip chip-soon">Under Test</span>
+          </header>
+
+          <h3 class="client-title">NEXUS Companion Mobile</h3>
+
+          <div class="card-body">
+            <p class="client-summary">
+              Lightweight mobile companion for node approval, ephemeral voice capture, zero-trust remote relay invocation, and device health status.
+            </p>
+            <dl class="specs-list">
+              <dt>Targets</dt>
+              <dd>arm64-v8a APK, Play Store Distribution</dd>
+              <dt>Security</dt>
+              <dd>Android Keystore, Biometric Prompt Auth, ChaCha20-Poly1305</dd>
+              <dt>OS Support</dt>
+              <dd>Android 10+ (API Level 29+)</dd>
+            </dl>
+          </div>
+
+          <footer class="card-footer">
+            <button type="button" class="btn btn-download-stub" disabled aria-disabled="true">
+              <span class="lock-icon" aria-hidden="true">🔒</span>
+              <span>Download .apk (Staged Release)</span>
+            </button>
+            <span class="footnote">Staged rollout begins following mobile security harness pass.</span>
+          </footer>
+        </article>
+
+        <!-- CLI Card -->
+        <article class="platform-card" id="card-cli">
+          <header class="card-header">
+            <div class="platform-tag">
+              <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="4 17 10 11 4 5"/>
+                <line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              <span class="platform-name">CLI &amp; Daemon</span>
+            </div>
+            <span class="status-chip chip-ready">Available Now</span>
+          </header>
+
+          <h3 class="client-title">NEXUS CLI Terminal Client</h3>
+
+          <div class="card-body">
+            <p class="client-summary">
+              Headless operator tool for remote pairing, node federation, task scheduling, and automation pipelines. Operates over LAN or encrypted relay.
+            </p>
+            <dl class="specs-list">
+              <dt>Targets</dt>
+              <dd>Python 3.10+ (Linux, macOS, Windows, BSD)</dd>
+              <dt>Security</dt>
+              <dd>Ed25519 node identity keys, ChaCha20 AEAD frames</dd>
+              <dt>Package</dt>
+              <dd>pip package / standalone binary installer</dd>
+            </dl>
+          </div>
+
+          <footer class="card-footer">
+            <div class="code-install-box">
+              <code>pip install nexus-cli</code>
+            </div>
+            <span class="footnote">Use with <code>nexus cp login</code> or <code>nexus register</code>.</span>
+          </footer>
+        </article>
+      </div>
+    </section>
+
+    <section id="cli" class="terminal-section">
+      <div class="terminal-window">
+        <div class="terminal-bar">
+          <span class="t-btn red"></span>
+          <span class="t-btn yellow"></span>
+          <span class="t-btn green"></span>
+          <span class="t-title">nexus — bash — 80x24</span>
+        </div>
+        <pre class="terminal-content"><code><span class="prompt">$</span> nexus cp login --email operator@domain.com
+<span class="dim">Connecting to control plane: https://nexus-control-plane-uvi8.onrender.com</span>
+<span class="success">✓ Authenticated successfully. Token saved to session vault.</span>
+
+<span class="prompt">$</span> nexus node status
+<span class="dim">ID        NAME          IP             ROLE      STATUS   HEARTBEAT</span>
+------------------------------------------------------------------
+node_01   workstation   192.168.1.120  primary   ONLINE   2s ago
+node_02   macbook-m3    192.168.1.144  worker    ONLINE   4s ago
+
+<span class="prompt">$</span> nexus relay tunnel node_01 --port 8000
+<span class="info">ℹ ChaCha20Poly1305 AEAD tunnel established. Session active.</span></code></pre>
+      </div>
+    </section>
+
+    <section id="architecture" class="arch-section">
+      <div class="section-header">
+        <h2 class="section-title">Zero-Trust Architecture</h2>
+        <p class="section-desc">Engineered for defense-in-depth with hardened boundaries between control plane and edge nodes.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-item">
+          <h4>ChaCha20-Poly1305 Relay</h4>
+          <p>Handshakes derive distinct ephemeral directional keys with monotonically tracked nonces and replay cache protection.</p>
+        </div>
+        <div class="feature-item">
+          <h4>No Personal Data Cloud Storage</h4>
+          <p>Files, audio transcripts, and embeddings stay strictly local to your registered hardware nodes. Control plane holds metadata only.</p>
+        </div>
+        <div class="feature-item">
+          <h4>Token Family Rotation</h4>
+          <p>Automatic detection and invalidation of compromised refresh token chains with immediate session group revocation.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-container">
+      <p class="footer-copy">© 2026 NEXUS Project. Open source sovereign intelligence under MIT License.</p>
+      <div class="footer-links">
+        <a href="https://github.com/kn1ght073/nexus">GitHub</a>
+        <a href="https://github.com/kn1ght073/nexus/blob/main/LICENSE">License</a>
+        <a href="https://github.com/kn1ght073/nexus/tree/main/docs">Documentation</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

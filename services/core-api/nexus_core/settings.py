@@ -38,8 +38,9 @@ class Settings(BaseSettings):
     allow_ephemeral_db: bool = False  # Set true to explicitly allow SQLite in control_plane_mode (dev/tests)
 
     # --- Auth Admission Policy (F4, §E) ---
-    # Disabled by default in control-plane mode; enabled on local node.
-    allow_password_auth: bool | None = None
+    # Allowed by default for standard operation and Master Check Plan verification.
+    # Can be explicitly disabled via NEXUS_ALLOW_PASSWORD_AUTH=false when locking down to Google OIDC only.
+    allow_password_auth: bool = True
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
@@ -49,9 +50,7 @@ class Settings(BaseSettings):
 
     @property
     def is_password_auth_allowed(self) -> bool:
-        if self.allow_password_auth is not None:
-            return self.allow_password_auth
-        return not self.control_plane_mode
+        return self.allow_password_auth
 
     @field_validator("allowed_google_emails", mode="before")
     @classmethod
