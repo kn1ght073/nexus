@@ -112,7 +112,7 @@ def run_pipeline(item_id: int) -> None:
 
     db = SessionLocal()
     try:
-        item = db.query(InboxItem).get(item_id)
+        item = db.get(InboxItem, item_id)
         if item is None:
             return
         item.status = "processing"
@@ -132,7 +132,7 @@ def run_pipeline(item_id: int) -> None:
             intent = extract_intent(transcript)
 
             # 3) Deterministic action engine
-            user = db.query(User).get(item.owner_id)
+            user = db.get(User, item.owner_id)
             result = execute_intent(db, user, intent, source=item.kind)
             import json as _json
 

@@ -426,6 +426,10 @@
     try {
       const u = await api('/api/auth/me');
       state.user = u;
+      if (state.user && state.user.role === 'user') {
+        window.location.replace('/client');
+        return;
+      }
       updateUserUI();
       hideAuthGate();
     } catch (_) {

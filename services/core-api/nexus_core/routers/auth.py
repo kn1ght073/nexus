@@ -638,6 +638,7 @@ def google_auth_callback_get(
         )
 
     # Success: Render auto-redirect HTML with localStorage population and set-cookie
+    target_path = "/client" if getattr(user, "role", "user") == "user" else "/admin"
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -658,7 +659,7 @@ def google_auth_callback_get(
       localStorage.setItem('nexus.token', '{token.access_token}');
       localStorage.setItem('nexus.refresh', '{token.refresh_token}');
     }} catch (e) {{}}
-    window.location.replace('/admin');
+    window.location.replace('{target_path}');
   </script>
 </body>
 </html>"""

@@ -145,13 +145,13 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.effective_cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS", "HEAD"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    @app.get("/health", tags=["system"])
+    @app.api_route("/health", methods=["GET", "HEAD"], tags=["system"])
     def health_check():
         # Minimum a probe needs: is it up, and which mode answers. The
         # version string is deliberately absent on the public internet.

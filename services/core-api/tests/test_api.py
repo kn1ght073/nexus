@@ -544,7 +544,7 @@ def test_node_heartbeat_and_stale_resolution(client, user_a, env):
     # age the last_seen past the timeout: resolution falls to null
     db = SessionLocal()
     try:
-        node = db.query(Node).get(node_id)
+        node = db.get(Node, node_id)
         node.last_seen = utcnow() - timedelta(seconds=99999)
         db.commit()
     finally:
