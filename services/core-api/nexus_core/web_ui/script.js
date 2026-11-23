@@ -400,7 +400,12 @@
             method: 'POST',
             body: JSON.stringify({ redirect_uri: `${API_BASE}/api/auth/google/callback` })
           });
-          if (res.url) window.location.href = res.url;
+          if (res.url && !res.url.includes('client_id=nexus-google-client-id')) {
+            window.location.href = res.url;
+          } else {
+            el.gateError.textContent = 'Google OAuth is not configured on Render: NEXUS_GOOGLE_CLIENT_ID is missing from environment. Please use Master Password login or add NEXUS_GOOGLE_CLIENT_ID in the Render dashboard.';
+            el.gateError.classList.remove('hidden');
+          }
         } catch (err) {
           el.gateError.textContent = `Google OIDC error: ${err.message}`;
           el.gateError.classList.remove('hidden');
