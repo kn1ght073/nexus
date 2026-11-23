@@ -45,8 +45,26 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSignIn = () => {
-    window.location.href = "/api/auth/google/start";
+  const handleGoogleSignIn = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch("/api/auth/google/start", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Google OIDC not configured");
+      if (data.url) {
+        if (data.url.includes("client_id=nexus-google-client-id")) {
+          throw new Error(
+            "Google OAuth is not configured on Render: NEXUS_GOOGLE_CLIENT_ID is missing from environment. Use Master Password login or add NEXUS_GOOGLE_CLIENT_ID in the Render dashboard."
+          );
+        }
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to initiate Google sign-in");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
