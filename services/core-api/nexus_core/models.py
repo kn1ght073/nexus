@@ -50,6 +50,7 @@ class ExternalIdentity(Base):
     email_at_link = Column(String(255), nullable=True, index=True)
     email_verified = Column(Boolean, default=False, nullable=False)
     display_name = Column(String(255), nullable=True)
+    picture_url = Column(String(1024), nullable=True)
     linked_at = Column(DateTime, default=utcnow, nullable=False)
     last_login_at = Column(DateTime, default=utcnow, nullable=False)
 
@@ -72,6 +73,7 @@ class SessionRecord(Base):
     family_id = Column(String(64), index=True, nullable=False)                  # rotation lineage
     created_via = Column(String(32), default="password", nullable=False)        # 'password' | 'google'
     last_used_ip = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
     issued_at = Column(DateTime, default=utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     rotated_at = Column(DateTime, nullable=True)

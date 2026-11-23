@@ -41,7 +41,7 @@ settings = get_settings()
 
 # Routers safe for the hosted control plane: identity + coordination only.
 # "relay" is the port-free bridge between devices and the node (routers/relay.py).
-CONTROL_PLANE_ROUTES = ("auth", "devices", "activity", "nodes", "relay")
+CONTROL_PLANE_ROUTES = ("auth", "devices", "activity", "nodes", "relay", "account")
 
 
 def _ensure_schema_compatibility(db_engine):
@@ -54,9 +54,11 @@ def _ensure_schema_compatibility(db_engine):
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(32) DEFAULT 'user' NOT NULL;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);",
                 "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL;",
+                "ALTER TABLE external_identities ADD COLUMN IF NOT EXISTS picture_url VARCHAR(1024);",
                 "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS family_id VARCHAR(64);",
                 "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_via VARCHAR(32) DEFAULT 'password';",
                 "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_used_ip VARCHAR(64);",
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_agent VARCHAR(512);",
                 "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS rotated_at TIMESTAMP;",
                 "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP;",
             ):
@@ -294,6 +296,13 @@ def create_app() -> FastAPI:
         if web_dir.is_dir() and (web_dir / "index.html").is_file():
             return FileResponse(web_dir / "index.html")
         raise HTTPException(status_code=404, detail="Control center interface not installed")
+
+    @app.get("/client", include_in_schema=False)
+    @app.get("/client/", include_in_schema=False)
+    def serve_client():
+        if web_dir.is_dir() and (web_dir / "client.html").is_file():
+            return FileResponse(web_dir / "client.html")
+        raise HTTPException(status_code=404, detail="Client console interface not installed")
 
     @app.get("/console", include_in_schema=False)
     @app.get("/dashboard", include_in_schema=False)

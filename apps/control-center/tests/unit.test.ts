@@ -57,3 +57,23 @@ describe("Control Center Environment & Base URL Resolution", () => {
     expect(normalized).toBe("https://custom-core.internal");
   });
 });
+
+describe("Client Console Segregation & Account Formatting", () => {
+  const getDestinationConsole = (role: "user" | "operator" | "owner") => {
+    return role === "user" ? "/client" : "/";
+  };
+
+  const formatAccountId = (id: number) => `NX-${String(id).padStart(6, "0")}`;
+
+  it("segregates standard users strictly to the client console", () => {
+    expect(getDestinationConsole("user")).toBe("/client");
+    expect(getDestinationConsole("operator")).toBe("/");
+    expect(getDestinationConsole("owner")).toBe("/");
+  });
+
+  it("formats sovereign account IDs with fixed six-digit padding", () => {
+    expect(formatAccountId(1)).toBe("NX-000001");
+    expect(formatAccountId(42)).toBe("NX-000042");
+    expect(formatAccountId(123456)).toBe("NX-123456");
+  });
+});

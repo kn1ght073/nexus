@@ -14,6 +14,11 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  // Regular users are segregated strictly into the Client Console
+  if (user.role === "user") {
+    redirect("/client");
+  }
+
   return (
     <div className="flex min-h-screen bg-[#080b11]">
       <Sidebar user={user} />

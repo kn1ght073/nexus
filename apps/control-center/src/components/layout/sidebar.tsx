@@ -14,6 +14,7 @@ import {
   Users,
   LogOut,
   Hexagon,
+  User as UserIcon,
 } from "lucide-react";
 import { User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ export function Sidebar({ user }: SidebarProps) {
 
   const navItems = [
     { label: "Overview", href: "/", icon: LayoutDashboard },
+    { label: "My Client Console", href: "/client", icon: UserIcon },
     { label: "Devices & Nodes", href: "/devices", icon: Server },
     { label: "Connections & Relay", href: "/relay", icon: Network },
     { label: "Services & Health", href: "/services", icon: Activity },

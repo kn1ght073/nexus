@@ -157,6 +157,7 @@ async def login(user_in: UserLogin, request: Request, db: Session = Depends(get_
         family_id=secrets.token_hex(16),
         created_via="password",
         last_used_ip=get_client_ip(request),
+        user_agent=request.headers.get("user-agent")[:500] if request.headers.get("user-agent") else None,
         expires_at=utcnow() + timedelta(days=_settings.refresh_token_days),
     )
     db.add(sess)
@@ -499,6 +500,10 @@ def _process_google_callback(
         if user is None or not user.is_active:
             raise HTTPException(status_code=403, detail="User account inactive or missing")
         ext_ident.last_login_at = utcnow()
+        if id_claims.get("name"):
+            ext_ident.display_name = id_claims.get("name")
+        if id_claims.get("picture"):
+            ext_ident.picture_url = id_claims.get("picture")
     else:
         existing_user = db.query(User).filter(User.email == email).first()
         if existing_user:
@@ -523,6 +528,7 @@ def _process_google_callback(
             email_at_link=email,
             email_verified=True,
             display_name=id_claims.get("name") or user.display_name,
+            picture_url=id_claims.get("picture"),
             linked_at=utcnow(),
             last_login_at=utcnow(),
         )
@@ -537,6 +543,7 @@ def _process_google_callback(
         family_id=secrets.token_hex(16),
         created_via="google",
         last_used_ip=get_client_ip(req),
+        user_agent=req.headers.get("user-agent")[:500] if req.headers.get("user-agent") else None,
         expires_at=utcnow() + timedelta(days=_settings.refresh_token_days),
     )
     db.add(sess)

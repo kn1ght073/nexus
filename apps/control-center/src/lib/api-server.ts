@@ -150,4 +150,43 @@ export const coreApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  // --- Client Console APIs ---
+  async getAccountOverview() {
+    return serverApiFetch<import("./types").AccountOverview>("/api/account/overview");
+  },
+
+  async getAccountDevices() {
+    return serverApiFetch<DeviceRecord[]>("/api/account/devices");
+  },
+
+  async revokeAccountDevice(deviceId: number) {
+    return serverApiFetch<void>(`/api/account/devices/${deviceId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getAccountSessions() {
+    return serverApiFetch<SessionRecord[]>("/api/account/sessions");
+  },
+
+  async revokeAccountSession(sessionId: number) {
+    return serverApiFetch<{ ok: boolean; detail: string }>(`/api/account/sessions/${sessionId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getAccountActivity(category?: string, limit = 50, offset = 0) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (category && category !== "all") params.set("category", category);
+    return serverApiFetch<import("./types").ActivityPage>(`/api/account/activity?${params.toString()}`);
+  },
+
+  async getClientServerStatus() {
+    return serverApiFetch<import("./types").ClientServerStatus>("/api/account/server-status");
+  },
+
+  async getAccountDataSummary() {
+    return serverApiFetch<import("./types").AccountDataSummary>("/api/account/data-summary");
+  },
 };
