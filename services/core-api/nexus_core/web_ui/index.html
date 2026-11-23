@@ -3,392 +3,572 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NEXUS | Sovereign Personal Digital Infrastructure</title>
-  <meta name="description" content="NEXUS sovereign personal infrastructure. Real-time control plane, zero-trust edge node mesh, end-to-end encrypted relay, and unified cross-platform workspace.">
+  <title>NEXUS Control Center</title>
+  <meta name="description" content="NEXUS Sovereign Infrastructure Management & Secure Operator Control Center.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body data-theme="dark">
-  <!-- Interactive Particle Background Canvas -->
-  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+  <!-- Interactive Canvas & Atmospheric Background -->
+  <canvas id="control-canvas" aria-hidden="true"></canvas>
   <div class="ambient-mesh" aria-hidden="true"></div>
-  <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
 
-  <!-- Main Navigation Bar -->
-  <header class="app-header">
-    <div class="header-inner">
-      <a href="#" class="brand-link" aria-label="NEXUS Core Hub">
-        <div class="brand-emblem" aria-hidden="true">
-          <svg viewBox="0 0 32 32" class="emblem-svg">
-            <polygon points="16,2 30,9 30,23 16,30 2,23 2,9" class="emblem-outer" />
-            <circle cx="16" cy="16" r="4" class="emblem-core" />
-          </svg>
-        </div>
-        <div class="brand-meta">
-          <span class="brand-title">NEXUS</span>
-          <span class="brand-sub">CONTROL PLANE</span>
-        </div>
-      </a>
+  <!-- Global Command Palette Modal (⌘K / Ctrl+K) -->
+  <dialog id="cmd-dialog" class="cmd-dialog" aria-label="Command Palette">
+    <div class="cmd-container">
+      <div class="cmd-search-bar">
+        <svg class="cmd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="cmd-input" placeholder="Type a command or jump to view... (Esc to close)" autocomplete="off">
+        <span class="cmd-badge">ESC</span>
+      </div>
+      <div class="cmd-results" id="cmd-results">
+        <!-- Injected via script.js -->
+      </div>
+    </div>
+  </dialog>
 
-      <!-- Real-time Cluster Telemetry Pill -->
-      <div class="cluster-telemetry" id="cluster-telemetry" role="status" aria-live="polite">
-        <span class="pulse-indicator status-online" id="status-pulse" aria-hidden="true"></span>
-        <span class="telemetry-label" id="status-text">CONNECTING CLUSTER</span>
-        <span class="telemetry-latency" id="status-latency">-- ms</span>
+  <!-- Detail Drawer for Devices/Nodes/Sessions -->
+  <aside id="detail-drawer" class="detail-drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="drawer-title-box">
+        <span class="drawer-tag" id="drawer-tag">INSPECTION</span>
+        <h3 id="drawer-title">Resource Details</h3>
+      </div>
+      <button class="drawer-close" id="drawer-close-btn" aria-label="Close Drawer">✕</button>
+    </div>
+    <div class="drawer-content" id="drawer-content">
+      <!-- Dynamic detailed payload injected here -->
+    </div>
+    <div class="drawer-footer" id="drawer-footer">
+      <!-- Contextual actions (e.g. Revoke, Ping) -->
+    </div>
+  </aside>
+
+  <!-- Login Modal / Auth Gate Overlay -->
+  <div id="auth-gate-overlay" class="auth-gate-overlay hidden" role="dialog" aria-modal="true" aria-label="Operator Authentication">
+    <div class="auth-gate-card">
+      <div class="auth-brand-emblem">
+        <svg viewBox="0 0 32 32" class="emblem-svg">
+          <polygon points="16,2 30,9 30,23 16,30 2,23 2,9" class="emblem-outer" />
+          <circle cx="16" cy="16" r="4" class="emblem-core" />
+        </svg>
+      </div>
+      <h2 class="auth-gate-title">NEXUS CONTROL CENTER</h2>
+      <p class="auth-gate-sub">Authenticate with an authorized Operator or Owner identity to access infrastructure telemetry and hardware nodes.</p>
+
+      <div class="auth-gate-tabs">
+        <button class="gate-tab active" id="tab-login" data-tab="login">Sign In</button>
+        <button class="gate-tab" id="tab-register" data-tab="register">Register Account</button>
       </div>
 
-      <nav class="nav-menu" aria-label="Primary Navigation">
-        <a href="#overview" class="nav-item active" data-nav="overview">Overview</a>
-        <a href="#console" class="nav-item" data-nav="console">Console</a>
-        <a href="#mesh" class="nav-item" data-nav="mesh">Mesh Nodes</a>
-        <a href="#clients" class="nav-item" data-nav="clients">Clients</a>
-        <a href="#auth" class="nav-item auth-cta" id="nav-auth-btn" data-nav="auth">Operator Login</a>
+      <form id="auth-gate-form" class="auth-gate-form">
+        <div class="field-group">
+          <label for="gate-email">Operator Email</label>
+          <input type="email" id="gate-email" required placeholder="operator@nexus.mesh" autocomplete="username">
+        </div>
+        <div class="field-group">
+          <label for="gate-password">Passphrase</label>
+          <input type="password" id="gate-password" required placeholder="••••••••••••••••" autocomplete="current-password">
+        </div>
+        <div id="gate-error" class="gate-error hidden" role="alert"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="gate-submit-btn">
+          <span id="gate-btn-text">Authenticate Session</span>
+          <span class="spinner hidden" id="gate-spinner"></span>
+        </button>
+      </form>
+
+      <div class="auth-divider"><span>OR CONTINUE VIA OIDC</span></div>
+
+      <button type="button" class="btn btn-google" id="gate-google-btn">
+        <svg class="google-icon" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z"/>
+          <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+        </svg>
+        <span>Sign in with Google Account</span>
+      </button>
+
+      <div class="auth-gate-footer">
+        <span>Restricted Admission: <code>NEXUS_ALLOWED_GOOGLE_EMAILS</code> policy enforced.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Master App Shell Container -->
+  <div class="app-layout">
+    <!-- Left Enterprise Navigation Sidebar -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <a href="#overview" class="brand-link">
+          <div class="brand-hexagon">⬡</div>
+          <div class="brand-info">
+            <span class="brand-title">NEXUS</span>
+            <span class="brand-sub">CONTROL CENTER</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Quick Command Trigger Pill -->
+      <button class="cmd-trigger-btn" id="cmd-trigger-btn" aria-label="Open Command Palette">
+        <span class="cmd-trigger-label">Jump to...</span>
+        <kbd class="cmd-shortcut">⌘K</kbd>
+      </button>
+
+      <!-- Navigation Hierarchy -->
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">MAIN</div>
+        <button class="nav-link active" data-view="overview">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>Overview</span>
+        </button>
+        <button class="nav-link" data-view="devices">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="12" rx="2"/><line x1="12" y1="20" x2="12" y2="16"/><line x1="8" y1="20" x2="16" y2="20"/></svg>
+          <span>Devices &amp; Nodes</span>
+          <span class="nav-pill" id="sidebar-node-count">0</span>
+        </button>
+        <button class="nav-link" data-view="relay">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          <span>Connections &amp; Relay</span>
+        </button>
+        <button class="nav-link" data-view="services">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>Services &amp; Health</span>
+        </button>
+
+        <div class="nav-group-label">SECURITY &amp; ACCESS</div>
+        <button class="nav-link" data-view="security">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Security Center</span>
+        </button>
+        <button class="nav-link" data-view="audit">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>Audit Logs</span>
+        </button>
+        <button class="nav-link" data-view="sessions">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Sessions &amp; Identity</span>
+        </button>
+
+        <div class="nav-group-label">SYSTEM</div>
+        <button class="nav-link" data-view="settings">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </button>
       </nav>
 
-      <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Viewport Shell -->
-  <main class="main-shell" id="app-root">
-
-    <!-- HERO SECTION -->
-    <section id="overview" class="hero-section scroll-reveal">
-      <div class="hero-badge">
-        <span class="badge-dot" aria-hidden="true"></span>
-        <span class="badge-text">AUTONOMOUS COORDINATION ARCHITECTURE // v0.3.0</span>
-      </div>
-
-      <h1 class="hero-headline">
-        <span class="glitch-text" data-text="Sovereign Compute.">Sovereign Compute.</span><br>
-        <span class="gradient-text">Zero Compromise.</span>
-      </h1>
-
-      <p class="hero-lead">
-        NEXUS unifies your personal hardware into a private, self-sovereign intelligence network.
-        End-to-end encrypted relay, zero personal data stored in the cloud, and millisecond node orchestration.
-      </p>
-
-      <div class="hero-actions">
-        <a href="#auth" class="btn btn-primary magnetic" id="hero-get-started">
-          <span>Access Control Plane</span>
-          <svg class="btn-arrow" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-        </a>
-        <a href="#clients" class="btn btn-secondary magnetic">
-          <span>Install Client Apps</span>
-        </a>
-      </div>
-
-      <!-- Live Metric Strip -->
-      <div class="metrics-strip">
-        <div class="metric-card">
-          <span class="metric-val" id="metric-nodes">0</span>
-          <span class="metric-desc">Registered Mesh Nodes</span>
+      <!-- Sidebar Footer User Card -->
+      <div class="sidebar-footer">
+        <div class="operator-profile">
+          <div class="operator-avatar" id="sidebar-avatar">OP</div>
+          <div class="operator-meta">
+            <span class="operator-name" id="sidebar-user-email">Not Authenticated</span>
+            <span class="operator-role-badge" id="sidebar-role-badge">GUEST</span>
+          </div>
         </div>
-        <div class="metric-card">
-          <span class="metric-val" id="metric-security">ChaCha20</span>
-          <span class="metric-desc">AEAD Tunnel Cipher</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-val" id="metric-latency">0.8ms</span>
-          <span class="metric-desc">Average Relay RTT</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-val">100%</span>
-          <span class="metric-desc">Local Disk Sovereignty</span>
-        </div>
+        <button class="logout-btn" id="sidebar-auth-action" title="Login or Logout">Sign In</button>
       </div>
-    </section>
+    </aside>
 
-    <!-- LIVE CONSOLE & OPERATOR AUTH WORKSPACE -->
-    <section id="auth" class="workspace-section scroll-reveal">
-      <div class="section-title-wrap">
-        <div class="section-tag">CONTROL INTERFACE</div>
-        <h2 class="section-heading">Operator Access &amp; Session Vault</h2>
-        <p class="section-subheading">Authenticate to orchestrate mesh federation, manage device keys, and inspect node telemetry.</p>
-      </div>
+    <!-- Main Content Stage Area -->
+    <div class="app-main">
+      <!-- Top Application Header -->
+      <header class="top-header">
+        <div class="top-header-left">
+          <button class="sidebar-toggle" id="sidebar-toggle-btn" aria-label="Toggle Sidebar">☰</button>
+          <div class="breadcrumb-trail">
+            <span class="bc-root">NEXUS</span>
+            <span class="bc-sep">/</span>
+            <span class="bc-current" id="bc-current-view">Overview</span>
+          </div>
+        </div>
 
-      <div class="workspace-grid">
-        <!-- Auth Card / Session Card -->
-        <div class="glass-panel" id="auth-panel">
-          <!-- Logged Out View -->
-          <div id="logged-out-state" class="state-container active">
-            <div class="auth-tabs" role="tablist">
-              <button class="auth-tab active" id="tab-login" role="tab" aria-selected="true" data-mode="login">Operator Login</button>
-              <button class="auth-tab" id="tab-register" role="tab" aria-selected="false" data-mode="register">Register Identity</button>
+        <div class="top-header-right">
+          <!-- Live Telemetry Badge -->
+          <div class="live-telemetry-badge" id="telemetry-badge">
+            <span class="pulse-dot-live" id="pulse-dot"></span>
+            <span class="telemetry-host" id="telemetry-host-text">CONNECTING</span>
+            <span class="telemetry-ping" id="telemetry-ping-text">-- ms</span>
+          </div>
+          <a href="https://github.com/kn1ght073/nexus" target="_blank" rel="noopener noreferrer" class="top-icon-btn" title="View Source on GitHub">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          </a>
+        </div>
+      </header>
+
+      <!-- View Containers -->
+      <main class="content-viewport" id="viewport-root">
+
+        <!-- 1. OVERVIEW VIEW -->
+        <section class="view-panel active" id="view-overview">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Infrastructure Overview</h1>
+              <p class="view-lead">Real-time status of your self-sovereign compute nodes and encrypted relay links.</p>
+            </div>
+            <div class="view-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-overview">
+                <span>↻ Refresh Telemetry</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Top Metrics Quad -->
+          <div class="metrics-grid">
+            <div class="card-metric">
+              <div class="metric-head">
+                <span class="m-label">ACTIVE MESH NODES</span>
+                <span class="m-chip ok" id="chip-nodes">ONLINE</span>
+              </div>
+              <div class="m-val" id="val-nodes">0</div>
+              <div class="m-sub">Claimed hardware endpoints</div>
             </div>
 
-            <form id="auth-form" class="auth-form">
-              <div class="input-group">
-                <label for="auth-email">Operator Email / Identity</label>
-                <div class="input-wrapper">
-                  <input type="email" id="auth-email" required placeholder="operator@nexus.mesh" autocomplete="username">
-                  <span class="input-glow"></span>
+            <div class="card-metric">
+              <div class="metric-head">
+                <span class="m-label">RELAY SOCKETS</span>
+                <span class="m-chip" id="chip-relay">0 ACTIVE</span>
+              </div>
+              <div class="m-val" id="val-relay">0</div>
+              <div class="m-sub">ChaCha20Poly1305 AEAD Tunnels</div>
+            </div>
+
+            <div class="card-metric">
+              <div class="metric-head">
+                <span class="m-label">DATABASE HEALTH</span>
+                <span class="m-chip ok" id="chip-db">CONNECTED</span>
+              </div>
+              <div class="m-val" id="val-db-latency">-- ms</div>
+              <div class="m-sub" id="val-db-engine">PostgreSQL Engine</div>
+            </div>
+
+            <div class="card-metric">
+              <div class="metric-head">
+                <span class="m-label">ACTIVE SESSIONS</span>
+                <span class="m-chip ok">PROTECTED</span>
+              </div>
+              <div class="m-val" id="val-sessions">1</div>
+              <div class="m-sub">Token family rotation lineage</div>
+            </div>
+          </div>
+
+          <!-- Overview Split: Relay Live Monitor & Recent Activity -->
+          <div class="overview-split">
+            <!-- Relay Topology Card -->
+            <div class="card-panel">
+              <div class="card-panel-head">
+                <h3>Relay Network Graph</h3>
+                <span class="panel-badge">ZERO-TRUST ROUTING</span>
+              </div>
+              <div class="relay-graph-wrap" id="relay-graph-wrap">
+                <div class="relay-node-box">
+                  <div class="r-icon">🖥️</div>
+                  <div class="r-meta"><span class="r-name">Local Node</span><span class="r-state">Behind NAT</span></div>
+                </div>
+                <div class="relay-tunnel-line">
+                  <span class="tunnel-pulse"></span>
+                  <span class="tunnel-label">X25519 ECDH + ChaCha20</span>
+                </div>
+                <div class="relay-cp-box">
+                  <div class="r-icon">☁️</div>
+                  <div class="r-meta"><span class="r-name">Control Plane</span><span class="r-state">Render Hosted</span></div>
+                </div>
+                <div class="relay-tunnel-line">
+                  <span class="tunnel-pulse"></span>
+                  <span class="tunnel-label">Forwarded Pipe</span>
+                </div>
+                <div class="relay-node-box">
+                  <div class="r-icon">📱</div>
+                  <div class="r-meta"><span class="r-name">Remote Client</span><span class="r-state">Device Attached</span></div>
                 </div>
               </div>
-
-              <div class="input-group">
-                <label for="auth-password">Passphrase / Key</label>
-                <div class="input-wrapper">
-                  <input type="password" id="auth-password" required placeholder="••••••••••••••••" autocomplete="current-password">
-                  <span class="input-glow"></span>
-                </div>
+              <div class="graph-footer-notes">
+                <span>Control Plane acts as router only. Cryptographic keys never leave client endpoints.</span>
               </div>
+            </div>
 
-              <div id="auth-error-banner" class="error-banner hidden" role="alert"></div>
+            <!-- Real-Time Activity Feed Card -->
+            <div class="card-panel">
+              <div class="card-panel-head">
+                <h3>Recent System Activity</h3>
+                <span class="panel-badge">AUDIT STREAM</span>
+              </div>
+              <div class="activity-stream" id="overview-activity-stream">
+                <div class="stream-empty">Listening for domain activity...</div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-              <button type="submit" class="btn btn-primary btn-block magnetic" id="auth-submit-btn">
-                <span id="auth-btn-text">Authenticate Session</span>
-                <span class="spinner hidden" id="auth-spinner" aria-hidden="true"></span>
+        <!-- 2. DEVICES & NODES VIEW -->
+        <section class="view-panel" id="view-devices">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Devices &amp; Federated Nodes</h1>
+              <p class="view-lead">Manage physical machines, workstation servers, and mobile clients registered to your identity.</p>
+            </div>
+            <div class="view-actions">
+              <button class="btn btn-primary btn-sm" id="btn-claim-modal">
+                <span>+ Claim Node</span>
               </button>
-
-              <div class="divider"><span>OR VIA OIDC IDENTITY</span></div>
-
-              <button type="button" class="btn btn-oidc" id="google-auth-btn">
-                <svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z"/>
-                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-                </svg>
-                <span>Sign in with Google OIDC</span>
-              </button>
-            </form>
+            </div>
           </div>
 
-          <!-- Logged In / Session Active View -->
-          <div id="logged-in-state" class="state-container">
-            <div class="session-header">
-              <div class="user-avatar" id="session-avatar">OP</div>
-              <div class="user-info">
-                <div class="user-email" id="session-email">operator@domain</div>
-                <div class="user-badge">SOVEREIGN PRIVILEGE</div>
+          <!-- Filter / Search Toolbar -->
+          <div class="table-toolbar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" class="search-svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="device-search-input" placeholder="Search devices by name, platform, IP...">
+            </div>
+            <div class="filter-group">
+              <select id="device-filter-platform" class="select-control">
+                <option value="all">All Platforms</option>
+                <option value="windows">Windows</option>
+                <option value="macos">macOS</option>
+                <option value="android">Android</option>
+                <option value="linux">Linux</option>
+                <option value="cli">CLI</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Data Table -->
+          <div class="table-wrapper">
+            <table class="data-table" id="devices-data-table">
+              <thead>
+                <tr>
+                  <th>STATUS</th>
+                  <th>IDENTIFIER</th>
+                  <th>TYPE</th>
+                  <th>PLATFORM</th>
+                  <th>ENDPOINT / IP</th>
+                  <th>LAST SEEN</th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="devices-table-body">
+                <tr><td colspan="7" class="td-empty">Loading claimed nodes and devices...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 3. CONNECTIONS & RELAY VIEW -->
+        <section class="view-panel" id="view-relay">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Connections &amp; Encrypted Relay</h1>
+              <p class="view-lead">Live inspection of active outbound tunnels connecting edge hardware across NAT barriers.</p>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="card-metric">
+              <div class="metric-head"><span class="m-label">RELAY STATUS</span></div>
+              <div class="m-val" id="relay-status-val">Operational</div>
+              <div class="m-sub">WebSockets router active</div>
+            </div>
+            <div class="card-metric">
+              <div class="metric-head"><span class="m-label">ENCRYPTION PROTOCOL</span></div>
+              <div class="m-val">ChaCha20-Poly1305</div>
+              <div class="m-sub">Monotonic replay deque</div>
+            </div>
+            <div class="card-metric">
+              <div class="metric-head"><span class="m-label">PAIRING CODE TTL</span></div>
+              <div class="m-val" id="relay-ttl-val">600s</div>
+              <div class="m-sub">Max attempts before lock: 5</div>
+            </div>
+          </div>
+
+          <div class="card-panel">
+            <div class="card-panel-head">
+              <h3>Active Relay Sockets &amp; Attach History</h3>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>LINK ID</th>
+                    <th>NODE ID</th>
+                    <th>DEVICE ID</th>
+                    <th>ATTACHED AT</th>
+                    <th>DETACHED AT</th>
+                    <th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody id="relay-links-table-body">
+                  <tr><td colspan="6" class="td-empty">No active relay tunnels established yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. SERVICES & HEALTH VIEW -->
+        <section class="view-panel" id="view-services">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Services &amp; Infrastructure</h1>
+              <p class="view-lead">Health status and connectivity verification for control-plane subsystems.</p>
+            </div>
+          </div>
+
+          <div class="services-grid" id="services-grid">
+            <!-- Service items populated by script.js -->
+          </div>
+        </section>
+
+        <!-- 5. SECURITY CENTER VIEW -->
+        <section class="view-panel" id="view-security">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Security Center</h1>
+              <p class="view-lead">Admission controls, Google OIDC gate verification, and token rotation safeguards.</p>
+            </div>
+          </div>
+
+          <div class="security-cards-grid">
+            <div class="card-panel">
+              <div class="card-panel-head">
+                <h3>Identity Admission Policy</h3>
+                <span class="panel-badge ok">ENFORCED</span>
               </div>
-              <button class="btn btn-ghost" id="session-logout-btn">Log out</button>
-            </div>
-
-            <div class="session-meta">
-              <div class="meta-row">
-                <span class="meta-label">Control Plane Mode</span>
-                <span class="meta-val highlight" id="cp-mode-badge">Active</span>
-              </div>
-              <div class="meta-row">
-                <span class="meta-label">Session Guard</span>
-                <span class="meta-val">Refresh Token Rotation</span>
-              </div>
-              <div class="meta-row">
-                <span class="meta-label">Connected Mesh Bridge</span>
-                <span class="meta-val mono" id="cp-url-display">--</span>
+              <p class="card-text">Account registration gating policy configured on the hosted control plane:</p>
+              <div class="kv-list">
+                <div class="kv-row"><span>Google OIDC Flow</span><span class="kv-mono">Authorization Code + PKCE S256</span></div>
+                <div class="kv-row"><span>Allowed Google Emails</span><span class="kv-mono" id="sec-allowlist-status">Configured via Env</span></div>
+                <div class="kv-row"><span>Password Registration</span><span class="kv-mono" id="sec-password-status">Active</span></div>
+                <div class="kv-row"><span>Brute Force Lockout</span><span class="kv-mono">5 strikes / 300s cooldown</span></div>
               </div>
             </div>
 
-            <div class="quick-command-box">
-              <div class="box-label">QUICK RELAY HANDSHAKE</div>
-              <p class="box-desc">Execute in terminal to bind your local machine to this cloud control plane:</p>
-              <div class="code-banner">
-                <code id="quick-cmd-code">nexus cp login --email ...</code>
-                <button class="copy-btn" id="copy-cmd-btn" aria-label="Copy Command">Copy</button>
+            <div class="card-panel">
+              <div class="card-panel-head">
+                <h3>Session &amp; Token Architecture</h3>
+                <span class="panel-badge ok">HARDENED</span>
+              </div>
+              <p class="card-text">Session security settings and family reuse protection:</p>
+              <div class="kv-list">
+                <div class="kv-row"><span>JWT Secret Origin</span><span class="kv-mono">NEXUS_JWT_SECRET (Pinned)</span></div>
+                <div class="kv-row"><span>Access Token Lifetime</span><span class="kv-mono">30 Minutes</span></div>
+                <div class="kv-row"><span>Refresh Token Lifetime</span><span class="kv-mono">30 Days (Rolling)</span></div>
+                <div class="kv-row"><span>Reuse Detection</span><span class="kv-mono">Full Family Invalidation</span></div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Live Terminal Simulator & Diagnostic View -->
-        <div class="terminal-container" id="console">
-          <div class="terminal-chrome">
-            <div class="chrome-dots">
-              <span class="dot d-red"></span>
-              <span class="dot d-yellow"></span>
-              <span class="dot d-green"></span>
+        <!-- 6. AUDIT LOGS VIEW -->
+        <section class="view-panel" id="view-audit">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Audit Log Stream</h1>
+              <p class="view-lead">Searchable, tamper-evident record of all authentication, node, and device mutations.</p>
             </div>
-            <div class="chrome-title">nexus-operator — control-plane-bridge — 128x36</div>
-            <div class="chrome-action">
-              <button id="clear-term-btn" class="term-mini-btn">Clear</button>
+            <div class="view-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-export-audit">Export JSON</button>
             </div>
           </div>
-          <div class="terminal-body" id="term-body">
-            <div class="term-line welcome-line"><span class="c-cyan">NEXUS CONTROL PLANE KERNEL</span> [v0.3.0-secure-remediation]</div>
-            <div class="term-line"><span class="c-dim">Type 'help', 'status', 'nodes', 'ping', or 'audit' for real-time telemetry.</span></div>
-            <div class="term-line"><span class="c-green">✓</span> Zero-trust AEAD relay engine initialized.</div>
-            <div class="term-line"><span class="c-cyan">ℹ</span> Canonical Endpoint: <span id="term-canonical-url" class="c-white">Loading...</span></div>
-            <div id="term-dynamic-output"></div>
-            <form id="term-input-row" class="term-input-row">
-              <span class="term-prompt">operator@nexus:~$</span>
-              <input type="text" id="term-input" class="term-input" autocomplete="off" spellcheck="false" aria-label="Terminal command prompt">
-            </form>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- MESH TOPOLOGY & REGISTERED HARDWARE NODES -->
-    <section id="mesh" class="mesh-section scroll-reveal">
-      <div class="section-title-wrap">
-        <div class="section-tag">HARDWARE TOPOLOGY</div>
-        <h2 class="section-heading">Federated Edge Nodes</h2>
-        <p class="section-subheading">Personal compute hardware linked to your sovereign identity via outbound-only encrypted tunnels.</p>
-      </div>
-
-      <div class="mesh-grid" id="mesh-nodes-container">
-        <!-- Rendered dynamically by script.js -->
-        <div class="node-skeleton-card">
-          <div class="node-header">
-            <span class="node-icon">🖥️</span>
-            <div class="node-title-box">
-              <span class="node-name">Local Workstation Primary</span>
-              <span class="node-status-badge status-active">SYNCHRONIZED</span>
+          <div class="table-toolbar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" class="search-svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="audit-search-input" placeholder="Filter audit events by action or detail...">
             </div>
           </div>
-          <div class="node-stats">
-            <div><span class="stat-l">IP Address</span><span class="stat-v">192.168.1.120</span></div>
-            <div><span class="stat-l">Capabilities</span><span class="stat-v">GPU / LLM / Storage</span></div>
-            <div><span class="stat-l">Heartbeat</span><span class="stat-v">Every 30s</span></div>
-          </div>
-        </div>
 
-        <div class="node-skeleton-card">
-          <div class="node-header">
-            <span class="node-icon">💻</span>
-            <div class="node-title-box">
-              <span class="node-name">MacBook M3 Pro</span>
-              <span class="node-status-badge status-active">SYNCHRONIZED</span>
+          <div class="table-wrapper">
+            <table class="data-table" id="audit-data-table">
+              <thead>
+                <tr>
+                  <th>TIMESTAMP</th>
+                  <th>ACTION</th>
+                  <th>DEVICE ID</th>
+                  <th>DETAILS</th>
+                </tr>
+              </thead>
+              <tbody id="audit-table-body">
+                <tr><td colspan="4" class="td-empty">Loading audit timeline...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 7. SESSIONS & IDENTITY VIEW -->
+        <section class="view-panel" id="view-sessions">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">Active Sessions &amp; Identity</h1>
+              <p class="view-lead">Inspect active credentials, login history, and execute emergency session revocation.</p>
+            </div>
+            <div class="view-actions">
+              <button class="btn btn-danger btn-sm" id="btn-revoke-all-sessions">Revoke All Other Sessions</button>
             </div>
           </div>
-          <div class="node-stats">
-            <div><span class="stat-l">IP Address</span><span class="stat-v">192.168.1.144</span></div>
-            <div><span class="stat-l">Capabilities</span><span class="stat-v">MLX / CoreML</span></div>
-            <div><span class="stat-l">Heartbeat</span><span class="stat-v">Every 30s</span></div>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- CLIENT DOWNLOAD SHOWCASE -->
-    <section id="clients" class="clients-section scroll-reveal">
-      <div class="section-title-wrap">
-        <div class="section-tag">CROSS-PLATFORM ECOSYSTEM</div>
-        <h2 class="section-heading">Client Applications &amp; Runtimes</h2>
-        <p class="section-subheading">Hardware-native user interfaces built with Tauri v2, Jetpack Compose, and Python.</p>
-      </div>
-
-      <div class="platforms-grid">
-        <!-- Windows -->
-        <article class="platform-card" id="card-win">
-          <div class="p-header">
-            <div class="p-badge-wrap">
-              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
-              <h3>Windows</h3>
+          <div class="card-panel">
+            <div class="card-panel-head">
+              <h3>Active Token Families</h3>
             </div>
-            <span class="p-status preview">Preview Build</span>
-          </div>
-          <p class="p-lead">NEXUS Desktop for Windows 10/11. DirectStorage sync, background tray daemon, and DPAPI credential isolation.</p>
-          <div class="p-specs">
-            <div class="spec-row"><span>Arch</span><span>x64, ARM64 (Snapdragon)</span></div>
-            <div class="spec-row"><span>Runtime</span><span>Tauri v2 + Rust Core</span></div>
-            <div class="spec-row"><span>Security</span><span>HVCI &amp; AppContainer</span></div>
-          </div>
-          <div class="p-footer">
-            <button class="btn btn-stub" disabled>
-              <span>Download .msi (Pending Signer)</span>
-            </button>
-            <span class="stub-note">Unlocks following HSM code-signing key release</span>
-          </div>
-        </article>
-
-        <!-- macOS -->
-        <article class="platform-card" id="card-mac">
-          <div class="p-header">
-            <div class="p-badge-wrap">
-              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 6a6 6 0 0 0-6 6c0 2.21 1.2 4.14 3 5.19"/></svg>
-              <h3>macOS</h3>
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>SESSION ID</th>
+                    <th>CREATED VIA</th>
+                    <th>ISSUED AT</th>
+                    <th>EXPIRES AT</th>
+                    <th>STATUS</th>
+                    <th>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody id="sessions-table-body">
+                  <tr><td colspan="6" class="td-empty">Loading active sessions...</td></tr>
+                </tbody>
+              </table>
             </div>
-            <span class="p-status preview">Preview Build</span>
           </div>
-          <p class="p-lead">Optimized for Apple Silicon unified memory. Secure Enclave keychain persistence and low-latency menu bar telemetry.</p>
-          <div class="p-specs">
-            <div class="spec-row"><span>Arch</span><span>Universal (M1–M4 &amp; Intel)</span></div>
-            <div class="spec-row"><span>Runtime</span><span>Swift + Tauri v2 + Metal</span></div>
-            <div class="spec-row"><span>Security</span><span>Hardened Runtime Notarized</span></div>
-          </div>
-          <div class="p-footer">
-            <button class="btn btn-stub" disabled>
-              <span>Download .dmg (Pending Signer)</span>
-            </button>
-            <span class="stub-note">Awaiting Apple Developer ID notarization gate</span>
-          </div>
-        </article>
+        </section>
 
-        <!-- Mobile -->
-        <article class="platform-card" id="card-android">
-          <div class="p-header">
-            <div class="p-badge-wrap">
-              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 18h.01"/></svg>
-              <h3>Android</h3>
+        <!-- 8. SETTINGS VIEW -->
+        <section class="view-panel" id="view-settings">
+          <div class="view-header">
+            <div>
+              <h1 class="view-title">System Settings &amp; Configuration</h1>
+              <p class="view-lead">Control-plane configuration metadata and deployment reference values.</p>
             </div>
-            <span class="p-status testing">Staged Test</span>
           </div>
-          <p class="p-lead">Companion mobile node with biometric approval, encrypted voice note capture, and zero-trust remote relay triggers.</p>
-          <div class="p-specs">
-            <div class="spec-row"><span>Target</span><span>Android 10+ (API 29+)</span></div>
-            <div class="spec-row"><span>Runtime</span><span>Jetpack Compose Native</span></div>
-            <div class="spec-row"><span>Security</span><span>Android Keystore + Biometrics</span></div>
-          </div>
-          <div class="p-footer">
-            <button class="btn btn-stub" disabled>
-              <span>Download .apk (Staged Release)</span>
-            </button>
-            <span class="stub-note">Releasing after mobile security harness audit</span>
-          </div>
-        </article>
 
-        <!-- CLI -->
-        <article class="platform-card" id="card-cli">
-          <div class="p-header">
-            <div class="p-badge-wrap">
-              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-              <h3>CLI &amp; Daemon</h3>
+          <div class="settings-wrap">
+            <div class="card-panel">
+              <div class="card-panel-head">
+                <h3>Single-Variable Public URL</h3>
+              </div>
+              <p class="card-text">All node federation, OAuth callbacks, and client binaries derive from this canonical address:</p>
+              <div class="config-display-box">
+                <code id="settings-canonical-url">https://nexus-control-plane-uvi8.onrender.com</code>
+              </div>
+              <span class="footnote">To redirect the entire ecosystem to a custom domain, update <code>NEXUS_PUBLIC_URL</code> in Render.</span>
             </div>
-            <span class="p-status active">Available</span>
-          </div>
-          <p class="p-lead">Headless orchestrator for Linux servers, Raspberry Pis, and developer workstations. Automate via pure CLI &amp; TUI.</p>
-          <div class="p-specs">
-            <div class="spec-row"><span>OS</span><span>Linux, macOS, Windows, BSD</span></div>
-            <div class="spec-row"><span>Runtime</span><span>Python 3.10+ / Rich / Typer</span></div>
-            <div class="spec-row"><span>Interface</span><span>Command-line &amp; Full TUI</span></div>
-          </div>
-          <div class="p-footer">
-            <div class="cli-cmd-box">
-              <code>pip install nexus-cli</code>
-              <button class="copy-btn-mini" onclick="navigator.clipboard.writeText('pip install nexus-cli')" aria-label="Copy PIP Command">📋</button>
-            </div>
-            <span class="stub-note">Run <code>nexus cp login</code> or <code>nexus cp set &lt;url&gt;</code></span>
-          </div>
-        </article>
-      </div>
-    </section>
-  </main>
 
-  <!-- Site Footer -->
-  <footer class="app-footer">
-    <div class="footer-inner">
-      <div class="f-brand">
-        <span class="f-logo">⬡ NEXUS</span>
-        <p>Sovereign Personal Digital Infrastructure. MIT Licensed Open Source Research.</p>
-      </div>
-      <div class="f-links">
-        <a href="https://github.com/kn1ght073/nexus" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="/api/docs" id="api-docs-link">API Docs</a>
-        <a href="/health">Health Probe</a>
-      </div>
+            <div class="card-panel">
+              <div class="card-panel-head">
+                <h3>Current Operator Privileges</h3>
+              </div>
+              <div class="kv-list">
+                <div class="kv-row"><span>Identity</span><span class="kv-mono" id="settings-operator-email">--</span></div>
+                <div class="kv-row"><span>Assigned Role</span><span class="kv-mono" id="settings-operator-role">--</span></div>
+                <div class="kv-row"><span>Control Plane Version</span><span class="kv-mono">v0.3.0</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
     </div>
-    <div class="footer-sub">
-      <span>Single-variable architecture: Set <code>NEXUS_PUBLIC_URL</code> to redirect all nodes seamlessly.</span>
-    </div>
-  </footer>
+  </div>
 
   <script src="/assets/script.js" defer></script>
 </body>

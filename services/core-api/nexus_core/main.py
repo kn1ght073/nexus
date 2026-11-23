@@ -30,10 +30,11 @@ from fastapi.responses import JSONResponse, FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
-from .database import Base, SessionLocal, engine
+from .database import Base, SessionLocal, engine, get_db
 from .events import DomainEvent, subscribe, unsubscribe
+from .models import User
 from .routers import all_routers
-from .security import decode_token
+from .security import decode_token, get_current_user
 from .settings import get_settings
 
 settings = get_settings()
@@ -132,6 +133,54 @@ def create_app() -> FastAPI:
             "status": "ok",
             "service": "nexus-core",
             "mode": mode,
+        }
+
+    @app.get("/api/system/status", tags=["system"])
+    def system_status(
+        db: SessionLocal = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ):
+        """Authenticated operator infrastructure status probe."""
+        import time
+        from sqlalchemy import text
+
+        # Check DB latency
+        t0 = time.perf_counter()
+        db_ok = False
+        db_err = None
+        try:
+            db.execute(text("SELECT 1")).scalar()
+            db_ok = True
+        except Exception as e:
+            db_err = str(e)
+        db_ms = round((time.perf_counter() - t0) * 1000, 2)
+
+        is_owner = getattr(current_user, "role", "user") == "owner"
+
+        return {
+            "service": "nexus-control-plane",
+            "mode": mode,
+            "database": {
+                "status": "connected" if db_ok else "degraded",
+                "latency_ms": db_ms,
+                "engine": "postgresql" if settings.database_url else "sqlite",
+                "error": db_err if is_owner else None,
+            },
+            "auth": {
+                "password_auth_allowed": settings.is_password_auth_allowed,
+                "google_oidc_configured": bool(settings.google_client_id),
+                "google_allowlist_active": bool(settings.allowed_google_emails),
+            },
+            "node_coordination": {
+                "heartbeat_timeout_sec": settings.node_heartbeat_timeout,
+                "relay_enabled": settings.relay_enabled,
+                "pairing_ttl_sec": settings.pairing_code_ttl,
+            },
+            "operator": {
+                "user_id": current_user.id,
+                "email": current_user.email,
+                "role": getattr(current_user, "role", "user"),
+            },
         }
 
     if settings.control_plane_mode:

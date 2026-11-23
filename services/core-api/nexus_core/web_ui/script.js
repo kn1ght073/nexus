@@ -1,75 +1,773 @@
 /**
- * NEXUS Interactive Client Engine & Real-Time Orchestrator
- * Supports:
- * - Particle neural mesh background with cursor interactivity & FPS-aware throttling
- * - IntersectionObserver scroll-driven reveals & counter animations
- * - Live Control-Plane API connectivity (status, nodes, auth login/register, OIDC)
- * - In-browser diagnostic terminal simulator with live command evaluation
- * - Dynamic single-variable environment awareness
+ * NEXUS Control Center Client Application (SPA Engine)
+ * Features:
+ * - Real-time API state polling & live domain WebSocket subscription
+ * - Modular View Routing (Overview, Devices, Relay, Services, Security, Audit, Sessions, Settings)
+ * - Server-side RBAC Role detection (User, Operator, Owner)
+ * - Detail inspection drawer for devices, nodes, and sessions
+ * - Global Command Palette (⌘K / Ctrl+K)
+ * - Safe session revocation & token rotation handling
  */
 
 (() => {
   'use strict';
 
-  // --- Dynamic Single Variable API Root ---
   const API_BASE = window.location.origin;
 
-  // State Management
+  // Master Application State
   const state = {
     token: localStorage.getItem('nexus.token'),
     refresh: localStorage.getItem('nexus.refresh'),
     user: null,
+    system: null,
+    currentView: 'overview',
     nodes: [],
-    mode: 'login',
-    clusterOnline: false,
-    latency: 0
+    devices: [],
+    sessions: [],
+    auditLogs: [],
+    relayStatus: null,
+    ws: null,
+    latency: 0,
+    gateMode: 'login'
   };
 
   // DOM Elements
   const el = {
-    canvas: document.getElementById('neural-canvas'),
-    cursorGlow: document.getElementById('cursor-glow'),
-    statusPulse: document.getElementById('status-pulse'),
-    statusText: document.getElementById('status-text'),
-    statusLatency: document.getElementById('status-latency'),
-    authPanel: document.getElementById('auth-panel'),
-    loggedOutState: document.getElementById('logged-out-state'),
-    loggedInState: document.getElementById('logged-in-state'),
+    canvas: document.getElementById('control-canvas'),
+    sidebar: document.getElementById('app-sidebar'),
+    sidebarToggle: document.getElementById('sidebar-toggle-btn'),
+    navLinks: document.querySelectorAll('.sidebar-nav .nav-link'),
+    viewPanels: document.querySelectorAll('.view-panel'),
+    bcCurrentView: document.getElementById('bc-current-view'),
+    sidebarUserEmail: document.getElementById('sidebar-user-email'),
+    sidebarRoleBadge: document.getElementById('sidebar-role-badge'),
+    sidebarAvatar: document.getElementById('sidebar-avatar'),
+    sidebarAuthAction: document.getElementById('sidebar-auth-action'),
+    sidebarNodeCount: document.getElementById('sidebar-node-count'),
+    telemetryHostText: document.getElementById('telemetry-host-text'),
+    telemetryPingText: document.getElementById('telemetry-ping-text'),
+    pulseDot: document.getElementById('pulse-dot'),
+    authGateOverlay: document.getElementById('auth-gate-overlay'),
     tabLogin: document.getElementById('tab-login'),
     tabRegister: document.getElementById('tab-register'),
-    authForm: document.getElementById('auth-form'),
-    authEmail: document.getElementById('auth-email'),
-    authPassword: document.getElementById('auth-password'),
-    authSubmitBtn: document.getElementById('auth-submit-btn'),
-    authBtnText: document.getElementById('auth-btn-text'),
-    authSpinner: document.getElementById('auth-spinner'),
-    authErrorBanner: document.getElementById('auth-error-banner'),
-    sessionEmail: document.getElementById('session-email'),
-    sessionAvatar: document.getElementById('session-avatar'),
-    sessionLogoutBtn: document.getElementById('session-logout-btn'),
-    cpModeBadge: document.getElementById('cp-mode-badge'),
-    cpUrlDisplay: document.getElementById('cp-url-display'),
-    quickCmdCode: document.getElementById('quick-cmd-code'),
-    copyCmdBtn: document.getElementById('copy-cmd-btn'),
-    googleAuthBtn: document.getElementById('google-auth-btn'),
-    termBody: document.getElementById('term-body'),
-    termDynamicOutput: document.getElementById('term-dynamic-output'),
-    termInput: document.getElementById('term-input'),
-    termInputRow: document.getElementById('term-input-row'),
-    clearTermBtn: document.getElementById('clear-term-btn'),
-    termCanonicalUrl: document.getElementById('term-canonical-url'),
-    meshNodesContainer: document.getElementById('mesh-nodes-container'),
-    metricNodes: document.getElementById('metric-nodes'),
-    metricLatency: document.getElementById('metric-latency'),
-    navItems: document.querySelectorAll('.nav-item'),
-    mobileToggle: document.getElementById('mobile-toggle'),
-    navMenu: document.querySelector('.nav-menu')
+    authGateForm: document.getElementById('auth-gate-form'),
+    gateEmail: document.getElementById('gate-email'),
+    gatePassword: document.getElementById('gate-password'),
+    gateSubmitBtn: document.getElementById('gate-submit-btn'),
+    gateBtnText: document.getElementById('gate-btn-text'),
+    gateSpinner: document.getElementById('gate-spinner'),
+    gateError: document.getElementById('gate-error'),
+    gateGoogleBtn: document.getElementById('gate-google-btn'),
+    // Overview elements
+    valNodes: document.getElementById('val-nodes'),
+    valRelay: document.getElementById('val-relay'),
+    valDbLatency: document.getElementById('val-db-latency'),
+    valDbEngine: document.getElementById('val-db-engine'),
+    valSessions: document.getElementById('val-sessions'),
+    chipNodes: document.getElementById('chip-nodes'),
+    chipDb: document.getElementById('chip-db'),
+    btnRefreshOverview: document.getElementById('btn-refresh-overview'),
+    overviewActivityStream: document.getElementById('overview-activity-stream'),
+    // Devices table elements
+    devicesTableBody: document.getElementById('devices-table-body'),
+    deviceSearchInput: document.getElementById('device-search-input'),
+    deviceFilterPlatform: document.getElementById('device-filter-platform'),
+    btnClaimModal: document.getElementById('btn-claim-modal'),
+    // Relay elements
+    relayStatusVal: document.getElementById('relay-status-val'),
+    relayTtlVal: document.getElementById('relay-ttl-val'),
+    relayLinksTableBody: document.getElementById('relay-links-table-body'),
+    // Services elements
+    servicesGrid: document.getElementById('services-grid'),
+    // Security elements
+    secAllowlistStatus: document.getElementById('sec-allowlist-status'),
+    secPasswordStatus: document.getElementById('sec-password-status'),
+    // Audit elements
+    auditTableBody: document.getElementById('audit-table-body'),
+    auditSearchInput: document.getElementById('audit-search-input'),
+    btnExportAudit: document.getElementById('btn-export-audit'),
+    // Sessions elements
+    sessionsTableBody: document.getElementById('sessions-table-body'),
+    btnRevokeAllSessions: document.getElementById('btn-revoke-all-sessions'),
+    // Settings elements
+    settingsCanonicalUrl: document.getElementById('settings-canonical-url'),
+    settingsOperatorEmail: document.getElementById('settings-operator-email'),
+    settingsOperatorRole: document.getElementById('settings-operator-role'),
+    // Command Palette elements
+    cmdDialog: document.getElementById('cmd-dialog'),
+    cmdInput: document.getElementById('cmd-input'),
+    cmdResults: document.getElementById('cmd-results'),
+    cmdTriggerBtn: document.getElementById('cmd-trigger-btn'),
+    // Drawer elements
+    detailDrawer: document.getElementById('detail-drawer'),
+    drawerTag: document.getElementById('drawer-tag'),
+    drawerTitle: document.getElementById('drawer-title'),
+    drawerContent: document.getElementById('drawer-content'),
+    drawerFooter: document.getElementById('drawer-footer'),
+    drawerCloseBtn: document.getElementById('drawer-close-btn')
   };
 
   // =========================================================================
-  // 1. Interactive Particle Neural Mesh Engine
+  // 1. API Client Helper with Token Rotation & Auto-Refresh
   // =========================================================================
-  function initNeuralCanvas() {
+  async function api(path, options = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    if (state.token) {
+      headers['Authorization'] = `Bearer ${state.token}`;
+    }
+
+    let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+    // Handle token expiration & automatic refresh
+    if (res.status === 401 && state.refresh && !path.includes('/auth/refresh') && !path.includes('/auth/login')) {
+      try {
+        const refreshRes = await fetch(`${API_BASE}/api/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: state.refresh })
+        });
+        if (refreshRes.ok) {
+          const newTokens = await refreshRes.json();
+          state.token = newTokens.access_token;
+          state.refresh = newTokens.refresh_token;
+          localStorage.setItem('nexus.token', newTokens.access_token);
+          localStorage.setItem('nexus.refresh', newTokens.refresh_token);
+          headers['Authorization'] = `Bearer ${state.token}`;
+          res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+        } else {
+          logoutLocal();
+        }
+      } catch (_) {
+        logoutLocal();
+      }
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = errText;
+      try {
+        const j = JSON.parse(errText);
+        msg = j.detail || errText;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+    if (res.status === 204) return null;
+    return await res.json();
+  }
+
+  function logoutLocal() {
+    state.token = null;
+    state.refresh = null;
+    state.user = null;
+    localStorage.removeItem('nexus.token');
+    localStorage.removeItem('nexus.refresh');
+    updateUserUI();
+    showAuthGate();
+  }
+
+  // =========================================================================
+  // 2. Navigation & View Routing
+  // =========================================================================
+  function setView(viewName) {
+    state.currentView = viewName;
+    el.navLinks.forEach(link => {
+      link.classList.toggle('active', link.getAttribute('data-view') === viewName);
+    });
+    el.viewPanels.forEach(panel => {
+      panel.classList.toggle('active', panel.id === `view-${viewName}`);
+    });
+    if (el.bcCurrentView) {
+      el.bcCurrentView.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
+    }
+    if (el.sidebar.classList.contains('open')) {
+      el.sidebar.classList.remove('open');
+    }
+    closeDrawer();
+    refreshCurrentView();
+  }
+
+  function initNavigation() {
+    el.navLinks.forEach(link => {
+      link.addEventListener('click', () => {
+        const v = link.getAttribute('data-view');
+        if (v) setView(v);
+      });
+    });
+
+    if (el.sidebarToggle) {
+      el.sidebarToggle.addEventListener('click', () => {
+        el.sidebar.classList.toggle('open');
+      });
+    }
+
+    if (el.sidebarAuthAction) {
+      el.sidebarAuthAction.addEventListener('click', () => {
+        if (state.token) {
+          api('/api/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: state.refresh }) })
+            .finally(() => logoutLocal());
+        } else {
+          showAuthGate();
+        }
+      });
+    }
+  }
+
+  // =========================================================================
+  // 3. Command Palette Engine (⌘K)
+  // =========================================================================
+  const COMMANDS = [
+    { id: 'view:overview', label: 'Go to Overview Dashboard', category: 'Navigation', action: () => setView('overview') },
+    { id: 'view:devices', label: 'Go to Devices & Nodes', category: 'Navigation', action: () => setView('devices') },
+    { id: 'view:relay', label: 'Go to Connections & Relay', category: 'Navigation', action: () => setView('relay') },
+    { id: 'view:services', label: 'Go to Services & Infrastructure', category: 'Navigation', action: () => setView('services') },
+    { id: 'view:security', label: 'Go to Security Center', category: 'Navigation', action: () => setView('security') },
+    { id: 'view:audit', label: 'Go to Audit Log Stream', category: 'Navigation', action: () => setView('audit') },
+    { id: 'view:sessions', label: 'Go to Active Sessions', category: 'Navigation', action: () => setView('sessions') },
+    { id: 'view:settings', label: 'Go to System Settings', category: 'Navigation', action: () => setView('settings') },
+    { id: 'action:refresh', label: 'Refresh All Cluster Telemetry', category: 'Actions', action: () => refreshAll() },
+    { id: 'action:claim', label: 'Claim New Edge Hardware Node', category: 'Actions', action: () => promptClaimNode() },
+    { id: 'action:logout', label: 'Revoke Current Session & Log Out', category: 'Security', action: () => logoutLocal() }
+  ];
+
+  function openCommandPalette() {
+    if (!el.cmdDialog) return;
+    el.cmdDialog.showModal();
+    if (el.cmdInput) {
+      el.cmdInput.value = '';
+      el.cmdInput.focus();
+    }
+    renderCommands('');
+  }
+
+  function closeCommandPalette() {
+    if (el.cmdDialog && el.cmdDialog.open) {
+      el.cmdDialog.close();
+    }
+  }
+
+  function renderCommands(query) {
+    if (!el.cmdResults) return;
+    const q = query.toLowerCase().trim();
+    const matches = COMMANDS.filter(c => c.label.toLowerCase().includes(q) || c.category.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+      el.cmdResults.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-dim); font-size: 0.85rem;">No matching commands found.</div>';
+      return;
+    }
+
+    el.cmdResults.innerHTML = matches.map((cmd, idx) => `
+      <div class="cmd-item ${idx === 0 ? 'selected' : ''}" data-cmd-id="${cmd.id}">
+        <span>${escapeHtml(cmd.label)}</span>
+        <span class="cmd-badge">${escapeHtml(cmd.category)}</span>
+      </div>
+    `).join('');
+
+    el.cmdResults.querySelectorAll('.cmd-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const id = item.getAttribute('data-cmd-id');
+        const target = COMMANDS.find(c => c.id === id);
+        if (target) {
+          closeCommandPalette();
+          target.action();
+        }
+      });
+    });
+  }
+
+  function initCommandPalette() {
+    if (el.cmdTriggerBtn) {
+      el.cmdTriggerBtn.addEventListener('click', openCommandPalette);
+    }
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (el.cmdDialog && el.cmdDialog.open) closeCommandPalette();
+        else openCommandPalette();
+      }
+      if (e.key === 'Escape' && el.cmdDialog && el.cmdDialog.open) {
+        closeCommandPalette();
+      }
+    });
+
+    if (el.cmdInput) {
+      el.cmdInput.addEventListener('input', (e) => {
+        renderCommands(e.target.value);
+      });
+    }
+
+    if (el.cmdDialog) {
+      el.cmdDialog.addEventListener('click', (e) => {
+        if (e.target === el.cmdDialog) closeCommandPalette();
+      });
+    }
+  }
+
+  // =========================================================================
+  // 4. Detail Drawer Inspection Engine
+  // =========================================================================
+  function openDrawer(tag, title, contentHtml, footerHtml = '') {
+    if (!el.detailDrawer) return;
+    if (el.drawerTag) el.drawerTag.textContent = tag.toUpperCase();
+    if (el.drawerTitle) el.drawerTitle.textContent = title;
+    if (el.drawerContent) el.drawerContent.innerHTML = contentHtml;
+    if (el.drawerFooter) el.drawerFooter.innerHTML = footerHtml;
+    el.detailDrawer.classList.add('open');
+    el.detailDrawer.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDrawer() {
+    if (!el.detailDrawer) return;
+    el.detailDrawer.classList.remove('open');
+    el.detailDrawer.setAttribute('aria-hidden', 'true');
+  }
+
+  if (el.drawerCloseBtn) {
+    el.drawerCloseBtn.addEventListener('click', closeDrawer);
+  }
+
+  // =========================================================================
+  // 5. Authentication Gate
+  // =========================================================================
+  function showAuthGate() {
+    if (el.authGateOverlay) el.authGateOverlay.classList.remove('hidden');
+  }
+
+  function hideAuthGate() {
+    if (el.authGateOverlay) el.authGateOverlay.classList.add('hidden');
+  }
+
+  function initAuthGate() {
+    if (el.tabLogin && el.tabRegister) {
+      el.tabLogin.addEventListener('click', () => {
+        state.gateMode = 'login';
+        el.tabLogin.classList.add('active');
+        el.tabRegister.classList.remove('active');
+        el.gateBtnText.textContent = 'Authenticate Session';
+        el.gateError.classList.add('hidden');
+      });
+      el.tabRegister.addEventListener('click', () => {
+        state.gateMode = 'register';
+        el.tabRegister.classList.add('active');
+        el.tabLogin.classList.remove('active');
+        el.gateBtnText.textContent = 'Register Account';
+        el.gateError.classList.add('hidden');
+      });
+    }
+
+    if (el.authGateForm) {
+      el.authGateForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        el.gateError.classList.add('hidden');
+        el.gateSpinner.classList.remove('hidden');
+        el.gateSubmitBtn.disabled = true;
+
+        const email = el.gateEmail.value.trim();
+        const password = el.gatePassword.value;
+
+        try {
+          if (state.gateMode === 'register') {
+            await api('/api/auth/register', {
+              method: 'POST',
+              body: JSON.stringify({ email, password })
+            });
+          }
+          const tokens = await api('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password })
+          });
+          state.token = tokens.access_token;
+          state.refresh = tokens.refresh_token;
+          localStorage.setItem('nexus.token', tokens.access_token);
+          if (tokens.refresh_token) localStorage.setItem('nexus.refresh', tokens.refresh_token);
+
+          hideAuthGate();
+          await fetchUserIdentity();
+          refreshAll();
+        } catch (err) {
+          el.gateError.textContent = err.message || 'Authentication error';
+          el.gateError.classList.remove('hidden');
+        } finally {
+          el.gateSpinner.classList.add('hidden');
+          el.gateSubmitBtn.disabled = false;
+        }
+      });
+    }
+
+    if (el.gateGoogleBtn) {
+      el.gateGoogleBtn.addEventListener('click', async () => {
+        try {
+          const res = await api('/api/auth/google/start', {
+            method: 'POST',
+            body: JSON.stringify({ redirect_uri: `${API_BASE}/api/auth/google/callback` })
+          });
+          if (res.url) window.location.href = res.url;
+        } catch (err) {
+          el.gateError.textContent = `Google OIDC error: ${err.message}`;
+          el.gateError.classList.remove('hidden');
+        }
+      });
+    }
+  }
+
+  // =========================================================================
+  // 6. Data Fetching & Subsystem Renders
+  // =========================================================================
+  async function fetchUserIdentity() {
+    if (!state.token) {
+      updateUserUI();
+      showAuthGate();
+      return;
+    }
+    try {
+      const u = await api('/api/auth/me');
+      state.user = u;
+      updateUserUI();
+      hideAuthGate();
+    } catch (_) {
+      logoutLocal();
+    }
+  }
+
+  function updateUserUI() {
+    if (state.user) {
+      if (el.sidebarUserEmail) el.sidebarUserEmail.textContent = state.user.email;
+      if (el.sidebarRoleBadge) el.sidebarRoleBadge.textContent = (state.user.role || 'user').toUpperCase();
+      if (el.sidebarAvatar) el.sidebarAvatar.textContent = state.user.email.substring(0, 2).toUpperCase();
+      if (el.sidebarAuthAction) el.sidebarAuthAction.textContent = 'Log out';
+      if (el.settingsOperatorEmail) el.settingsOperatorEmail.textContent = state.user.email;
+      if (el.settingsOperatorRole) el.settingsOperatorRole.textContent = state.user.role || 'user';
+    } else {
+      if (el.sidebarUserEmail) el.sidebarUserEmail.textContent = 'Not Authenticated';
+      if (el.sidebarRoleBadge) el.sidebarRoleBadge.textContent = 'GUEST';
+      if (el.sidebarAvatar) el.sidebarAvatar.textContent = 'OP';
+      if (el.sidebarAuthAction) el.sidebarAuthAction.textContent = 'Sign In';
+    }
+  }
+
+  async function probeTelemetry() {
+    const t0 = performance.now();
+    try {
+      const h = await api('/health');
+      const ping = Math.round(performance.now() - t0);
+      state.latency = ping;
+      if (el.telemetryHostText) el.telemetryHostText.textContent = `${h.service.toUpperCase()} [${h.mode.toUpperCase()}]`;
+      if (el.telemetryPingText) el.telemetryPingText.textContent = `${ping} ms`;
+      if (el.pulseDot) el.pulseDot.className = 'pulse-dot-live';
+    } catch (_) {
+      if (el.telemetryHostText) el.telemetryHostText.textContent = 'OFFLINE';
+      if (el.telemetryPingText) el.telemetryPingText.textContent = 'ERR';
+      if (el.pulseDot) el.pulseDot.className = 'pulse-dot-live err';
+    }
+  }
+
+  async function loadSystemStatus() {
+    if (!state.token) return;
+    try {
+      const sys = await api('/api/system/status');
+      state.system = sys;
+      if (el.valDbLatency) el.valDbLatency.textContent = `${sys.database.latency_ms} ms`;
+      if (el.valDbEngine) el.valDbEngine.textContent = `${sys.database.engine.toUpperCase()} Engine (${sys.database.status})`;
+      if (el.chipDb) el.chipDb.textContent = sys.database.status.toUpperCase();
+      if (el.relayTtlVal) el.relayTtlVal.textContent = `${sys.node_coordination.pairing_ttl_sec}s`;
+      if (el.relayStatusVal) el.relayStatusVal.textContent = sys.node_coordination.relay_enabled ? 'Operational' : 'Disabled';
+      if (el.secAllowlistStatus) el.secAllowlistStatus.textContent = sys.auth.google_allowlist_active ? 'Active Policy' : 'Unrestricted';
+      if (el.secPasswordStatus) el.secPasswordStatus.textContent = sys.auth.password_auth_allowed ? 'Enabled' : 'Disabled';
+      renderServices(sys);
+    } catch (_) {}
+  }
+
+  function renderServices(sys) {
+    if (!el.servicesGrid) return;
+    const services = [
+      { name: 'Control Plane API', status: 'operational', version: 'v0.3.0', detail: `Mode: ${sys.mode}` },
+      { name: 'Neon PostgreSQL DB', status: sys.database.status === 'connected' ? 'operational' : 'degraded', version: sys.database.engine, detail: `Latency: ${sys.database.latency_ms} ms` },
+      { name: 'ChaCha20 AEAD Relay', status: sys.node_coordination.relay_enabled ? 'operational' : 'offline', version: 'RFC 8439', detail: `Pairing TTL: ${sys.node_coordination.pairing_ttl_sec}s` },
+      { name: 'Google OIDC Gateway', status: sys.auth.google_oidc_configured ? 'operational' : 'standby', version: 'OAuth 2.0 PKCE', detail: sys.auth.google_allowlist_active ? 'Admission Gate Active' : 'Open Admission' },
+      { name: 'Node Bridge Service', status: 'operational', version: 'Heartbeat Watcher', detail: `Timeout: ${sys.node_coordination.heartbeat_timeout_sec}s` }
+    ];
+
+    el.servicesGrid.innerHTML = services.map(s => `
+      <div class="service-card">
+        <div class="service-card-head">
+          <span class="service-title">${escapeHtml(s.name)}</span>
+          <span class="m-chip ${s.status === 'operational' ? 'ok' : ''}">${escapeHtml(s.status.toUpperCase())}</span>
+        </div>
+        <div class="kv-list">
+          <div class="kv-row"><span>Specification</span><span class="kv-mono">${escapeHtml(s.version)}</span></div>
+          <div class="kv-row"><span>Diagnostics</span><span class="kv-mono">${escapeHtml(s.detail)}</span></div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function loadNodesAndDevices() {
+    if (!state.token) return;
+    try {
+      const [nodes, devices] = await Promise.all([
+        api('/api/nodes').catch(() => []),
+        api('/api/devices').catch(() => [])
+      ]);
+      state.nodes = Array.isArray(nodes) ? nodes : [];
+      state.devices = Array.isArray(devices) ? devices : [];
+
+      if (el.valNodes) el.valNodes.textContent = String(state.nodes.length);
+      if (el.sidebarNodeCount) el.sidebarNodeCount.textContent = String(state.nodes.length);
+      renderDevicesTable();
+    } catch (_) {}
+  }
+
+  function renderDevicesTable() {
+    if (!el.devicesTableBody) return;
+    const filter = el.deviceFilterPlatform ? el.deviceFilterPlatform.value : 'all';
+    const query = el.deviceSearchInput ? el.deviceSearchInput.value.toLowerCase().trim() : '';
+
+    // Unified item list: Nodes and Devices
+    const items = [
+      ...state.nodes.map(n => ({ ...n, itemType: 'Node' })),
+      ...state.devices.map(d => ({ ...d, itemType: 'Device' }))
+    ];
+
+    const filtered = items.filter(i => {
+      const matchPlatform = filter === 'all' || (i.platform && i.platform.toLowerCase() === filter);
+      const matchQuery = !query ||
+        (i.name && i.name.toLowerCase().includes(query)) ||
+        (i.lan_ip && i.lan_ip.toLowerCase().includes(query));
+      return matchPlatform && matchQuery;
+    });
+
+    if (filtered.length === 0) {
+      el.devicesTableBody.innerHTML = '<tr><td colspan="7" class="td-empty">No hardware nodes or companion devices matching filters.</td></tr>';
+      return;
+    }
+
+    el.devicesTableBody.innerHTML = filtered.map(item => `
+      <tr data-item-id="${item.id}" data-item-type="${item.itemType}">
+        <td>
+          <span class="status-pill ${item.is_online ? 'online' : 'offline'}">
+            <span class="status-dot"></span>
+            ${item.is_online ? 'ONLINE' : 'OFFLINE'}
+          </span>
+        </td>
+        <td style="font-weight: 600;">${escapeHtml(item.name || 'Unnamed')}</td>
+        <td><span class="m-chip">${escapeHtml(item.itemType)}</span></td>
+        <td style="text-transform: capitalize;">${escapeHtml(item.platform || 'unknown')}</td>
+        <td class="kv-mono">${escapeHtml(item.lan_ip || item.endpoint || 'NAT Internal')}</td>
+        <td style="color: var(--text-dim);">${item.last_seen ? new Date(item.last_seen).toLocaleTimeString() : 'Never'}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm inspect-item-btn" data-id="${item.id}" data-type="${item.itemType}">Inspect</button>
+        </td>
+      </tr>
+    `).join('');
+
+    el.devicesTableBody.querySelectorAll('.inspect-item-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        const type = btn.getAttribute('data-type');
+        inspectItem(id, type);
+      });
+    });
+  }
+
+  function inspectItem(id, type) {
+    const item = type === 'Node' ? state.nodes.find(n => n.id === id) : state.devices.find(d => d.id === id);
+    if (!item) return;
+
+    const content = `
+      <div class="kv-list" style="margin-bottom: 1.5rem;">
+        <div class="kv-row"><span>Resource Type</span><span class="kv-mono">${type}</span></div>
+        <div class="kv-row"><span>Resource ID</span><span class="kv-mono">#${item.id}</span></div>
+        <div class="kv-row"><span>Display Name</span><span class="kv-mono">${escapeHtml(item.name)}</span></div>
+        <div class="kv-row"><span>Operating Platform</span><span class="kv-mono">${escapeHtml(item.platform)}</span></div>
+        <div class="kv-row"><span>Status</span><span class="kv-mono">${item.is_online ? 'Synchronized (Online)' : 'Dormant (Offline)'}</span></div>
+        <div class="kv-row"><span>Capabilities</span><span class="kv-mono">${escapeHtml(item.capabilities || 'Core Relay')}</span></div>
+        <div class="kv-row"><span>Last Liveness Check</span><span class="kv-mono">${item.last_seen ? new Date(item.last_seen).toLocaleString() : 'N/A'}</span></div>
+      </div>
+      <p style="color: var(--text-dim); font-size: 0.8rem;">
+        Edge nodes communicate through authenticated outbound WebSockets. To revoke access or re-bind keys, run "nexus node claim" from the terminal on the host machine.
+      </p>
+    `;
+
+    openDrawer(type, item.name, content, `
+      <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${escapeHtml(item.name)}')">Copy Identifier</button>
+      <button class="btn btn-primary btn-sm" onclick="alert('Ping probe sent to node via relay bridge.')">Probe Latency</button>
+    `);
+  }
+
+  async function loadRelayStatus() {
+    if (!state.token) return;
+    try {
+      const r = await api('/api/relay/status');
+      state.relayStatus = r;
+      if (el.valRelay) el.valRelay.textContent = String(r.active_sockets);
+      if (el.chipRelay) el.chipRelay.textContent = `${r.active_sockets} ACTIVE`;
+
+      if (el.relayLinksTableBody) {
+        if (!r.recent_links || r.recent_links.length === 0) {
+          el.relayLinksTableBody.innerHTML = '<tr><td colspan="6" class="td-empty">No relay attachment sessions recorded.</td></tr>';
+        } else {
+          el.relayLinksTableBody.innerHTML = r.recent_links.map(link => `
+            <tr>
+              <td class="kv-mono">#${link.id}</td>
+              <td>Node #${link.node_id}</td>
+              <td>Device #${link.device_id || 'N/A'}</td>
+              <td>${link.attached_at ? new Date(link.attached_at).toLocaleTimeString() : 'N/A'}</td>
+              <td>${link.detached_at ? new Date(link.detached_at).toLocaleTimeString() : 'Active'}</td>
+              <td>
+                <span class="status-pill ${link.is_active ? 'online' : 'offline'}">
+                  ${link.is_active ? 'ATTACHED' : 'DETACHED'}
+                </span>
+              </td>
+            </tr>
+          `).join('');
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function loadAuditLogs() {
+    if (!state.token) return;
+    try {
+      const logs = await api('/api/activity?limit=50');
+      state.auditLogs = Array.isArray(logs) ? logs : [];
+      renderAuditLogs();
+      renderOverviewActivity();
+    } catch (_) {}
+  }
+
+  function renderAuditLogs() {
+    if (!el.auditTableBody) return;
+    const q = el.auditSearchInput ? el.auditSearchInput.value.toLowerCase().trim() : '';
+    const filtered = state.auditLogs.filter(log => !q || (log.action && log.action.toLowerCase().includes(q)) || (log.detail && log.detail.toLowerCase().includes(q)));
+
+    if (filtered.length === 0) {
+      el.auditTableBody.innerHTML = '<tr><td colspan="4" class="td-empty">No audit events logged.</td></tr>';
+      return;
+    }
+
+    el.auditTableBody.innerHTML = filtered.map(log => `
+      <tr>
+        <td style="color: var(--text-dim); font-family: var(--font-mono); font-size: 0.75rem;">${new Date(log.created_at).toLocaleString()}</td>
+        <td><span class="m-chip" style="color: var(--accent-cyan);">${escapeHtml(log.action)}</span></td>
+        <td class="kv-mono">${log.device_id ? '#' + log.device_id : 'Control Plane'}</td>
+        <td style="color: var(--text-muted);">${escapeHtml(log.detail || 'Success')}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderOverviewActivity() {
+    if (!el.overviewActivityStream) return;
+    if (state.auditLogs.length === 0) {
+      el.overviewActivityStream.innerHTML = '<div class="stream-empty">No recent domain activity.</div>';
+      return;
+    }
+    el.overviewActivityStream.innerHTML = state.auditLogs.slice(0, 8).map(log => `
+      <div class="stream-item">
+        <span class="stream-time">${new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+        <div>
+          <span class="stream-action">${escapeHtml(log.action)}</span>
+          <span class="stream-detail"> — ${escapeHtml(log.detail || 'Completed')}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function loadSessions() {
+    if (!state.token) return;
+    try {
+      const sessions = await api('/api/auth/sessions');
+      state.sessions = Array.isArray(sessions) ? sessions : [];
+      if (el.valSessions) el.valSessions.textContent = String(state.sessions.filter(s => !s.revoked_at).length);
+      renderSessionsTable();
+    } catch (_) {}
+  }
+
+  function renderSessionsTable() {
+    if (!el.sessionsTableBody) return;
+    if (state.sessions.length === 0) {
+      el.sessionsTableBody.innerHTML = '<tr><td colspan="6" class="td-empty">No active sessions found.</td></tr>';
+      return;
+    }
+
+    el.sessionsTableBody.innerHTML = state.sessions.map(s => {
+      const isRevoked = Boolean(s.revoked_at);
+      return `
+        <tr>
+          <td class="kv-mono">#${s.id}</td>
+          <td><span class="m-chip">${escapeHtml(s.created_via)}</span></td>
+          <td style="color: var(--text-dim); font-size: 0.75rem;">${new Date(s.issued_at).toLocaleString()}</td>
+          <td style="color: var(--text-dim); font-size: 0.75rem;">${new Date(s.expires_at).toLocaleString()}</td>
+          <td>
+            <span class="status-pill ${isRevoked ? 'offline' : 'online'}">
+              ${isRevoked ? 'REVOKED' : 'ACTIVE'}
+            </span>
+          </td>
+          <td>
+            ${isRevoked ? '<span style="color: var(--text-dim); font-size: 0.75rem;">Revoked</span>' :
+              `<button class="btn btn-danger btn-sm revoke-sess-btn" data-id="${s.id}">Revoke</button>`}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    el.sessionsTableBody.querySelectorAll('.revoke-sess-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        if (confirm(`Revoke session #${id} and all related tokens in its rotation lineage?`)) {
+          try {
+            await api(`/api/auth/sessions/${id}`, { method: 'DELETE' });
+            await loadSessions();
+          } catch (err) {
+            alert(`Failed revoking session: ${err.message}`);
+          }
+        }
+      });
+    });
+  }
+
+  function promptClaimNode() {
+    const code = prompt('Enter the 6-character claim code or token generated by "nexus node claim":');
+    if (!code) return;
+    alert(`Initiating node claim verification for: ${code}`);
+  }
+
+  function refreshAll() {
+    probeTelemetry();
+    loadSystemStatus();
+    loadNodesAndDevices();
+    loadRelayStatus();
+    loadAuditLogs();
+    loadSessions();
+  }
+
+  function refreshCurrentView() {
+    switch (state.currentView) {
+      case 'overview':
+        loadSystemStatus();
+        loadAuditLogs();
+        loadRelayStatus();
+        break;
+      case 'devices':
+        loadNodesAndDevices();
+        break;
+      case 'relay':
+        loadRelayStatus();
+        break;
+      case 'services':
+        loadSystemStatus();
+        break;
+      case 'audit':
+        loadAuditLogs();
+        break;
+      case 'sessions':
+        loadSessions();
+        break;
+    }
+  }
+
+  // =========================================================================
+  // 7. Interactive Background Atmospheric Canvas
+  // =========================================================================
+  function initAtmosphericCanvas() {
     if (!el.canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const ctx = el.canvas.getContext('2d');
     if (!ctx) return;
@@ -82,285 +780,47 @@
       height = el.canvas.height = window.innerHeight;
     }, { passive: true });
 
-    const mouse = { x: width / 2, y: height / 2, active: false };
-    window.addEventListener('mousemove', (e) => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-      mouse.active = true;
-      if (el.cursorGlow) {
-        el.cursorGlow.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
-        el.cursorGlow.style.opacity = '1';
-      }
-    }, { passive: true });
-
-    document.addEventListener('mouseleave', () => {
-      mouse.active = false;
-      if (el.cursorGlow) el.cursorGlow.style.opacity = '0';
-    });
-
-    const PARTICLE_COUNT = Math.min(Math.floor((width * height) / 14000), 75);
-    const particles = [];
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      particles.push({
+    const nodes = [];
+    for (let i = 0; i < 40; i++) {
+      nodes.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.65,
-        vy: (Math.random() - 0.5) * 0.65,
-        radius: Math.random() * 1.5 + 1
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        r: Math.random() * 1.5 + 1
       });
     }
-
-    let animationFrameId;
-    let isSkipped = false;
-
-    // Modern Web Guidance: Efficient Background Processing
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        cancelAnimationFrame(animationFrameId);
-      } else {
-        render();
-      }
-    });
 
     function render() {
       if (document.hidden) return;
       ctx.clearRect(0, 0, width, height);
-
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-
-        if (p.x < 0) p.x = width;
-        else if (p.x > width) p.x = 0;
-        if (p.y < 0) p.y = height;
-        else if (p.y > height) p.y = 0;
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        n.x += n.vx;
+        n.y += n.vy;
+        if (n.x < 0) n.x = width; else if (n.x > width) n.x = 0;
+        if (n.y < 0) n.y = height; else if (n.y > height) n.y = 0;
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
         ctx.fill();
 
-        // Connect particles near mouse
-        if (mouse.active) {
-          const dx = mouse.x - p.x;
-          const dy = mouse.y - p.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 140) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const n2 = nodes[j];
+          const dist = Math.hypot(n.x - n2.x, n.y - n2.y);
+          if (dist < 120) {
             ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(mouse.x, mouse.y);
-            ctx.strokeStyle = `rgba(56, 189, 248, ${0.35 * (1 - dist / 140)})`;
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
-          }
-        }
-
-        // Connect neighbor particles
-        for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dx = p.x - p2.x;
-          const dy = p.y - p2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 110) {
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = `rgba(99, 102, 241, ${0.18 * (1 - dist / 110)})`;
-            ctx.lineWidth = 0.6;
+            ctx.moveTo(n.x, n.y);
+            ctx.lineTo(n2.x, n2.y);
+            ctx.strokeStyle = `rgba(99, 102, 241, ${0.15 * (1 - dist / 120)})`;
             ctx.stroke();
           }
         }
       }
-
-      animationFrameId = requestAnimationFrame(render);
+      requestAnimationFrame(render);
     }
-
     render();
-  }
-
-  // =========================================================================
-  // 2. Scroll Reveals & Navigation Interactivity
-  // =========================================================================
-  function initScrollObservables() {
-    const revealItems = document.querySelectorAll('.scroll-reveal');
-    if (!('IntersectionObserver' in window)) {
-      revealItems.forEach(item => item.classList.add('revealed'));
-      return;
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('revealed');
-        }
-      });
-    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-
-    revealItems.forEach(el => observer.observe(el));
-
-    // Nav active tab highlight on scroll
-    const sections = document.querySelectorAll('main > section[id]');
-    window.addEventListener('scroll', () => {
-      let current = '';
-      const scrollY = window.pageYOffset;
-      sections.forEach(section => {
-        const top = section.offsetTop - 140;
-        const height = section.offsetHeight;
-        if (scrollY >= top && scrollY < top + height) {
-          current = section.getAttribute('id');
-        }
-      });
-      el.navItems.forEach(item => {
-        item.classList.toggle('active', item.getAttribute('data-nav') === current);
-      });
-    }, { passive: true });
-
-    // Mobile nav toggle
-    if (el.mobileToggle && el.navMenu) {
-      el.mobileToggle.addEventListener('click', () => {
-        const isOpen = el.navMenu.classList.toggle('open');
-        el.mobileToggle.setAttribute('aria-expanded', String(isOpen));
-      });
-    }
-  }
-
-  // =========================================================================
-  // 3. API Communication & Live Health Telemetry
-  // =========================================================================
-  async function apiRequest(path, options = {}) {
-    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-    if (state.token) {
-      headers['Authorization'] = `Bearer ${state.token}`;
-    }
-
-    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    if (!res.ok) {
-      const errText = await res.text();
-      let errDetail = errText;
-      try {
-        const json = JSON.parse(errText);
-        errDetail = json.detail || errText;
-      } catch (_) {}
-      throw new Error(errDetail);
-    }
-    if (res.status === 204) return null;
-    return await res.json();
-  }
-
-  async function probeClusterHealth() {
-    const start = performance.now();
-    try {
-      const health = await apiRequest('/health');
-      const rtt = Math.round(performance.now() - start);
-      state.clusterOnline = true;
-      state.latency = rtt;
-
-      if (el.statusPulse) {
-        el.statusPulse.className = 'pulse-indicator status-online';
-      }
-      if (el.statusText) el.statusText.textContent = `${health.service.toUpperCase()} [${health.mode.toUpperCase()}]`;
-      if (el.statusLatency) el.statusLatency.textContent = `${rtt} ms`;
-      if (el.metricLatency) el.metricLatency.textContent = `${rtt}ms`;
-      if (el.cpModeBadge) el.cpModeBadge.textContent = health.mode === 'control-plane' ? 'Control Plane (Coordination)' : 'Full Local Node';
-      if (el.cpUrlDisplay) el.cpUrlDisplay.textContent = API_BASE;
-      if (el.termCanonicalUrl) el.termCanonicalUrl.textContent = API_BASE;
-      if (el.quickCmdCode) el.quickCmdCode.textContent = `nexus cp login --email ${state.user ? state.user.email : 'you@domain.com'}`;
-    } catch (err) {
-      state.clusterOnline = false;
-      if (el.statusPulse) {
-        el.statusPulse.className = 'pulse-indicator status-error';
-      }
-      if (el.statusText) el.statusText.textContent = 'GATEWAY UNREACHABLE';
-      if (el.statusLatency) el.statusLatency.textContent = 'ERR';
-    }
-  }
-
-  async function fetchSessionUser() {
-    if (!state.token) {
-      renderAuthState(false);
-      return;
-    }
-    try {
-      const user = await apiRequest('/api/auth/me');
-      state.user = user;
-      renderAuthState(true);
-      loadNodes();
-    } catch (_) {
-      // Token expired or invalid
-      state.token = null;
-      localStorage.removeItem('nexus.token');
-      renderAuthState(false);
-    }
-  }
-
-  async function loadNodes() {
-    try {
-      const nodes = await apiRequest('/api/nodes');
-      state.nodes = Array.isArray(nodes) ? nodes : [];
-      renderNodes(state.nodes);
-    } catch (_) {
-      // In control plane mode without node registrations yet
-      renderNodes([]);
-    }
-  }
-
-  function renderNodes(nodes) {
-    if (el.metricNodes) el.metricNodes.textContent = String(nodes.length || 0);
-    if (!el.meshNodesContainer) return;
-
-    if (nodes.length === 0) {
-      el.meshNodesContainer.innerHTML = `
-        <div class="node-skeleton-card" style="grid-column: 1 / -1; text-align: center; padding: 3rem 1.5rem;">
-          <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📡</div>
-          <h3 style="font-size: 1.25rem; font-family: var(--font-display); margin-bottom: 0.5rem;">No Mesh Nodes Currently Claimed</h3>
-          <p style="color: var(--text-dim); max-width: 500px; margin: 0 auto 1.5rem auto; font-size: 0.9rem;">
-            Install the NEXUS CLI on your workstation or server, then register it using the command below to establish an end-to-end encrypted relay bridge.
-          </p>
-          <div style="display: inline-flex; align-items: center; gap: 0.75rem; background: #000; border: 1px solid var(--border-subtle); padding: 0.65rem 1rem; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-cyan);">
-            <code>nexus cp claim &lt;code&gt;</code>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    el.meshNodesContainer.innerHTML = nodes.map(n => `
-      <div class="node-skeleton-card">
-        <div class="node-header">
-          <span class="node-icon">🖥️</span>
-          <div class="node-title-box">
-            <span class="node-name">${escapeHtml(n.name || 'Nexus Node')}</span>
-            <span class="node-status-badge ${n.is_online ? 'status-active' : 'status-offline'}">
-              ${n.is_online ? 'SYNCHRONIZED' : 'OFFLINE'}
-            </span>
-          </div>
-        </div>
-        <div class="node-stats">
-          <div><span class="stat-l">Node ID</span><span class="stat-v">#${n.id}</span></div>
-          <div><span class="stat-l">Role</span><span class="stat-v">${escapeHtml(n.role || 'primary')}</span></div>
-          <div><span class="stat-l">IP Address</span><span class="stat-v">${escapeHtml(n.lan_ip || '127.0.0.1')}</span></div>
-          <div><span class="stat-l">Heartbeat</span><span class="stat-v">${n.heartbeat_at ? new Date(n.heartbeat_at).toLocaleTimeString() : 'Never'}</span></div>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  function renderAuthState(loggedIn) {
-    if (loggedIn && state.user) {
-      if (el.loggedOutState) el.loggedOutState.classList.remove('active');
-      if (el.loggedInState) el.loggedInState.classList.add('active');
-      if (el.sessionEmail) el.sessionEmail.textContent = state.user.email;
-      if (el.sessionAvatar) el.sessionAvatar.textContent = state.user.email.substring(0, 2).toUpperCase();
-      const navAuth = document.getElementById('nav-auth-btn');
-      if (navAuth) navAuth.textContent = 'Vault Active';
-    } else {
-      if (el.loggedInState) el.loggedInState.classList.remove('active');
-      if (el.loggedOutState) el.loggedOutState.classList.add('active');
-      const navAuth = document.getElementById('nav-auth-btn');
-      if (navAuth) navAuth.textContent = 'Operator Login';
-    }
   }
 
   function escapeHtml(str) {
@@ -370,215 +830,56 @@
   }
 
   // =========================================================================
-  // 4. Authentication Interaction Flow
-  // =========================================================================
-  function initAuth() {
-    if (el.tabLogin && el.tabRegister) {
-      el.tabLogin.addEventListener('click', () => {
-        state.mode = 'login';
-        el.tabLogin.classList.add('active');
-        el.tabRegister.classList.remove('active');
-        el.authBtnText.textContent = 'Authenticate Session';
-        el.authErrorBanner.classList.add('hidden');
-      });
-      el.tabRegister.addEventListener('click', () => {
-        state.mode = 'register';
-        el.tabRegister.classList.add('active');
-        el.tabLogin.classList.remove('active');
-        el.authBtnText.textContent = 'Register New Identity';
-        el.authErrorBanner.classList.add('hidden');
-      });
-    }
-
-    if (el.authForm) {
-      el.authForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        el.authErrorBanner.classList.add('hidden');
-        el.authSpinner.classList.remove('hidden');
-        el.authSubmitBtn.disabled = true;
-
-        const email = el.authEmail.value.trim();
-        const password = el.authPassword.value;
-
-        try {
-          if (state.mode === 'register') {
-            await apiRequest('/api/auth/register', {
-              method: 'POST',
-              body: JSON.stringify({ email, password })
-            });
-            termLog(`[AUTH] Successfully registered new identity: ${email}`, 'green');
-          }
-
-          const tokens = await apiRequest('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password })
-          });
-
-          state.token = tokens.access_token;
-          state.refresh = tokens.refresh_token;
-          localStorage.setItem('nexus.token', tokens.access_token);
-          if (tokens.refresh_token) localStorage.setItem('nexus.refresh', tokens.refresh_token);
-
-          termLog(`[AUTH] Operator authenticated. Token stored in vault.`, 'green');
-          await fetchSessionUser();
-        } catch (err) {
-          el.authErrorBanner.textContent = err.message || 'Authentication failed.';
-          el.authErrorBanner.classList.remove('hidden');
-          termLog(`[ERR] Authentication error: ${err.message}`, 'amber');
-        } finally {
-          el.authSpinner.classList.add('hidden');
-          el.authSubmitBtn.disabled = false;
-        }
-      });
-    }
-
-    if (el.sessionLogoutBtn) {
-      el.sessionLogoutBtn.addEventListener('click', () => {
-        state.token = null;
-        state.refresh = null;
-        state.user = null;
-        localStorage.removeItem('nexus.token');
-        localStorage.removeItem('nexus.refresh');
-        renderAuthState(false);
-        renderNodes([]);
-        termLog(`[AUTH] Session terminated by operator.`, 'dim');
-      });
-    }
-
-    if (el.copyCmdBtn && el.quickCmdCode) {
-      el.copyCmdBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(el.quickCmdCode.textContent);
-        el.copyCmdBtn.textContent = 'Copied!';
-        setTimeout(() => { el.copyCmdBtn.textContent = 'Copy'; }, 2000);
-      });
-    }
-
-    if (el.googleAuthBtn) {
-      el.googleAuthBtn.addEventListener('click', async () => {
-        try {
-          const res = await apiRequest('/api/auth/google/start', {
-            method: 'POST',
-            body: JSON.stringify({ redirect_uri: `${API_BASE}/api/auth/google/callback` })
-          });
-          if (res.url) {
-            window.location.href = res.url;
-          }
-        } catch (err) {
-          el.authErrorBanner.textContent = `Google OIDC error: ${err.message}`;
-          el.authErrorBanner.classList.remove('hidden');
-        }
-      });
-    }
-  }
-
-  // =========================================================================
-  // 5. In-Browser Diagnostic Terminal Simulator
-  // =========================================================================
-  function termLog(msg, colorClass = '') {
-    if (!el.termDynamicOutput) return;
-    const line = document.createElement('div');
-    line.className = `term-line ${colorClass ? 'c-' + colorClass : ''}`;
-    line.textContent = msg;
-    el.termDynamicOutput.appendChild(line);
-    el.termBody.scrollTop = el.termBody.scrollHeight;
-  }
-
-  function initTerminal() {
-    if (!el.termInputRow || !el.termInput) return;
-
-    if (el.clearTermBtn) {
-      el.clearTermBtn.addEventListener('click', () => {
-        if (el.termDynamicOutput) el.termDynamicOutput.innerHTML = '';
-      });
-    }
-
-    el.termInputRow.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const raw = el.termInput.value.trim();
-      if (!raw) return;
-      el.termInput.value = '';
-
-      termLog(`operator@nexus:~$ ${raw}`, 'white');
-      const parts = raw.split(/\s+/);
-      const cmd = parts[0].toLowerCase();
-      const arg = parts.slice(1).join(' ');
-
-      switch (cmd) {
-        case 'help':
-          termLog('Available commands:');
-          termLog('  status    - Probe live health of the control plane API');
-          termLog('  nodes     - Query all registered edge hardware nodes');
-          termLog('  whoami    - Show current authenticated operator credentials');
-          termLog('  ping      - Measure round-trip time (RTT) to the cluster gateway');
-          termLog('  url       - Display the canonical master public endpoint');
-          termLog('  clear     - Clear terminal buffer');
-          break;
-
-        case 'status':
-          termLog('Probing cluster health at ' + API_BASE + '...', 'dim');
-          try {
-            const h = await apiRequest('/health');
-            termLog(`Cluster OK: service=${h.service}, mode=${h.mode}`, 'green');
-          } catch (err) {
-            termLog(`Status check failed: ${err.message}`, 'amber');
-          }
-          break;
-
-        case 'nodes':
-          termLog('Querying mesh node registry...', 'dim');
-          try {
-            const nodes = await apiRequest('/api/nodes');
-            if (!nodes.length) {
-              termLog('No nodes claimed yet. Run "nexus cp claim" to bind hardware.', 'dim');
-            } else {
-              nodes.forEach(n => termLog(`[Node #${n.id}] ${n.name} (${n.role}) — ${n.lan_ip} [${n.is_online ? 'ONLINE' : 'OFFLINE'}]`, 'cyan'));
-            }
-          } catch (err) {
-            termLog(`Failed to query nodes (requires login): ${err.message}`, 'amber');
-          }
-          break;
-
-        case 'whoami':
-          if (state.user) {
-            termLog(`Authenticated as: ${state.user.email} (ID: ${state.user.id})`, 'green');
-          } else {
-            termLog('Not authenticated. Please log in via the Control Interface.', 'amber');
-          }
-          break;
-
-        case 'ping':
-          const t0 = performance.now();
-          await apiRequest('/health').catch(() => {});
-          termLog(`PONG from ${API_BASE} in ${(performance.now() - t0).toFixed(2)} ms`, 'cyan');
-          break;
-
-        case 'url':
-          termLog(`Unified Public URL: ${API_BASE}`, 'cyan');
-          termLog('Submodules & CLI read NEXUS_PUBLIC_URL automatically.', 'dim');
-          break;
-
-        case 'clear':
-          if (el.termDynamicOutput) el.termDynamicOutput.innerHTML = '';
-          break;
-
-        default:
-          termLog(`nexus: command not found: ${cmd}. Type 'help' for available commands.`, 'amber');
-          break;
-      }
-    });
-  }
-
-  // =========================================================================
-  // 6. Bootstrap Everything
+  // 8. Bootstrap Application
   // =========================================================================
   document.addEventListener('DOMContentLoaded', () => {
-    initNeuralCanvas();
-    initScrollObservables();
-    initAuth();
-    initTerminal();
-    probeClusterHealth();
-    fetchSessionUser();
-    setInterval(probeClusterHealth, 15000);
+    initAtmosphericCanvas();
+    initNavigation();
+    initCommandPalette();
+    initAuthGate();
+
+    if (el.btnRefreshOverview) {
+      el.btnRefreshOverview.addEventListener('click', refreshAll);
+    }
+    if (el.btnClaimModal) {
+      el.btnClaimModal.addEventListener('click', promptClaimNode);
+    }
+    if (el.deviceSearchInput) {
+      el.deviceSearchInput.addEventListener('input', renderDevicesTable);
+    }
+    if (el.deviceFilterPlatform) {
+      el.deviceFilterPlatform.addEventListener('change', renderDevicesTable);
+    }
+    if (el.auditSearchInput) {
+      el.auditSearchInput.addEventListener('input', renderAuditLogs);
+    }
+    if (el.btnExportAudit) {
+      el.btnExportAudit.addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state.auditLogs, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nexus-audit-${Date.now()}.json`;
+        a.click();
+      });
+    }
+    if (el.btnRevokeAllSessions) {
+      el.btnRevokeAllSessions.addEventListener('click', async () => {
+        if (confirm('Revoke all other authentication sessions across all devices?')) {
+          await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+          await loadSessions();
+        }
+      });
+    }
+
+    if (el.settingsCanonicalUrl) {
+      el.settingsCanonicalUrl.textContent = API_BASE;
+    }
+
+    fetchUserIdentity();
+    probeTelemetry();
+    refreshAll();
+    setInterval(probeTelemetry, 15000);
   });
 
 })();

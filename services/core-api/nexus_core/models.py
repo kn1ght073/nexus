@@ -27,6 +27,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=True)  # nullable for Google OIDC accounts
     display_name = Column(String(255), nullable=True)
+    role = Column(String(32), default="user", nullable=False)  # 'user' | 'operator' | 'owner'
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 

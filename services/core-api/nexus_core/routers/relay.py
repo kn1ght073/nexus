@@ -162,6 +162,48 @@ def create_pairing_code(
     )
 
 
+@router.get("/status")
+def relay_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Inspect active relay links and tunnel metrics for user's nodes."""
+    # Find all nodes belonging to the user
+    user_node_ids = [n.id for n in db.query(Node.id).filter(Node.owner_id == current_user.id).all()]
+    active_in_memory = []
+    for nid, entry in relay_state.nodes.items():
+        if nid in user_node_ids and entry.get("ws") is not None:
+            active_in_memory.append({
+                "node_id": nid,
+                "has_device": entry.get("device") is not None,
+                "owner_id": entry.get("owner_id"),
+            })
+
+    historical_links = (
+        db.query(RelayLink)
+        .filter(RelayLink.owner_id == current_user.id)
+        .order_by(RelayLink.attached_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    return {
+        "active_sockets": len(active_in_memory),
+        "nodes_listening": active_in_memory,
+        "recent_links": [
+            {
+                "id": link.id,
+                "node_id": link.node_id,
+                "device_id": link.device_id,
+                "attached_at": link.attached_at.isoformat() if link.attached_at else None,
+                "detached_at": link.detached_at.isoformat() if link.detached_at else None,
+                "is_active": link.detached_at is None,
+            }
+            for link in historical_links
+        ],
+    }
+
+
 def _validate_pairing(db: Session, pairing_id: int, code: str) -> tuple[PairingSession, int]:
     """Shared validation for the REST and WS attach paths.
 

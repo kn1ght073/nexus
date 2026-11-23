@@ -136,6 +136,23 @@ def get_current_user(
     return user
 
 
+def require_role(*allowed_roles: str):
+    """Dependency factory: require user to have one of `allowed_roles` (e.g. 'operator', 'owner')."""
+
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        user_role = getattr(current_user, "role", "user") or "user"
+        # 'owner' has superset authority over 'operator' and 'user'
+        effective_roles = {"owner", user_role} if user_role == "owner" else {user_role}
+        if not effective_roles.intersection(allowed_roles):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Action requires elevated role: {list(allowed_roles)}. Current role: '{user_role}'",
+            )
+        return current_user
+
+    return role_checker
+
+
 def require_scope(*allowed: str):
     """Dependency factory: require the token's scope to intersect `allowed`.
 
