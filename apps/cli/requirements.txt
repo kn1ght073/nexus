@@ -1,5 +1,6 @@
-typer==0.23.1
-rich==14.3.3
-requests==2.32.5
-pydantic==2.12.5
-textual==8.2.8
+typer>=0.12.0
+rich>=13.7.0
+requests>=2.31.0
+pydantic>=2.4.2
+keyring>=25.0.0
+textual>=0.50.0

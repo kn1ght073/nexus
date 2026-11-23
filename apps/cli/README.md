@@ -1,195 +1,289 @@
 # NEXUS CLI (Command Line Interface)
 
-The NEXUS CLI is a powerful terminal-based tool for interacting with your Central API Node. It allows you to rapidly capture notes, manage tasks, and organize projects directly from your command line.
+NEXUS CLI is a professional, high-performance developer tool and edge node controller for the NEXUS sovereign infrastructure ecosystem.
+
+## Key Architecture & Features
+
+- **Modular Command Hierarchy**: Clean, domain-focused command groups (`auth`, `account`, `devices`, `nodes`, `projects`, `tasks`, `notes`, `files`, `sync`, `github`, `services`, `config`, `doctor`).
+- **OS Keyring Integration**: Secure token storage backed by system keychains (macOS Keychain, Linux SecretService, Windows Credential Manager) with graceful fallback to `chmod 0600` file storage.
+- **Deep Diagnostics Engine (`nexus doctor`)**: Instant verification of runtime, security backends, config file integrity, core node latency, control plane connectivity, and optional local services (STT, LLM).
+- **Strict Unix Output Discipline**: Structured data to stdout, interactive progress spinners to stderr, full `--json` support across commands, and automatic `NO_COLOR` / non-TTY detection.
+- **100% Backward Compatibility**: Preserves all root legacy commands and aliases (`login`, `register`, `logout`, `whoami`, `init`, `status`, `ui`, `search`, `bootstrap`, `cp`).
+
+---
 
 ## Installation
 
-To install the CLI globally on your system (so you can run the `nexus` command from anywhere):
+Install in editable mode using `uv` (recommended) or `pip`:
 
 ```bash
-cd apps/cli
-source venv/bin/activate
-pip install -e .
+uv pip install -e apps/cli
 ```
 
-## Global Commands
+Verify your installation:
 
-### `nexus init`
-Initialize the CLI and connect it to your NEXUS Core API server.
-- **Arguments:** None
-- **Options:** 
-  - `--url` (string): The base URL of your API server (e.g., `http://127.0.0.1:8000`).
-- **Example:** `nexus init --url http://192.168.1.15:8000`
-
-### `nexus status`
-Check the health and connectivity of your configured API server.
-- **Arguments:** None
-- **Example:** `nexus status`
-
-### `nexus ui`
-Launch the full-screen interactive Terminal User Interface (TUI). This interface provides a persistent, interactive way to view and add Projects, Tasks, and Notes using a synthwave aesthetic.
-
-**TUI Keyboard Shortcuts & Interactions:**
-- `p`: Switch view to Projects
-- `t`: Switch view to Tasks
-- `n`: Switch view to Notes
-- `f`: Switch view to Files (Local filesystem)
-- `s`: Open global file search modal
-- `P`: Open modal to add a new Project
-- `T`: Open modal to add a new Task
-- `N`: Open modal to add a new Note
-- `Ctrl+S`: Open the Command Palette
-- `Enter` or `Click`: Select a Project or Task row to change its status (Pending, In Progress, Completed)
-- `q`: Quit the application
-
----
-
-## File Operations
-
-### `nexus file list`
-List all files in a specific directory (defaults to the server's first configured storage root — the file jail).
-- **Arguments:**
-  - `PATH` (string, optional): The directory path to list.
-- **Example:** `nexus file list ~/Documents`
-
-### `nexus search`
-Globally search for text within files on the connected device.
-- **Arguments:**
-  - `QUERY` (string): The text to search for.
-- **Options:**
-  - `--path` (string, optional): The directory to search within (defaults to the storage root).
-- **Example:** `nexus search "API_KEY" --path ~/Projects`
-
----
-
-## Projects Management
-
-### `nexus project list`
-Fetch and display all your projects in a clean table format.
-- **Arguments:** None
-- **Example:** `nexus project list`
-
-### `nexus project create`
-Create a new project.
-- **Arguments:**
-  - `TITLE` (string): The title of the new project. (Enclose in quotes if it contains spaces).
-- **Options:**
-  - `--description` (string, optional): A description for the project.
-- **Example:** `nexus project create "My Super Project" --description "Top secret work"`
-
----
-
-## Tasks Management
-
-### `nexus task list`
-Fetch and display all active tasks.
-- **Arguments:** None
-- **Example:** `nexus task list`
-
-### `nexus task add`
-Add a new task and assign it to a specific project.
-- **Arguments:**
-  - `TITLE` (string): The title of the task. (Enclose in quotes if it contains spaces).
-  - `PROJECT_ID` (integer): The numeric ID of the project this task belongs to.
-- **Example:** `nexus task add "Finish the assignment" 1`
-
----
-
-## Notes Capture
-
-### `nexus note add`
-Quickly capture a thought or text note to the central brain.
-- **Arguments:**
-  - `TITLE` (string): The title of the note.
-  - `CONTENT` (string): The body content of the note.
-- **Example:** `nexus note add "Shopping List" "Milk, Eggs, Bread"`
-
-
----
-
-## Authentication (new)
-
-Since Core v0.2.0 the API uses real token authentication. The CLI stores it
-after login and attaches it to every request automatically.
-
-### `nexus register`
-Create your first NEXUS account (password must be 8+ characters).
-- **Example:** `nexus register`
-
-### `nexus login`
-Log in and store the access token locally (`~/.nexus-cli.json`).
-- **Example:** `nexus login`
-
-### `nexus logout`
-Forget the stored credentials.
-- **Example:** `nexus logout`
-
-### `nexus whoami`
-Show the account tied to the stored token.
-- **Example:** `nexus whoami`
-
----
-
-## Additional Task & Device Commands (new)
-
-### `nexus task done`
-Mark a task as completed by its ID.
-- **Arguments:** `TASK_ID` (integer)
-- **Example:** `nexus task done 3`
-
-### `nexus task today`
-Show tasks created today (your daily focus list).
-- **Example:** `nexus task today`
-
-### `nexus devices`
-List the devices registered against your NEXUS account.
-- **Example:** `nexus devices`
-
-### `nexus file roots`
-Show the server's configured storage roots (what the file jail allows).
-- **Example:** `nexus file roots`
-
----
-
-## Sync & Machine-Readable Output (new, Core v0.2.1)
-
-### `nexus sync`
-Pull server changes (projects/tasks/notes) since your last cursor — the CLI
-half of the metadata sync engine.
-- **Options:**
-  - `--since` (string, optional): ISO timestamp of the last successful pull; omit for a full first pull.
-- **Example:** `nexus sync` · `nexus sync --since 2026-11-15T08:00:00`
-
-### `nexus device token`
-Issue a scoped token bound to one of your devices (validated against the
-device's declared capabilities).
-- **Arguments:** `DEVICE_ID` (integer)
-- **Options:** `--scopes` (comma-separated; default `read`)
-- **Example:** `nexus device token 2 --scopes read,capture`
-
-### `--json` global flag
-Every listing command (`task list`, `task today`, `project list`, `note list`,
-`devices`, `file list`, `search`, `sync`) accepts `--json` and emits
-machine-readable JSON on stdout (tables/panels go to stderr), for pipelines:
 ```bash
-nexus task list --json | jq '.[] | select(.status=="pending") | .id'
+nexus --version
+nexus doctor
 ```
 
 ---
 
-## Control Plane & Node Commands (online access)
+## Command Reference
 
-Log in from anywhere while personal data stays on your machine. The full
-walkthrough (Render + Neon/Supabase free tiers, Tailscale) is in
-[docs/deploy/online-access.md](../../docs/deploy/online-access.md).
+### Diagnostics & System Health
 
-| Command | What it does |
-| --- | --- |
-| `nexus cp set <url>` | Point the CLI at the hosted control plane |
-| `nexus cp login` | Log in against the control plane (any network) |
-| `nexus node claim [--name N] [--platform p] [--endpoint e] [--watch]` | Make this machine the active main server; `--watch` heartbeats every 30 s |
-| `nexus node resolve [--json]` | Show the current active node + endpoint (null if offline) |
-| `nexus node list` | All your nodes with online/offline status |
-| `nexus services status` | Which optional services are installed (stt, llm) |
-| `nexus services install stt` | Install faster-whisper (reliable local transcription) |
-| `nexus services install llm` | Instructions for Ollama |
+#### `nexus doctor`
+Run full diagnostic probes across runtime, credentials, node connectivity, and services.
+```bash
+nexus doctor
+nexus doctor --json
+```
+
+#### `nexus status`
+Check live connection and authentication status with the configured NEXUS core node.
+```bash
+nexus status
+```
+
+---
+
+### Authentication & Account Identity
+
+#### `nexus auth login`
+Log in to NEXUS Core and store session tokens securely in the OS Keyring.
+```bash
+nexus auth login --email user@example.com --password secret
+```
+
+#### `nexus auth register`
+Register a new account on the connected node.
+```bash
+nexus auth register --email user@example.com --password secret
+```
+
+#### `nexus auth whoami`
+Display identity, role, and permissions of the current session.
+```bash
+nexus auth whoami
+nexus auth whoami --json
+```
+
+#### `nexus auth logout`
+Revoke active session tokens server-side and purge local keychain credentials.
+```bash
+nexus auth logout
+```
+
+#### `nexus account overview`
+Inspect sovereign account details, Google OAuth identity linking, and registered entity metrics.
+```bash
+nexus account overview
+nexus account overview --json
+```
+
+#### `nexus account data`
+Inspect entity tallies (projects, tasks, notes) and verify the zero-cloud sovereign retention policy.
+```bash
+nexus account data
+nexus account data --json
+```
+
+#### `nexus account activity`
+View the audit activity event stream with filtering.
+```bash
+nexus account activity --category auth --limit 10
+```
+
+---
+
+### Devices & Hardware Nodes
+
+#### `nexus devices list`
+List all registered hardware devices, platform types, and online states.
+```bash
+nexus devices list
+nexus devices list --json
+```
+
+#### `nexus devices inspect <device-id>`
+Inspect hardware metadata, network properties, and capabilities for a specific device.
+```bash
+nexus devices inspect 1
+```
+
+#### `nexus devices token`
+Generate a single-use onboarding token for new clients (mobile apps, laptops).
+```bash
+nexus devices token --platform android --expires 15
+```
+
+#### `nexus devices revoke <device-id>`
+Revoke a device's authorization and unlink it permanently.
+```bash
+nexus devices revoke 2 --yes
+```
+
+#### `nexus nodes claim`
+Claim this host machine as an authoritative NEXUS edge node.
+```bash
+nexus nodes claim --name "Workstation-Node" --watch
+```
+
+#### `nexus nodes list`
+List all claimed edge nodes and their live heartbeats.
+```bash
+nexus nodes list
+```
+
+#### `nexus nodes resolve`
+Query which node is currently elected as active primary node.
+```bash
+nexus nodes resolve
+```
+
+#### `nexus nodes pair`
+Mint a temporary 6-digit numeric pairing code for edge onboarding.
+```bash
+nexus nodes pair
+```
+
+---
+
+### GitHub Integration
+
+#### `nexus github connect`
+Link your GitHub account using the OAuth Device Flow (works headless & over SSH).
+```bash
+nexus github connect
+```
+
+#### `nexus github status`
+Check GitHub account linking status and active scopes.
+```bash
+nexus github status
+nexus github status --json
+```
+
+#### `nexus github highlights`
+Display profile highlights, top repositories, and recent commit activity.
+```bash
+nexus github highlights
+nexus github highlights --refresh
+nexus github highlights --json
+```
+
+#### `nexus github unlink`
+Unlink GitHub account and revoke tokens server-side.
+```bash
+nexus github unlink
+```
+
+---
+
+### File Operations & Jailed Search
+
+#### `nexus files list [path]`
+Browse files inside the server's configured storage roots.
+```bash
+nexus files list
+nexus files list ~/Documents
+```
+
+#### `nexus files roots`
+List configured storage roots defining path jail boundaries.
+```bash
+nexus files roots
+```
+
+#### `nexus files search <query>` (or `nexus search <query>`)
+Search for text inside files contained within the storage roots.
+```bash
+nexus files search "API_KEY"
+```
+
+---
+
+### Projects, Tasks & Notes
+
+#### `nexus projects list`
+```bash
+nexus projects list
+nexus projects list --json
+```
+
+#### `nexus projects create <title> [--desc <desc>]`
+```bash
+nexus projects create "Project Apollo" --desc "Core architecture"
+```
+
+#### `nexus tasks list` / `nexus tasks today`
+```bash
+nexus tasks list
+nexus tasks today
+```
+
+#### `nexus tasks add <title> [--project <id>]`
+```bash
+nexus tasks add "Refactor syscall stubs" --project 1
+```
+
+#### `nexus tasks done <task-id>`
+```bash
+nexus tasks done 5
+```
+
+#### `nexus notes list` / `nexus notes add <title> <content>`
+```bash
+nexus notes list
+nexus notes add "Kernel Architecture" "Detailed notes on IRP handling..."
+```
+
+---
+
+### Node Services (STT, LLM)
+
+#### `nexus services status`
+Show which optional services (faster-whisper, ollama) are installed or active.
+```bash
+nexus services status
+```
+
+#### `nexus services install <stt|llm|bootstrap>`
+Install an optional service locally:
+```bash
+nexus services install stt
+```
+
+---
+
+### Configuration Management
+
+#### `nexus config list`
+List active CLI parameters with automatic credential masking.
+```bash
+nexus config list
+nexus config list --json
+```
+
+#### `nexus config get <key>` / `nexus config set <key> <value>`
+```bash
+nexus config get api_url
+nexus config set api_url http://127.0.0.1:8000
+```
+
+#### `nexus config reset`
+Clear all configuration and purge stored credentials from OS Keyring.
+```bash
+nexus config reset --yes
+```
+
+---
+
+### Interactive TUI
+
+#### `nexus ui`
+Launch the full-screen interactive Terminal User Interface (TUI).
+```bash
+nexus ui
+```

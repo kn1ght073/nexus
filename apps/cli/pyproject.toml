@@ -4,18 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus-cli"
-version = "0.1.0"
-description = "Power Tools for the NEXUS Ecosystem"
+version = "0.2.0"
+description = "World-Class Developer CLI & Edge Node Controller for NEXUS"
+readme = "README.md"
+requires-python = ">=3.10"
 dependencies = [
     "typer>=0.12.0",
     "rich>=13.7.0",
     "requests>=2.31.0",
     "pydantic>=2.4.2",
-    "textual"
+    "keyring>=25.0.0",
+    "textual>=0.50.0"
 ]
 
 [project.scripts]
-nexus = "main:app"
+nexus = "nexus_cli.cli:app"
 
 [tool.setuptools]
 py-modules = ["main", "config", "tui"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nexus_cli*"]
