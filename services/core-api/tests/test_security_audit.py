@@ -179,6 +179,26 @@ def test_google_auth_pkce_start_and_callback(client):
     assert r_me.json()["email"] == "user@example.com"
 
 
+def test_google_auth_get_callback_browser_redirect(client):
+    r_start = client.post("/api/auth/google/start", json={})
+    assert r_start.status_code == 200
+    state = r_start.json()["state"]
+
+    mock_claims = {
+        "sub": "google-user-browser-123",
+        "email": "browser.user@example.com",
+        "email_verified": True,
+        "name": "Browser User",
+    }
+    mock_code = "mock_token_" + base64.urlsafe_b64encode(json.dumps(mock_claims).encode()).decode()
+
+    r_get = client.get(f"/api/auth/google/callback?code={mock_code}&state={state}")
+    assert r_get.status_code == 200
+    assert "text/html" in r_get.headers["content-type"]
+    assert "localStorage.setItem" in r_get.text
+    assert "nexus_access_token" in r_get.headers.get("set-cookie", "")
+
+
 def test_google_auth_allowlist_admission_gate(client, monkeypatch):
     import nexus_core.settings as settings_mod
 
