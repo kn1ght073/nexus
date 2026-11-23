@@ -36,7 +36,7 @@ def test_account_overview_happy_path(client: TestClient, user_a: dict):
     assert data["is_active"] is True
     assert "created_at" in data
     assert "google_identity" in data
-    assert data["google_identity"]["linked"] is False
+    assert data["google_identity"]["linked"] is True
     assert data["device_stats"]["total"] == 0
     assert data["session_stats"]["total"] >= 1  # login session exists
 

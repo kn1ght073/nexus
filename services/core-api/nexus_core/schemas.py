@@ -125,6 +125,7 @@ class AccountDataSummaryOut(BaseModel):
 class GoogleStartRequest(BaseModel):
     redirect_uri: str | None = None
     scopes: list[str] = ["openid", "email", "profile"]
+    cli_port: int | None = None
 
 
 class GoogleStartResponse(BaseModel):

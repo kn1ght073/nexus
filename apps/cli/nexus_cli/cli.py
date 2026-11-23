@@ -65,28 +65,14 @@ def cp_set(url: str = typer.Argument(..., help="Control plane URL")):
 
 @cp_app.command("login")
 def cp_login(
-    email: str = typer.Option(..., prompt=True),
-    password: str = typer.Option(..., prompt=True, hide_input=True),
+    token: Optional[str] = typer.Option(None, "--token", "-t", help="Direct session token"),
+    url: Optional[str] = typer.Option(None, "--url", help="Control plane URL"),
 ):
-    """Log in against the control plane."""
+    """Log in against the control plane via Google OAuth."""
     cfg = load_config()
-    base = (cfg.control_plane_url or "").rstrip("/")
-    if not base:
-        print_error("Control plane URL not configured. Set with 'nexus cp set <url>'.")
-        raise typer.Exit(ExitCode.USAGE_ERROR)
-    client = get_client(base_url=base)
-    try:
-        with status_spinner(f"Logging in to control plane at {base}…"):
-            resp = client.post("/api/auth/login", json={"email": email, "password": password})
-            tokens = resp.json()
-            cfg.token = tokens.get("access_token")
-            cfg.refresh_token = tokens.get("refresh_token")
-            cfg.email = email
-            save_config(cfg)
-        print_success(f"Logged in as [bold cyan]{email}[/bold cyan] on control plane.", title="Control-plane Login")
-    except NexusError as e:
-        print_error(e.message, title="Control-plane Login Failed")
-        raise typer.Exit(e.exit_code)
+    target = url or cfg.control_plane_url or cfg.api_url
+    from nexus_cli.commands.auth import login
+    login(token=token, url=target)
 
 
 app.add_typer(cp_app, name="cp")
@@ -298,20 +284,21 @@ def bootstrap_cmd(
 
 @app.command("login")
 def legacy_login(
-    email: str = typer.Option(..., prompt=True),
-    password: str = typer.Option(..., prompt=True, hide_input=True),
+    token: Optional[str] = typer.Option(None, "--token", "-t", help="Session token from Control Center"),
+    email: Optional[str] = typer.Option(None, "--email", help="(Disabled) Legacy email"),
+    password: Optional[str] = typer.Option(None, "--password", help="(Disabled) Legacy password"),
 ):
-    """Log in to the NEXUS Core and store credentials securely (legacy alias)."""
+    """Log in to the NEXUS Core via Google OAuth (legacy alias)."""
     from nexus_cli.commands.auth import login
-    login(email=email, password=password, url=None)
+    login(token=token, email=email, password=password, url=None)
 
 
 @app.command("register")
 def legacy_register(
-    email: str = typer.Option(..., prompt=True),
-    password: str = typer.Option(..., prompt=True, hide_input=True),
+    email: Optional[str] = typer.Option(None, "--email", help="(Disabled) Legacy email"),
+    password: Optional[str] = typer.Option(None, "--password", help="(Disabled) Legacy password"),
 ):
-    """Register a new account on the NEXUS Core (legacy alias)."""
+    """Register a new account on the NEXUS Core via Google OAuth (legacy alias)."""
     from nexus_cli.commands.auth import register
     register(email=email, password=password, url=None)
 

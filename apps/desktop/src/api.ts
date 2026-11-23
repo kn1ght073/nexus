@@ -78,18 +78,22 @@ export const api = {
     return request("/health");
   },
 
-  async login(email: string, password: string): Promise<{ access_token: string; refresh_token: string }> {
-    return request("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
+  async login(_email: string, _password: string): Promise<{ access_token: string; refresh_token: string }> {
+    throw new Error("Password authentication is disabled. Please authenticate using Google OAuth.");
   },
 
-  async register(email: string, password: string): Promise<User> {
-    return request("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
+  async register(_email: string, _password: string): Promise<User> {
+    throw new Error("Account registration is disabled. Please authenticate using Google OAuth.");
+  },
+
+  async loginWithToken(token: string): Promise<User> {
+    this.setToken(token);
+    try {
+      return await this.me();
+    } catch (e) {
+      this.clearToken();
+      throw e;
+    }
   },
 
   async me(): Promise<User> {

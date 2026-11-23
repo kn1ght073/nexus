@@ -7,80 +7,38 @@ const getBaseUrl = () => {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password, mode } = body;
+    const { token, email, password } = body;
 
-    const endpoint = mode === "register" ? "/api/auth/register" : "/api/auth/login";
-    const res = await fetch(`${getBaseUrl()}${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      let detail = text;
-      try {
-        const j = JSON.parse(text);
-        detail = j.detail || text;
-      } catch {}
-      return NextResponse.json({ detail }, { status: res.status });
-    }
-
-    if (mode === "register") {
-      // Automatic login after register
-      const loginRes = await fetch(`${getBaseUrl()}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+    // Direct token validation flow
+    if (token) {
+      const meRes = await fetch(`${getBaseUrl()}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!loginRes.ok) {
-        return NextResponse.json({ detail: "Registered successfully. Please log in." }, { status: 200 });
+      if (!meRes.ok) {
+        return NextResponse.json({ detail: "Invalid or expired session token" }, { status: 401 });
       }
-      const tokens = await loginRes.json();
-      const response = NextResponse.json({ ok: true, user: tokens });
-      
-      response.cookies.set("nexus_access_token", tokens.access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 30 * 60, // 30 mins
-      });
-      if (tokens.refresh_token) {
-        response.cookies.set("nexus_refresh_token", tokens.refresh_token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          path: "/",
-          maxAge: 30 * 24 * 60 * 60, // 30 days
-        });
-      }
-      return response;
-    }
+      const user = await meRes.json();
+      const response = NextResponse.json({ ok: true, user });
 
-    const tokens = await res.json();
-    const response = NextResponse.json({ ok: true });
-    
-    // Set secure HttpOnly cookies
-    response.cookies.set("nexus_access_token", tokens.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 30 * 60,
-    });
-
-    if (tokens.refresh_token) {
-      response.cookies.set("nexus_refresh_token", tokens.refresh_token, {
+      response.cookies.set("nexus_access_token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
         maxAge: 30 * 24 * 60 * 60,
       });
+
+      return response;
     }
 
-    return response;
+    // Password authentication and registration are strictly prohibited
+    return NextResponse.json(
+      {
+        detail:
+          "Password authentication and registration are disabled. Please authenticate exclusively using Google OAuth.",
+      },
+      { status: 403 }
+    );
   } catch (err: any) {
     return NextResponse.json({ detail: err.message || "Authentication service failed" }, { status: 500 });
   }

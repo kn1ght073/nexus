@@ -10,25 +10,17 @@ def test_health(client):
     assert body["status"] == "ok" and body["service"] == "nexus-core"
 
 
-# --- Auth ---
-def test_register_duplicate_email(client, user_a):
-    r = client.post("/api/auth/register", json={"email": "a@nexus.example.com", "password": "password-a-123"})
-    assert r.status_code == 409
+# --- Auth & Policy ---
+def test_password_registration_disabled(client):
+    r = client.post("/api/auth/register", json={"email": "hacker@nexus.example.com", "password": "password123"})
+    assert r.status_code == 403
+    assert "disabled" in r.json()["detail"].lower()
 
 
-def test_login_wrong_password(client, user_a):
-    r = client.post("/api/auth/login", json={"email": "a@nexus.example.com", "password": "wrong-password"})
-    assert r.status_code == 401
-
-
-def test_login_unknown_email(client):
-    r = client.post("/api/auth/login", json={"email": "ghost@nexus.example.com", "password": "whatever123"})
-    assert r.status_code == 401
-
-
-def test_password_too_short_rejected(client):
-    r = client.post("/api/auth/register", json={"email": "x@nexus.example.com", "password": "short"})
-    assert r.status_code == 422
+def test_password_login_disabled(client):
+    r = client.post("/api/auth/login", json={"email": "hacker@nexus.example.com", "password": "password123"})
+    assert r.status_code == 403
+    assert "disabled" in r.json()["detail"].lower()
 
 
 def test_protected_route_requires_token(client):
@@ -42,8 +34,7 @@ def test_protected_route_rejects_garbage_token(client):
 
 
 def test_refresh_flow(client, user_a):
-    r = client.post("/api/auth/login", json={"email": "a@nexus.example.com", "password": "password-a-123"})
-    refresh = r.json()["refresh_token"]
+    refresh = user_a["refresh_token"]
     r2 = client.post("/api/auth/refresh", json={"refresh_token": refresh})
     assert r2.status_code == 200 and r2.json()["access_token"]
     # refresh token must not work as an access token
@@ -140,7 +131,7 @@ def test_activity_log_records_actions(client, user_a):
     client.post("/api/projects", json={"title": "Logged project"}, headers=user_a["headers"])
     activity = client.get("/api/activity", headers=user_a["headers"]).json()
     actions = [a["action"] for a in activity]
-    assert "user.login" in actions and "project.created" in actions
+    assert ("user.login" in actions or "user.login_google" in actions) and "project.created" in actions
 
 
 def test_activity_is_per_user(client, user_a, user_b):
@@ -600,8 +591,10 @@ import nexus_core.main as m
 
 with TestClient(m.app) as c:
     assert c.get("/health").json()["mode"] == "control-plane"
-    c.post("/api/auth/register", json={"email": "cp@nexus.example.com", "password": "password-cp-1"})
-    login = c.post("/api/auth/login", json={"email": "cp@nexus.example.com", "password": "password-cp-1"}).json()
+    start = c.post("/api/auth/google/start", json={}).json()
+    claims = {"sub": "google-sub-cp", "email": "cp@nexus.example.com", "email_verified": True, "name": "CP"}
+    code = "mock_token_" + __import__("base64").urlsafe_b64encode(__import__("json").dumps(claims).encode()).decode()
+    login = c.post("/api/auth/google/callback", json={"code": code, "state": start["state"], "code_verifier": start["code_verifier"]}).json()
     h = {"Authorization": "Bearer " + login["access_token"]}
     claim = c.post("/api/nodes/claim", json={"name": "Mac", "platform": "macos", "endpoint": "http://mac:8000"}, headers=h)
     assert claim.status_code == 201, claim.text

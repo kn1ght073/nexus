@@ -127,14 +127,14 @@ def test_control_plane_mode_disables_password_registration_and_login(monkeypatch
 
     client = TestClient(main_mod.create_app())
 
-    # Password register and login return 404 when explicitly disabled
+    # Password register and login return 403 when explicitly disabled
     r_reg = client.post("/api/auth/register", json={"email": "hacker@test.com", "password": "password123"})
-    assert r_reg.status_code == 404
-    assert "disabled in control-plane mode" in r_reg.json()["detail"]
+    assert r_reg.status_code == 403
+    assert "disabled" in r_reg.json()["detail"].lower()
 
     r_login = client.post("/api/auth/login", json={"email": "hacker@test.com", "password": "password123"})
-    assert r_login.status_code == 404
-    assert "disabled in control-plane mode" in r_login.json()["detail"]
+    assert r_login.status_code == 403
+    assert "disabled" in r_login.json()["detail"].lower()
 
     settings_mod.get_settings.cache_clear()
 
@@ -268,9 +268,11 @@ def test_google_auth_unverified_email_rejected(client):
 # F5: Session Management, Rotation, Reuse Detection, and Revocation
 # ---------------------------------------------------------------------------
 def test_refresh_token_rotation_and_reuse_detection(client):
-    # Register and login
-    client.post("/api/auth/register", json={"email": "session_user@example.com", "password": "password123"})
-    login_resp = client.post("/api/auth/login", json={"email": "session_user@example.com", "password": "password123"})
+    # Register and login via Google OAuth
+    start = client.post("/api/auth/google/start", json={}).json()
+    claims = {"sub": "google-sub-sess", "email": "session_user@example.com", "email_verified": True, "name": "Session"}
+    code = "mock_token_" + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode()
+    login_resp = client.post("/api/auth/google/callback", json={"code": code, "state": start["state"], "code_verifier": start["code_verifier"]})
     assert login_resp.status_code == 200
     tokens = login_resp.json()
     r1 = tokens["refresh_token"]
@@ -298,8 +300,10 @@ def test_refresh_token_rotation_and_reuse_detection(client):
 
 
 def test_logout_and_session_revocation(client):
-    client.post("/api/auth/register", json={"email": "logout_user@example.com", "password": "password123"})
-    login_resp = client.post("/api/auth/login", json={"email": "logout_user@example.com", "password": "password123"})
+    start = client.post("/api/auth/google/start", json={}).json()
+    claims = {"sub": "google-sub-logout", "email": "logout_user@example.com", "email_verified": True, "name": "Logout"}
+    code = "mock_token_" + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode()
+    login_resp = client.post("/api/auth/google/callback", json={"code": code, "state": start["state"], "code_verifier": start["code_verifier"]})
     tokens = login_resp.json()
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
@@ -331,7 +335,7 @@ def test_body_size_limit_middleware_declared_and_streaming(client, monkeypatch):
 
     # Large payload exceeding 1 KB
     large_payload = {"data": "A" * 2000}
-    r = client.post("/api/auth/login", json=large_payload)
+    r = client.post("/api/auth/google/start", json=large_payload)
     assert r.status_code == 413
     assert "Payload too large" in r.json()["detail"]
 
@@ -342,8 +346,10 @@ def test_body_size_limit_middleware_declared_and_streaming(client, monkeypatch):
 # F13: Pairing Redemption Atomicity Race Protection
 # ---------------------------------------------------------------------------
 def test_atomic_pairing_redemption_duplicate_rejected(client):
-    client.post("/api/auth/register", json={"email": "pair_owner@example.com", "password": "password123"})
-    login = client.post("/api/auth/login", json={"email": "pair_owner@example.com", "password": "password123"}).json()
+    start = client.post("/api/auth/google/start", json={}).json()
+    claims = {"sub": "google-sub-pair", "email": "pair_owner@example.com", "email_verified": True, "name": "Pair"}
+    code = "mock_token_" + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode()
+    login = client.post("/api/auth/google/callback", json={"code": code, "state": start["state"], "code_verifier": start["code_verifier"]}).json()
     headers = {"Authorization": f"Bearer {login['access_token']}"}
 
     # Mint pairing code
@@ -379,7 +385,7 @@ def test_cors_rejects_unauthorized_origin(client):
         "Origin": "https://evil-attacker.com",
         "Access-Control-Request-Method": "POST",
     }
-    r = client.options("/api/auth/login", headers=headers)
+    r = client.options("/api/auth/google/start", headers=headers)
     assert "access-control-allow-origin" not in r.headers
 
 

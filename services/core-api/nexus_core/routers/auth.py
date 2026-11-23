@@ -19,7 +19,7 @@ import time
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 import requests as _requests
 from sqlalchemy.orm import Session
 
@@ -93,8 +93,8 @@ def _client_key(request: Request, email: str) -> str:
 def _check_password_auth_allowed():
     if not get_settings().is_password_auth_allowed:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Password authentication is disabled in control-plane mode.",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password registration and authentication are disabled. Google OAuth is the only supported authentication method.",
         )
 
 
@@ -330,6 +330,17 @@ def update_user_role(
 # ---------------------------------------------------------------------------
 # Google OIDC Flow (F4, §E)
 # ---------------------------------------------------------------------------
+@router.get("/google/start")
+def google_auth_start_get(
+    cli_port: int | None = None,
+    redirect_uri: str | None = None,
+):
+    """Initiate Google OAuth with PKCE via browser GET (for CLI or direct navigation)."""
+    req = GoogleStartRequest(redirect_uri=redirect_uri, cli_port=cli_port)
+    resp = google_auth_start(req)
+    return RedirectResponse(url=resp.url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
 @router.post("/google/start", response_model=GoogleStartResponse)
 def google_auth_start(request: GoogleStartRequest):
     """Initiate Google OAuth with PKCE S256."""
@@ -345,12 +356,14 @@ def google_auth_start(request: GoogleStartRequest):
     )
 
     redirect_uri = request.redirect_uri or s.google_redirect_uri or f"{s.canonical_public_url}/api/auth/google/callback"
+    cli_port = request.cli_port
     try:
         import jwt as _jwt
         payload = {
             "nonce": nonce,
             "code_verifier": code_verifier,
             "redirect_uri": redirect_uri,
+            "cli_port": cli_port,
             "exp": time.time() + 900,
             "purp": "google_state",
         }
@@ -362,6 +375,7 @@ def google_auth_start(request: GoogleStartRequest):
         "nonce": nonce,
         "code_verifier": code_verifier,
         "redirect_uri": redirect_uri,
+        "cli_port": cli_port,
         "expires": time.time() + 900,
     }
 
@@ -386,7 +400,7 @@ def _process_google_callback(
     code_verifier_override: str | None,
     req: Request,
     db: Session,
-) -> tuple[Token, User]:
+) -> tuple[Token, User, int | None]:
     """Internal core processor for Google OAuth callback."""
     _sweep_google_oauth()
     s = get_settings()
@@ -400,6 +414,7 @@ def _process_google_callback(
                     "nonce": decoded.get("nonce"),
                     "code_verifier": decoded.get("code_verifier"),
                     "redirect_uri": decoded.get("redirect_uri"),
+                    "cli_port": decoded.get("cli_port"),
                     "expires": decoded.get("exp", 0),
                 }
         except Exception:
@@ -409,6 +424,7 @@ def _process_google_callback(
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     code_verifier = code_verifier_override or pending.get("code_verifier", "")
+    cli_port = pending.get("cli_port")
 
     # Token exchange: if code starts with mock_token_, extract mock claims for testing
     id_claims: dict = {}
@@ -550,7 +566,7 @@ def _process_google_callback(
     log_activity(db, user_id=user.id, action="user.login_google", detail=email)
     db.commit()
 
-    return Token(access_token=access_tok, refresh_token=refresh_tok), user
+    return Token(access_token=access_tok, refresh_token=refresh_tok), user, cli_port
 
 
 @router.post("/google/callback", response_model=Token)
@@ -560,7 +576,7 @@ def google_auth_callback(
     db: Session = Depends(get_db),
 ):
     """Redeem code from Google, enforce allowlist, bind ExternalIdentity, issue session (POST API)."""
-    token, _ = _process_google_callback(
+    token, _, _ = _process_google_callback(
         code=req_body.code,
         state=req_body.state,
         code_verifier_override=req_body.code_verifier,
@@ -581,7 +597,7 @@ def google_auth_callback_get(
     """Browser redirect landing from Google OAuth flow (GET).
 
     Redeems code, writes credentials to localStorage and HttpOnly cookies,
-    and seamlessly redirects the operator to the control center root UI.
+    notifies local CLI loopback listener if requested, and redirects to control center.
     """
     if error:
         return HTMLResponse(
@@ -606,7 +622,7 @@ def google_auth_callback_get(
         )
 
     try:
-        token, user = _process_google_callback(
+        token, user, cli_port = _process_google_callback(
             code=code,
             state=state,
             code_verifier_override=None,
@@ -639,6 +655,25 @@ def google_auth_callback_get(
 
     # Success: Render auto-redirect HTML with localStorage population and set-cookie
     target_path = "/client" if getattr(user, "role", "user") == "user" else "/admin"
+    cli_js = ""
+    cli_banner = ""
+    redirect_delay = 1000
+    if cli_port:
+        redirect_delay = 4000
+        cli_banner = f"""
+        <div id="cli-status" style="margin:12px 0;padding:10px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);border-radius:6px;font-size:12px;color:#38bdf8;">
+          Transmitting session to local NEXUS CLI on port {cli_port}...
+        </div>"""
+        cli_js = f"""
+        fetch('http://127.0.0.1:{cli_port}/callback?token=' + encodeURIComponent('{token.access_token}') + '&refresh=' + encodeURIComponent('{token.refresh_token}'))
+          .then(r => r.json())
+          .then(data => {{
+            const el = document.getElementById('cli-status');
+            if (el) el.innerHTML = '&#x2713; NEXUS CLI Authorized! You may return to your terminal or close this tab.';
+          }})
+          .catch(() => {{}});
+        """
+
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -646,20 +681,31 @@ def google_auth_callback_get(
   <title>NEXUS - Authenticating...</title>
 </head>
 <body style="background:#080b11;color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;">
-  <div style="text-align:center;max-width:400px;padding:24px;border:1px solid rgba(255,255,255,0.08);background:#0d1322;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
-    <div style="width:36px;height:36px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;color:#38bdf8;">
+  <div style="text-align:center;max-width:440px;padding:28px;border:1px solid rgba(255,255,255,0.08);background:#0d1322;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+    <div style="width:40px;height:40px;border-radius:10px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;color:#38bdf8;font-size:18px;">
       &#x2713;
     </div>
-    <h3 style="margin:0 0 8px;font-size:16px;font-weight:600;">Authenticated Session</h3>
-    <p style="color:#94a3b8;font-size:12px;margin:0 0 16px;">Welcome back, {user.email}. Loading Control Center...</p>
-    <div style="font-family:monospace;font-size:10px;color:#38bdf8;">REDIRECTING &rarr;</div>
+    <h3 style="margin:0 0 8px;font-size:16px;font-weight:600;">Google OAuth Authenticated</h3>
+    <p style="color:#94a3b8;font-size:12px;margin:0 0 16px;">Provisioned operator session for <b>{user.email}</b>.</p>
+    {cli_banner}
+    <div style="margin:16px 0;text-align:left;">
+      <label style="font-size:10px;color:#64748b;display:block;margin-bottom:4px;font-family:monospace;">SESSION TOKEN (CLI / DESKTOP)</label>
+      <div style="display:flex;gap:6px;">
+        <input id="sess-tok" type="text" readonly value="{token.access_token}" style="flex:1;background:#050811;border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;padding:6px 10px;font-size:11px;font-family:monospace;border-radius:4px;" />
+        <button onclick="navigator.clipboard.writeText('{token.access_token}');this.innerText='Copied!';" style="background:#0284c7;color:#fff;border:none;padding:6px 12px;font-size:11px;border-radius:4px;cursor:pointer;">Copy</button>
+      </div>
+    </div>
+    <div style="font-family:monospace;font-size:10px;color:#38bdf8;">FORWARDING TO CONSOLE &rarr;</div>
   </div>
   <script>
     try {{
       localStorage.setItem('nexus.token', '{token.access_token}');
       localStorage.setItem('nexus.refresh', '{token.refresh_token}');
     }} catch (e) {{}}
-    window.location.replace('{target_path}');
+    {cli_js}
+    setTimeout(function() {{
+      window.location.replace('{target_path}');
+    }}, {redirect_delay});
   </script>
 </body>
 </html>"""

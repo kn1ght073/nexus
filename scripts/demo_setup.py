@@ -223,10 +223,20 @@ def start_node() -> subprocess.Popen | None:
 def step_auth() -> str | None:
     code, _ = api("POST", "/api/auth/register",
                   body={"email": "demo@nexus.example.com", "password": "password-demo-123"})
-    check("register (real Argon2+JWT auth)", code == 201, f"HTTP {code}")
-    code, body = api("POST", "/api/auth/login",
-                     body={"email": "demo@nexus.example.com", "password": "password-demo-123"})
-    check("login", code == 200 and "access_token" in body, f"HTTP {code}")
+    check("register rejected by Google OAuth policy", code == 403, f"HTTP {code}")
+    code, start = api("POST", "/api/auth/google/start", body={})
+    check("google oauth start", code == 200, f"HTTP {code}")
+    mock_code = "mock_token_" + __import__("base64").urlsafe_b64encode(
+        __import__("json").dumps({
+            "sub": "google-demo-1",
+            "email": "demo@nexus.example.com",
+            "email_verified": True,
+            "name": "Demo",
+        }).encode()
+    ).decode()
+    code, body = api("POST", "/api/auth/google/callback",
+                     body={"code": mock_code, "state": start["state"], "code_verifier": start["code_verifier"]})
+    check("google oauth login", code == 200 and "access_token" in body, f"HTTP {code}")
     return body.get("access_token")
 
 

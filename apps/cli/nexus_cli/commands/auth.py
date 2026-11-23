@@ -1,6 +1,12 @@
 """Authentication and identity commands."""
 
+import http.server
+import socket
+import threading
+import time
 from typing import Optional
+import urllib.parse
+import webbrowser
 
 import typer
 from rich.panel import Panel
@@ -23,33 +29,131 @@ from ..ui import (
 auth_app = typer.Typer(help="Manage authentication and user identity")
 
 
+class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
+    result_holder: dict[str, str] = {}
+
+    def log_message(self, format, *args):
+        pass  # Suppress default server access logs on stdout/stderr
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
+    def do_GET(self):
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        token = query.get("token", [None])[0]
+        refresh = query.get("refresh", [None])[0]
+        if token:
+            self.result_holder["token"] = token
+            if refresh:
+                self.result_holder["refresh"] = refresh
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok","message":"CLI authorized"}')
+        else:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"status":"error","message":"Missing token"}')
+
+
 @auth_app.command("login")
 def login(
-    email: str = typer.Option(..., prompt=True, help="Account email address"),
-    password: str = typer.Option(..., prompt=True, hide_input=True, help="Account password"),
+    token: Optional[str] = typer.Option(None, "--token", "-t", help="Direct session token from Control Center"),
+    email: Optional[str] = typer.Option(None, "--email", help="(Disabled) Legacy email"),
+    password: Optional[str] = typer.Option(None, "--password", help="(Disabled) Legacy password"),
     url: Optional[str] = typer.Option(None, "--url", help="API URL (defaults to configured api_url)"),
 ):
-    """Log in to NEXUS Core and securely store credentials."""
+    """Log in to NEXUS Core via Google OAuth and securely store credentials."""
     cfg = load_config()
     target_url = url if isinstance(url, str) and url else cfg.api_url
     client = get_client(base_url=target_url)
 
-    try:
-        with status_spinner(f"Authenticating with {target_url}…"):
-            resp = client.post("/api/auth/login", json={"email": email, "password": password})
-        tokens = resp.json()
+    if email and password and not token:
+        console.print(
+            Panel(
+                "Password authentication is disabled.\nNEXUS accounts authenticate exclusively via Google OAuth.",
+                title="[bold yellow]Notice[/bold yellow]",
+                border_style="yellow",
+                expand=False,
+            )
+        )
 
-        cfg.token = tokens["access_token"]
-        if tokens.get("refresh_token"):
-            cfg.refresh_token = tokens["refresh_token"]
-        cfg.email = email
+    access_token = token
+    refresh_token = None
+
+    if not access_token:
+        def find_free_port() -> int:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", 0))
+                return s.getsockname()[1]
+
+        port = find_free_port()
+        _OAuthCallbackHandler.result_holder = {}
+        server = http.server.HTTPServer(("127.0.0.1", port), _OAuthCallbackHandler)
+        server.timeout = 1.5
+
+        auth_url = f"{target_url.rstrip('/')}/api/auth/google/start?cli_port={port}"
+        console.print(
+            Panel(
+                f"Opening browser for Google OAuth sign-in:\n[bold cyan]{auth_url}[/bold cyan]\n\n"
+                "[dim]After authenticating, your CLI will capture the session automatically.\n"
+                "If the browser does not open, visit the URL above or copy your session token from the web console.[/dim]",
+                title="[bold cyan]Google OAuth Authentication[/bold cyan]",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+
+        with status_spinner("Waiting for Google OAuth authentication in browser…"):
+            start_time = time.time()
+            while time.time() - start_time < 90:
+                server.handle_request()
+                if "token" in _OAuthCallbackHandler.result_holder:
+                    access_token = _OAuthCallbackHandler.result_holder["token"]
+                    refresh_token = _OAuthCallbackHandler.result_holder.get("refresh")
+                    break
+
+        server.server_close()
+
+        if not access_token:
+            console.print("[yellow]Automatic callback did not complete within timeout.[/yellow]")
+            access_token = typer.prompt("Paste Session Token from Control Center (or press Ctrl+C to cancel)")
+            if not access_token:
+                print_error("No session token provided. Login aborted.")
+                raise typer.Exit(ExitCode.AUTH_ERROR)
+
+    # Validate token against the target control plane
+    try:
+        with status_spinner(f"Verifying session with {target_url}…"):
+            resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {access_token}"})
+            data = resp.json()
+            user_email = data.get("email", "unknown")
+            user_role = data.get("role", "user")
+
+        cfg.token = access_token
+        if refresh_token:
+            cfg.refresh_token = refresh_token
+        cfg.email = user_email
         if url and isinstance(url, str):
             cfg.api_url = url.rstrip("/")
         save_config(cfg)
 
         console.print(
             Panel(
-                f"Logged in as [bold cyan]{email}[/bold cyan].",
+                f"Logged in as [bold cyan]{user_email}[/bold cyan] ([bold]{user_role}[/bold]) via Google OAuth.\n"
+                f"Session token stored securely in [bold]{CredentialStore.get_backend_name()}[/bold].",
                 title="[bold green]Login successful[/bold green]",
                 border_style="green",
                 expand=False,
@@ -58,7 +162,7 @@ def login(
     except NexusError as e:
         console.print(
             Panel(
-                f"Could not reach NEXUS at {target_url}.\n[dim]{e.message}[/dim]",
+                f"Could not reach or verify session with NEXUS at {target_url}.\n[dim]{e.message}[/dim]",
                 title="[bold red]Login failed[/bold red]",
                 border_style="red",
                 expand=False,
@@ -69,35 +173,22 @@ def login(
 
 @auth_app.command("register")
 def register(
-    email: str = typer.Option(..., prompt=True, help="New account email"),
-    password: str = typer.Option(..., prompt=True, hide_input=True, confirmation_prompt=True, help="Password (8+ chars)"),
+    email: Optional[str] = typer.Option(None, "--email", help="(Disabled) Legacy email"),
+    password: Optional[str] = typer.Option(None, "--password", help="(Disabled) Legacy password"),
     url: Optional[str] = typer.Option(None, "--url", help="API URL"),
 ):
-    """Register a new NEXUS user account."""
-    if len(password) < 8:
-        console.print(
-            Panel("Password must be at least 8 characters.", title="[bold red]Registration failed[/bold red]", border_style="red", expand=False)
+    """Register a new NEXUS user account via Google OAuth."""
+    console.print(
+        Panel(
+            "Account registration is exclusively handled via Google OAuth.\n"
+            "Authenticating with your Google account will automatically provision\n"
+            "and register your operator identity in the NEXUS database.",
+            title="[bold cyan]Google OAuth Registration Policy[/bold cyan]",
+            border_style="cyan",
+            expand=False,
         )
-        raise typer.Exit(ExitCode.USAGE_ERROR)
-
-    target_url = url if isinstance(url, str) and url else None
-    client = get_client(base_url=target_url)
-    try:
-        with status_spinner("Creating account…"):
-            resp = client.post("/api/auth/register", json={"email": email, "password": password})
-        console.print(
-            Panel(
-                "Account created. Now run [bold cyan]nexus login[/bold cyan].",
-                title="[bold green]Registration successful[/bold green]",
-                border_style="green",
-                expand=False,
-            )
-        )
-    except NexusError as e:
-        console.print(
-            Panel(f"{e.message}", title="[bold red]Registration failed[/bold red]", border_style="red", expand=False)
-        )
-        raise typer.Exit(e.exit_code)
+    )
+    login(token=None, email=None, password=None, url=url)
 
 
 @auth_app.command("logout")

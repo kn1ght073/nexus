@@ -103,39 +103,42 @@ def client(env):
         yield c
 
 
+import base64
+
+
+def _create_google_user(client, email: str, sub: str):
+    start = client.post("/api/auth/google/start", json={}).json()
+    claims = {
+        "sub": sub,
+        "email": email,
+        "email_verified": True,
+        "name": email.split("@")[0],
+    }
+    mock_code = "mock_token_" + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode()
+    resp = client.post(
+        "/api/auth/google/callback",
+        json={
+            "code": mock_code,
+            "state": start["state"],
+            "code_verifier": start["code_verifier"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    tokens = resp.json()
+    return {
+        "token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "headers": {"Authorization": f"Bearer {tokens['access_token']}"},
+    }
+
+
 @pytest.fixture()
 def user_a(client):
-    """Registered user A with valid token."""
-    r = client.post(
-        "/api/auth/register",
-        json={"email": "a@nexus.example.com", "password": "password-a-123"},
-    )
-    assert r.status_code == 201, r.text
-    r = client.post(
-        "/api/auth/login",
-        json={"email": "a@nexus.example.com", "password": "password-a-123"},
-    )
-    assert r.status_code == 200, r.text
-    return {
-        "token": r.json()["access_token"],
-        "headers": {"Authorization": f"Bearer {r.json()['access_token']}"},
-    }
+    """Registered user A provisioned via Google OAuth."""
+    return _create_google_user(client, "a@nexus.example.com", "google-sub-user-a")
 
 
 @pytest.fixture()
 def user_b(client):
-    """Registered user B with valid token (isolation tests)."""
-    r = client.post(
-        "/api/auth/register",
-        json={"email": "b@nexus.example.com", "password": "password-b-456"},
-    )
-    assert r.status_code == 201, r.text
-    r = client.post(
-        "/api/auth/login",
-        json={"email": "b@nexus.example.com", "password": "password-b-456"},
-    )
-    assert r.status_code == 200, r.text
-    return {
-        "token": r.json()["access_token"],
-        "headers": {"Authorization": f"Bearer {r.json()['access_token']}"},
-    }
+    """Registered user B provisioned via Google OAuth (isolation tests)."""
+    return _create_google_user(client, "b@nexus.example.com", "google-sub-user-b")

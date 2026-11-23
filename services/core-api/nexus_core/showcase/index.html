@@ -332,12 +332,12 @@
             <div class="window-title" id="terminal-title">nexus — bash — 80x24</div>
             <button class="terminal-copy-btn" id="terminal-copy-btn" title="Copy Terminal Snippet">Copy Snippet</button>
           </div>
-          <pre class="terminal-body"><code id="terminal-code"><span class="cmd-prompt">$</span> nexus cp login --email operator@nexus.internal
-<span class="dim">Connecting to control plane: https://nexus-control-plane-uvi8.onrender.com</span>
-<span class="success">✓ Authenticated successfully. Session key locked in system keychain.</span>
+          <pre class="terminal-body"><code id="terminal-code"><span class="cmd-prompt">$</span> nexus login
+<span class="dim">Opening browser for Google OAuth: https://nexus-control-plane-uvi8.onrender.com/api/auth/google/start</span>
+<span class="success">✓ Authenticated successfully via Google OAuth. Session key locked in system keychain.</span>
 
 <span class="cmd-prompt">$</span> nexus whoami
-<span class="info">User:</span> operator@nexus.internal   <span class="info">Role:</span> owner   <span class="info">Status:</span> active</code></pre>
+<span class="info">User:</span> operator@example.com   <span class="info">Role:</span> owner   <span class="info">Status:</span> active</code></pre>
         </div>
       </div>
     </section>

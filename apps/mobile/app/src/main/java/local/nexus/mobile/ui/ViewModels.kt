@@ -1,5 +1,7 @@
 package local.nexus.mobile.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,13 +9,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import local.nexus.mobile.api.LoginRequest
 import local.nexus.mobile.api.NexusClient
 import local.nexus.mobile.api.Task
 import local.nexus.mobile.api.TaskCreate
@@ -31,14 +33,18 @@ class LoginViewModel(private val store: TokenStore) : ViewModel() {
     val state: StateFlow<State> = _state
 
     fun login(email: String, password: String) {
+        _state.value = State(error = "Password authentication is disabled. Please authenticate via Google OAuth.")
+    }
+
+    fun loginWithToken(token: String) {
         viewModelScope.launch {
             _state.value = State(busy = true)
             try {
-                val tokens = NexusClient.api().login(LoginRequest(email, password))
-                store.saveTokens(tokens.access_token, tokens.refresh_token)
+                NexusClient.api().me(NexusClient.bearer(token))
+                store.saveTokens(token, "")
                 _state.value = State(loggedIn = true)
             } catch (e: Exception) {
-                _state.value = State(error = e.message ?: "login failed")
+                _state.value = State(error = e.message ?: "Invalid session token")
             }
         }
     }
@@ -97,8 +103,8 @@ class TasksViewModel(private val store: TokenStore) : ViewModel() {
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {
     val state by viewModel.state.collectAsState()
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    var token by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -106,17 +112,33 @@ fun LoginScreen(viewModel: LoginViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("NEXUS", style = MaterialTheme.typography.headlineLarge)
-        Text("capture → structure → everywhere", style = MaterialTheme.typography.bodySmall)
+        Text("Identity Admission: Google OAuth Only", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(24.dp))
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(16.dp))
         Button(
-            onClick = { viewModel.login(email, password) },
-            enabled = !state.busy && email.isNotBlank() && password.length >= 8,
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("${NexusClient.baseUrl}api/auth/google/start"))
+                context.startActivity(intent)
+            },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (state.busy) "…" else "Log in") }
+        ) {
+            Text("Sign in with Google OAuth")
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("— OR —", style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = token,
+            onValueChange = { token = it },
+            label = { Text("Session Token") },
+            placeholder = { Text("Paste token from Control Center") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = { viewModel.loginWithToken(token.trim()) },
+            enabled = !state.busy && token.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (state.busy) "Verifying…" else "Authenticate with Token") }
         state.error?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)

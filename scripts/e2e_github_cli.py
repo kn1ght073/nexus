@@ -146,9 +146,14 @@ def main() -> int:
     _reset_cli_config()
     p = run_cli("init", "--url", "http://127.0.0.1:8980")
     checks.append(("init sets URL", "API URL set" in p.stdout + p.stderr))
-    p = run_cli("register", "--email", "e2e@nexus.example.com", "--password", "password-e2e-123")
-    checks.append(("register ok", "Registration successful" in p.stdout + p.stderr))
-    p = run_cli("login", "--email", "e2e@nexus.example.com", "--password", "password-e2e-123")
+
+    # Authenticate via Google OAuth token
+    start = requests.post("http://127.0.0.1:8980/api/auth/google/start", json={}).json()
+    claims = {"sub": "google-sub-e2e", "email": "e2e@nexus.example.com", "email_verified": True, "name": "E2E"}
+    code = "mock_token_" + __import__("base64").urlsafe_b64encode(__import__("json").dumps(claims).encode()).decode()
+    login_resp = requests.post("http://127.0.0.1:8980/api/auth/google/callback", json={"code": code, "state": start["state"], "code_verifier": start["code_verifier"]}).json()
+    token = login_resp["access_token"]
+    p = run_cli("login", "--token", token)
     checks.append(("login ok", "Login successful" in p.stdout + p.stderr))
 
     # status before linking

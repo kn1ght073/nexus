@@ -53,9 +53,8 @@ class Settings(BaseSettings):
         return url.rstrip("/")
 
     # --- Auth Admission Policy (F4, §E) ---
-    # Allowed by default for standard operation and Master Check Plan verification.
-    # Can be explicitly disabled via NEXUS_ALLOW_PASSWORD_AUTH=false when locking down to Google OIDC only.
-    allow_password_auth: bool = True
+    # Disabled by default: Google OAuth is the SOLE supported authentication & registration method.
+    allow_password_auth: bool = False
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None

@@ -48,11 +48,8 @@
     telemetryPingText: document.getElementById('telemetry-ping-text'),
     pulseDot: document.getElementById('pulse-dot'),
     authGateOverlay: document.getElementById('auth-gate-overlay'),
-    tabLogin: document.getElementById('tab-login'),
-    tabRegister: document.getElementById('tab-register'),
     authGateForm: document.getElementById('auth-gate-form'),
-    gateEmail: document.getElementById('gate-email'),
-    gatePassword: document.getElementById('gate-password'),
+    gateToken: document.getElementById('gate-token'),
     gateSubmitBtn: document.getElementById('gate-submit-btn'),
     gateBtnText: document.getElementById('gate-btn-text'),
     gateSpinner: document.getElementById('gate-spinner'),
@@ -337,23 +334,6 @@
   }
 
   function initAuthGate() {
-    if (el.tabLogin && el.tabRegister) {
-      el.tabLogin.addEventListener('click', () => {
-        state.gateMode = 'login';
-        el.tabLogin.classList.add('active');
-        el.tabRegister.classList.remove('active');
-        el.gateBtnText.textContent = 'Authenticate Session';
-        el.gateError.classList.add('hidden');
-      });
-      el.tabRegister.addEventListener('click', () => {
-        state.gateMode = 'register';
-        el.tabRegister.classList.add('active');
-        el.tabLogin.classList.remove('active');
-        el.gateBtnText.textContent = 'Register Account';
-        el.gateError.classList.add('hidden');
-      });
-    }
-
     if (el.authGateForm) {
       el.authGateForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -361,24 +341,23 @@
         el.gateSpinner.classList.remove('hidden');
         el.gateSubmitBtn.disabled = true;
 
-        const email = el.gateEmail.value.trim();
-        const password = el.gatePassword.value;
+        const token = el.gateToken ? el.gateToken.value.trim() : '';
+        if (!token) {
+          el.gateError.textContent = 'Please provide a valid session token';
+          el.gateError.classList.remove('hidden');
+          el.gateSpinner.classList.add('hidden');
+          el.gateSubmitBtn.disabled = false;
+          return;
+        }
 
         try {
-          if (state.gateMode === 'register') {
-            await api('/api/auth/register', {
-              method: 'POST',
-              body: JSON.stringify({ email, password })
-            });
-          }
-          const tokens = await api('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password })
+          const res = await fetch(`${API_BASE}/api/auth/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
           });
-          state.token = tokens.access_token;
-          state.refresh = tokens.refresh_token;
-          localStorage.setItem('nexus.token', tokens.access_token);
-          if (tokens.refresh_token) localStorage.setItem('nexus.refresh', tokens.refresh_token);
+          if (!res.ok) throw new Error('Invalid or expired session token');
+          const user = await res.json();
+          state.token = token;
+          localStorage.setItem('nexus.token', token);
 
           hideAuthGate();
           await fetchUserIdentity();
@@ -403,7 +382,7 @@
           if (res.url && !res.url.includes('client_id=nexus-google-client-id')) {
             window.location.href = res.url;
           } else {
-            el.gateError.textContent = 'Google OAuth is not configured on Render: NEXUS_GOOGLE_CLIENT_ID is missing from environment. Please use Master Password login or add NEXUS_GOOGLE_CLIENT_ID in the Render dashboard.';
+            el.gateError.textContent = 'Google OAuth is not configured on Render: NEXUS_GOOGLE_CLIENT_ID is missing from environment. Please add NEXUS_GOOGLE_CLIENT_ID in the Render dashboard.';
             el.gateError.classList.remove('hidden');
           }
         } catch (err) {

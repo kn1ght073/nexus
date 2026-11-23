@@ -23,51 +23,68 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # ---------------------------------------------------------------------------
 # 1. Hardening: lockout, throttle, hidden docs, headers
 # ---------------------------------------------------------------------------
-def test_login_lockout_after_failures(client):
-    client.post("/api/auth/register", json={"email": "lock@nexus.example.com", "password": "password-lock-1"})
-    for _ in range(5):
-        r = client.post("/api/auth/login", json={"email": "lock@nexus.example.com", "password": "wrong"})
-        assert r.status_code == 401
-    # locked: even the RIGHT password answers 401 (indistinguishable)
-    r = client.post("/api/auth/login", json={"email": "lock@nexus.example.com", "password": "password-lock-1"})
-    assert r.status_code == 401
-    # unknown account + locked account look identical (no account probing)
-    r2 = client.post("/api/auth/login", json={"email": "ghost@nexus.example.com", "password": "whatever"})
-    assert r2.status_code == 401 and r2.json()["detail"] == r.json()["detail"]
-
-
-def test_login_lockout_expires(client):
-    import time
-
-    from nexus_core.routers import auth as auth_router
-
-    client.post("/api/auth/register", json={"email": "cool@nexus.example.com", "password": "password-cool-1"})
-    # shrink the lockout so the test is fast (settings default is 300 s)
-    auth_router._account_lockout.lockout_seconds = 0.2
+def test_login_lockout_after_failures(client, monkeypatch):
+    import nexus_core.settings as settings_mod
+    monkeypatch.setenv("NEXUS_ALLOW_PASSWORD_AUTH", "true")
+    settings_mod.get_settings.cache_clear()
     try:
+        client.post("/api/auth/register", json={"email": "lock@nexus.example.com", "password": "password-lock-1"})
         for _ in range(5):
-            client.post("/api/auth/login", json={"email": "cool@nexus.example.com", "password": "wrong"})
-        time.sleep(0.25)
-        r = client.post("/api/auth/login", json={"email": "cool@nexus.example.com", "password": "password-cool-1"})
-        assert r.status_code == 200, "lockout must expire, not persist forever"
+            r = client.post("/api/auth/login", json={"email": "lock@nexus.example.com", "password": "wrong"})
+            assert r.status_code == 401
+        # locked: even the RIGHT password answers 401 (indistinguishable)
+        r = client.post("/api/auth/login", json={"email": "lock@nexus.example.com", "password": "password-lock-1"})
+        assert r.status_code == 401
+        # unknown account + locked account look identical (no account probing)
+        r2 = client.post("/api/auth/login", json={"email": "ghost@nexus.example.com", "password": "whatever"})
+        assert r2.status_code == 401 and r2.json()["detail"] == r.json()["detail"]
     finally:
-        auth_router._account_lockout.lockout_seconds = auth_router._settings.auth_lockout_seconds
+        settings_mod.get_settings.cache_clear()
 
 
-def test_login_throttled_by_rate_limit(client):
+def test_login_lockout_expires(client, monkeypatch):
+    import time
+    import nexus_core.settings as settings_mod
     from nexus_core.routers import auth as auth_router
 
-    client.post("/api/auth/register", json={"email": "rate@nexus.example.com", "password": "password-rate-1"})
-    # shrink the limit for the test
-    auth_router._login_limiter.limit = 2
+    monkeypatch.setenv("NEXUS_ALLOW_PASSWORD_AUTH", "true")
+    settings_mod.get_settings.cache_clear()
     try:
-        client.post("/api/auth/login", json={"email": "rate@nexus.example.com", "password": "wrong"})
-        client.post("/api/auth/login", json={"email": "rate@nexus.example.com", "password": "wrong"})
-        r = client.post("/api/auth/login", json={"email": "rate@nexus.example.com", "password": "password-rate-1"})
-        assert r.status_code == 429
-        assert "Retry-After" in r.headers
+        client.post("/api/auth/register", json={"email": "cool@nexus.example.com", "password": "password-cool-1"})
+        # shrink the lockout so the test is fast (settings default is 300 s)
+        auth_router._account_lockout.lockout_seconds = 0.2
+        try:
+            for _ in range(5):
+                client.post("/api/auth/login", json={"email": "cool@nexus.example.com", "password": "wrong"})
+            time.sleep(0.25)
+            r = client.post("/api/auth/login", json={"email": "cool@nexus.example.com", "password": "password-cool-1"})
+            assert r.status_code == 200, "lockout must expire, not persist forever"
+        finally:
+            auth_router._account_lockout.lockout_seconds = auth_router._settings.auth_lockout_seconds
     finally:
-        auth_router._login_limiter.limit = auth_router._settings.auth_rate_limit
+        settings_mod.get_settings.cache_clear()
+
+
+def test_login_throttled_by_rate_limit(client, monkeypatch):
+    import nexus_core.settings as settings_mod
+    from nexus_core.routers import auth as auth_router
+
+    monkeypatch.setenv("NEXUS_ALLOW_PASSWORD_AUTH", "true")
+    settings_mod.get_settings.cache_clear()
+    try:
+        client.post("/api/auth/register", json={"email": "rate@nexus.example.com", "password": "password-rate-1"})
+        # shrink the limit for the test
+        auth_router._login_limiter.limit = 2
+        try:
+            client.post("/api/auth/login", json={"email": "rate@nexus.example.com", "password": "wrong"})
+            client.post("/api/auth/login", json={"email": "rate@nexus.example.com", "password": "wrong"})
+            r = client.post("/api/auth/login", json={"email": "rate@nexus.example.com", "password": "password-rate-1"})
+            assert r.status_code == 429
+            assert "Retry-After" in r.headers
+        finally:
+            auth_router._login_limiter.limit = auth_router._settings.auth_rate_limit
+    finally:
+        settings_mod.get_settings.cache_clear()
 
 
 def test_docs_hidden_by_default_and_headers_present(client):

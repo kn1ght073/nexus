@@ -34,17 +34,18 @@
 
 ---
 
-## Item 1 — Core Auth, Ownership Isolation, Path Jail & Security Headers
+## Item 1 — Core Auth, Google OAuth Policy, Ownership Isolation, Path Jail & Security Headers
 
 | Step | Command / action | Expected Output |
 |------|------------------|-----------------|
-| 1.1 | `nexus register --email operator@example.com --password Password123!` then `nexus login --email operator@example.com --password Password123!` | Registration successful (persisted in Neon DB); login succeeds; session token stored securely in OS Keyring. |
-| 1.2 | `nexus whoami` | Displays User ID, email (`operator@example.com`), role (`user`), and API endpoint. |
+| 1.1a | `curl -s -o /dev/null -w "%{http_code}" -X POST https://nexus-control-plane-uvi8.onrender.com/api/auth/register -H "Content-Type: application/json" -d '{"email":"operator@example.com","password":"Password123!"}'` | Server-Side Validation: HTTP `403` Forbidden ("Password registration and authentication are disabled. Google OAuth is the only supported authentication method."). |
+| 1.1b | `nexus login` (opens Google OAuth flow in browser) or `nexus login --token <SESSION_TOKEN>` | Google OAuth authentication succeeds; user identity provisioned in Neon DB; session token stored securely in OS Keyring. |
+| 1.2 | `nexus whoami` | Displays User ID, email (`operator@example.com`), role (`user` or `owner`), and API endpoint. |
 | 1.3 | `nexus project create "Sovereign Project A"`; `nexus task add "Audit Syscall Stubs" --project 1`; `nexus project list` | Project and task created and displayed in formatted table. |
-| 1.4 | Register a second user in isolated config (`NEXUS_CLI_CONFIG=/tmp/nexus_u2.json nexus register --email operator2@example.com --password Password123!`); run `nexus project list` | Second user sees empty project list (complete tenant ownership isolation). |
+| 1.4 | Authenticate a second identity in isolated config (`NEXUS_CLI_CONFIG=/tmp/nexus_u2.json nexus login --token <TOKEN2>`); run `nexus project list` | Second user sees empty project list (complete tenant ownership isolation). |
 | 1.5 | `nexus files roots` (or `nexus file roots`) | Lists active sandboxed storage boundaries (e.g. `~/Documents`). |
 | 1.6 | Attempt directory traversal via `nexus files search` or browse outside root (`../`) | Access blocked; path traversal outside jail strictly refused. |
-| 1.7 | Perform 5 incorrect login attempts, then 1 valid login | Account locked out via rate-limiting/brute-force defense (HTTP 401 with lockout delay). |
+| 1.7 | Attempt password endpoint abuse (`POST /api/auth/login`) | Strictly blocked server-side (HTTP 403 Forbidden admission policy). |
 | 1.8 | Visit `https://nexus-control-plane-uvi8.onrender.com/docs` or `http://127.0.0.1:8000/docs` in browser | HTTP 404 by default (API documentation hidden unless `NEXUS_EXPOSE_DOCS=true`). |
 | 1.9 | `curl -I https://nexus-control-plane-uvi8.onrender.com/health` | Security headers present: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`. |
 
