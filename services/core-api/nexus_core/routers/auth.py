@@ -305,7 +305,7 @@ def google_auth_start(request: GoogleStartRequest):
         .rstrip("=")
     )
 
-    redirect_uri = request.redirect_uri or s.google_redirect_uri or "http://127.0.0.1:8000/api/auth/google/callback"
+    redirect_uri = request.redirect_uri or s.google_redirect_uri or f"{s.canonical_public_url}/api/auth/google/callback"
     _pending_google_oauth[state] = {
         "nonce": nonce,
         "code_verifier": code_verifier,

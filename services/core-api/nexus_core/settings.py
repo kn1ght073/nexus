@@ -37,6 +37,21 @@ class Settings(BaseSettings):
     control_plane_mode: bool = False
     allow_ephemeral_db: bool = False  # Set true to explicitly allow SQLite in control_plane_mode (dev/tests)
 
+    # --- Single Unified Public Endpoint (Master Variable) ---
+    # When deployed on Render or a custom domain, set NEXUS_PUBLIC_URL once
+    # (e.g. https://nexus-control-plane-uvi8.onrender.com). All submodules,
+    # OAuth redirects, web endpoints, and relay bridges derive from this single variable.
+    public_url: str = "https://nexus-control-plane-uvi8.onrender.com"
+
+    @property
+    def canonical_public_url(self) -> str:
+        url = (self.public_url or "").strip()
+        if not url:
+            return "http://127.0.0.1:8000"
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = f"https://{url}"
+        return url.rstrip("/")
+
     # --- Auth Admission Policy (F4, §E) ---
     # Allowed by default for standard operation and Master Check Plan verification.
     # Can be explicitly disabled via NEXUS_ALLOW_PASSWORD_AUTH=false when locking down to Google OIDC only.
@@ -137,6 +152,14 @@ class Settings(BaseSettings):
 
     # --- CORS (tauri://localhost + vite dev server; never "*") ---
     cors_origins: list[str] = ["tauri://localhost", "http://localhost:5173"]
+
+    @property
+    def effective_cors_origins(self) -> list[str]:
+        origins = list(self.cors_origins)
+        pub = self.canonical_public_url
+        if pub and pub not in origins:
+            origins.append(pub)
+        return origins
 
 
 @lru_cache

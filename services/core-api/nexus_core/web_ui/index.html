@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS | Sovereign Personal Digital Infrastructure</title>
+  <meta name="description" content="NEXUS sovereign personal infrastructure. Real-time control plane, zero-trust edge node mesh, end-to-end encrypted relay, and unified cross-platform workspace.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body data-theme="dark">
+  <!-- Interactive Particle Background Canvas -->
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+  <div class="ambient-mesh" aria-hidden="true"></div>
+  <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
+
+  <!-- Main Navigation Bar -->
+  <header class="app-header">
+    <div class="header-inner">
+      <a href="#" class="brand-link" aria-label="NEXUS Core Hub">
+        <div class="brand-emblem" aria-hidden="true">
+          <svg viewBox="0 0 32 32" class="emblem-svg">
+            <polygon points="16,2 30,9 30,23 16,30 2,23 2,9" class="emblem-outer" />
+            <circle cx="16" cy="16" r="4" class="emblem-core" />
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">NEXUS</span>
+          <span class="brand-sub">CONTROL PLANE</span>
+        </div>
+      </a>
+
+      <!-- Real-time Cluster Telemetry Pill -->
+      <div class="cluster-telemetry" id="cluster-telemetry" role="status" aria-live="polite">
+        <span class="pulse-indicator status-online" id="status-pulse" aria-hidden="true"></span>
+        <span class="telemetry-label" id="status-text">CONNECTING CLUSTER</span>
+        <span class="telemetry-latency" id="status-latency">-- ms</span>
+      </div>
+
+      <nav class="nav-menu" aria-label="Primary Navigation">
+        <a href="#overview" class="nav-item active" data-nav="overview">Overview</a>
+        <a href="#console" class="nav-item" data-nav="console">Console</a>
+        <a href="#mesh" class="nav-item" data-nav="mesh">Mesh Nodes</a>
+        <a href="#clients" class="nav-item" data-nav="clients">Clients</a>
+        <a href="#auth" class="nav-item auth-cta" id="nav-auth-btn" data-nav="auth">Operator Login</a>
+      </nav>
+
+      <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Viewport Shell -->
+  <main class="main-shell" id="app-root">
+
+    <!-- HERO SECTION -->
+    <section id="overview" class="hero-section scroll-reveal">
+      <div class="hero-badge">
+        <span class="badge-dot" aria-hidden="true"></span>
+        <span class="badge-text">AUTONOMOUS COORDINATION ARCHITECTURE // v0.3.0</span>
+      </div>
+
+      <h1 class="hero-headline">
+        <span class="glitch-text" data-text="Sovereign Compute.">Sovereign Compute.</span><br>
+        <span class="gradient-text">Zero Compromise.</span>
+      </h1>
+
+      <p class="hero-lead">
+        NEXUS unifies your personal hardware into a private, self-sovereign intelligence network.
+        End-to-end encrypted relay, zero personal data stored in the cloud, and millisecond node orchestration.
+      </p>
+
+      <div class="hero-actions">
+        <a href="#auth" class="btn btn-primary magnetic" id="hero-get-started">
+          <span>Access Control Plane</span>
+          <svg class="btn-arrow" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        </a>
+        <a href="#clients" class="btn btn-secondary magnetic">
+          <span>Install Client Apps</span>
+        </a>
+      </div>
+
+      <!-- Live Metric Strip -->
+      <div class="metrics-strip">
+        <div class="metric-card">
+          <span class="metric-val" id="metric-nodes">0</span>
+          <span class="metric-desc">Registered Mesh Nodes</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-security">ChaCha20</span>
+          <span class="metric-desc">AEAD Tunnel Cipher</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-latency">0.8ms</span>
+          <span class="metric-desc">Average Relay RTT</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val">100%</span>
+          <span class="metric-desc">Local Disk Sovereignty</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVE CONSOLE & OPERATOR AUTH WORKSPACE -->
+    <section id="auth" class="workspace-section scroll-reveal">
+      <div class="section-title-wrap">
+        <div class="section-tag">CONTROL INTERFACE</div>
+        <h2 class="section-heading">Operator Access &amp; Session Vault</h2>
+        <p class="section-subheading">Authenticate to orchestrate mesh federation, manage device keys, and inspect node telemetry.</p>
+      </div>
+
+      <div class="workspace-grid">
+        <!-- Auth Card / Session Card -->
+        <div class="glass-panel" id="auth-panel">
+          <!-- Logged Out View -->
+          <div id="logged-out-state" class="state-container active">
+            <div class="auth-tabs" role="tablist">
+              <button class="auth-tab active" id="tab-login" role="tab" aria-selected="true" data-mode="login">Operator Login</button>
+              <button class="auth-tab" id="tab-register" role="tab" aria-selected="false" data-mode="register">Register Identity</button>
+            </div>
+
+            <form id="auth-form" class="auth-form">
+              <div class="input-group">
+                <label for="auth-email">Operator Email / Identity</label>
+                <div class="input-wrapper">
+                  <input type="email" id="auth-email" required placeholder="operator@nexus.mesh" autocomplete="username">
+                  <span class="input-glow"></span>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="auth-password">Passphrase / Key</label>
+                <div class="input-wrapper">
+                  <input type="password" id="auth-password" required placeholder="••••••••••••••••" autocomplete="current-password">
+                  <span class="input-glow"></span>
+                </div>
+              </div>
+
+              <div id="auth-error-banner" class="error-banner hidden" role="alert"></div>
+
+              <button type="submit" class="btn btn-primary btn-block magnetic" id="auth-submit-btn">
+                <span id="auth-btn-text">Authenticate Session</span>
+                <span class="spinner hidden" id="auth-spinner" aria-hidden="true"></span>
+              </button>
+
+              <div class="divider"><span>OR VIA OIDC IDENTITY</span></div>
+
+              <button type="button" class="btn btn-oidc" id="google-auth-btn">
+                <svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                <span>Sign in with Google OIDC</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Logged In / Session Active View -->
+          <div id="logged-in-state" class="state-container">
+            <div class="session-header">
+              <div class="user-avatar" id="session-avatar">OP</div>
+              <div class="user-info">
+                <div class="user-email" id="session-email">operator@domain</div>
+                <div class="user-badge">SOVEREIGN PRIVILEGE</div>
+              </div>
+              <button class="btn btn-ghost" id="session-logout-btn">Log out</button>
+            </div>
+
+            <div class="session-meta">
+              <div class="meta-row">
+                <span class="meta-label">Control Plane Mode</span>
+                <span class="meta-val highlight" id="cp-mode-badge">Active</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Session Guard</span>
+                <span class="meta-val">Refresh Token Rotation</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Connected Mesh Bridge</span>
+                <span class="meta-val mono" id="cp-url-display">--</span>
+              </div>
+            </div>
+
+            <div class="quick-command-box">
+              <div class="box-label">QUICK RELAY HANDSHAKE</div>
+              <p class="box-desc">Execute in terminal to bind your local machine to this cloud control plane:</p>
+              <div class="code-banner">
+                <code id="quick-cmd-code">nexus cp login --email ...</code>
+                <button class="copy-btn" id="copy-cmd-btn" aria-label="Copy Command">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Terminal Simulator & Diagnostic View -->
+        <div class="terminal-container" id="console">
+          <div class="terminal-chrome">
+            <div class="chrome-dots">
+              <span class="dot d-red"></span>
+              <span class="dot d-yellow"></span>
+              <span class="dot d-green"></span>
+            </div>
+            <div class="chrome-title">nexus-operator — control-plane-bridge — 128x36</div>
+            <div class="chrome-action">
+              <button id="clear-term-btn" class="term-mini-btn">Clear</button>
+            </div>
+          </div>
+          <div class="terminal-body" id="term-body">
+            <div class="term-line welcome-line"><span class="c-cyan">NEXUS CONTROL PLANE KERNEL</span> [v0.3.0-secure-remediation]</div>
+            <div class="term-line"><span class="c-dim">Type 'help', 'status', 'nodes', 'ping', or 'audit' for real-time telemetry.</span></div>
+            <div class="term-line"><span class="c-green">✓</span> Zero-trust AEAD relay engine initialized.</div>
+            <div class="term-line"><span class="c-cyan">ℹ</span> Canonical Endpoint: <span id="term-canonical-url" class="c-white">Loading...</span></div>
+            <div id="term-dynamic-output"></div>
+            <form id="term-input-row" class="term-input-row">
+              <span class="term-prompt">operator@nexus:~$</span>
+              <input type="text" id="term-input" class="term-input" autocomplete="off" spellcheck="false" aria-label="Terminal command prompt">
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MESH TOPOLOGY & REGISTERED HARDWARE NODES -->
+    <section id="mesh" class="mesh-section scroll-reveal">
+      <div class="section-title-wrap">
+        <div class="section-tag">HARDWARE TOPOLOGY</div>
+        <h2 class="section-heading">Federated Edge Nodes</h2>
+        <p class="section-subheading">Personal compute hardware linked to your sovereign identity via outbound-only encrypted tunnels.</p>
+      </div>
+
+      <div class="mesh-grid" id="mesh-nodes-container">
+        <!-- Rendered dynamically by script.js -->
+        <div class="node-skeleton-card">
+          <div class="node-header">
+            <span class="node-icon">🖥️</span>
+            <div class="node-title-box">
+              <span class="node-name">Local Workstation Primary</span>
+              <span class="node-status-badge status-active">SYNCHRONIZED</span>
+            </div>
+          </div>
+          <div class="node-stats">
+            <div><span class="stat-l">IP Address</span><span class="stat-v">192.168.1.120</span></div>
+            <div><span class="stat-l">Capabilities</span><span class="stat-v">GPU / LLM / Storage</span></div>
+            <div><span class="stat-l">Heartbeat</span><span class="stat-v">Every 30s</span></div>
+          </div>
+        </div>
+
+        <div class="node-skeleton-card">
+          <div class="node-header">
+            <span class="node-icon">💻</span>
+            <div class="node-title-box">
+              <span class="node-name">MacBook M3 Pro</span>
+              <span class="node-status-badge status-active">SYNCHRONIZED</span>
+            </div>
+          </div>
+          <div class="node-stats">
+            <div><span class="stat-l">IP Address</span><span class="stat-v">192.168.1.144</span></div>
+            <div><span class="stat-l">Capabilities</span><span class="stat-v">MLX / CoreML</span></div>
+            <div><span class="stat-l">Heartbeat</span><span class="stat-v">Every 30s</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLIENT DOWNLOAD SHOWCASE -->
+    <section id="clients" class="clients-section scroll-reveal">
+      <div class="section-title-wrap">
+        <div class="section-tag">CROSS-PLATFORM ECOSYSTEM</div>
+        <h2 class="section-heading">Client Applications &amp; Runtimes</h2>
+        <p class="section-subheading">Hardware-native user interfaces built with Tauri v2, Jetpack Compose, and Python.</p>
+      </div>
+
+      <div class="platforms-grid">
+        <!-- Windows -->
+        <article class="platform-card" id="card-win">
+          <div class="p-header">
+            <div class="p-badge-wrap">
+              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+              <h3>Windows</h3>
+            </div>
+            <span class="p-status preview">Preview Build</span>
+          </div>
+          <p class="p-lead">NEXUS Desktop for Windows 10/11. DirectStorage sync, background tray daemon, and DPAPI credential isolation.</p>
+          <div class="p-specs">
+            <div class="spec-row"><span>Arch</span><span>x64, ARM64 (Snapdragon)</span></div>
+            <div class="spec-row"><span>Runtime</span><span>Tauri v2 + Rust Core</span></div>
+            <div class="spec-row"><span>Security</span><span>HVCI &amp; AppContainer</span></div>
+          </div>
+          <div class="p-footer">
+            <button class="btn btn-stub" disabled>
+              <span>Download .msi (Pending Signer)</span>
+            </button>
+            <span class="stub-note">Unlocks following HSM code-signing key release</span>
+          </div>
+        </article>
+
+        <!-- macOS -->
+        <article class="platform-card" id="card-mac">
+          <div class="p-header">
+            <div class="p-badge-wrap">
+              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><path d="M12 6a6 6 0 0 0-6 6c0 2.21 1.2 4.14 3 5.19"/></svg>
+              <h3>macOS</h3>
+            </div>
+            <span class="p-status preview">Preview Build</span>
+          </div>
+          <p class="p-lead">Optimized for Apple Silicon unified memory. Secure Enclave keychain persistence and low-latency menu bar telemetry.</p>
+          <div class="p-specs">
+            <div class="spec-row"><span>Arch</span><span>Universal (M1–M4 &amp; Intel)</span></div>
+            <div class="spec-row"><span>Runtime</span><span>Swift + Tauri v2 + Metal</span></div>
+            <div class="spec-row"><span>Security</span><span>Hardened Runtime Notarized</span></div>
+          </div>
+          <div class="p-footer">
+            <button class="btn btn-stub" disabled>
+              <span>Download .dmg (Pending Signer)</span>
+            </button>
+            <span class="stub-note">Awaiting Apple Developer ID notarization gate</span>
+          </div>
+        </article>
+
+        <!-- Mobile -->
+        <article class="platform-card" id="card-android">
+          <div class="p-header">
+            <div class="p-badge-wrap">
+              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 18h.01"/></svg>
+              <h3>Android</h3>
+            </div>
+            <span class="p-status testing">Staged Test</span>
+          </div>
+          <p class="p-lead">Companion mobile node with biometric approval, encrypted voice note capture, and zero-trust remote relay triggers.</p>
+          <div class="p-specs">
+            <div class="spec-row"><span>Target</span><span>Android 10+ (API 29+)</span></div>
+            <div class="spec-row"><span>Runtime</span><span>Jetpack Compose Native</span></div>
+            <div class="spec-row"><span>Security</span><span>Android Keystore + Biometrics</span></div>
+          </div>
+          <div class="p-footer">
+            <button class="btn btn-stub" disabled>
+              <span>Download .apk (Staged Release)</span>
+            </button>
+            <span class="stub-note">Releasing after mobile security harness audit</span>
+          </div>
+        </article>
+
+        <!-- CLI -->
+        <article class="platform-card" id="card-cli">
+          <div class="p-header">
+            <div class="p-badge-wrap">
+              <svg class="p-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              <h3>CLI &amp; Daemon</h3>
+            </div>
+            <span class="p-status active">Available</span>
+          </div>
+          <p class="p-lead">Headless orchestrator for Linux servers, Raspberry Pis, and developer workstations. Automate via pure CLI &amp; TUI.</p>
+          <div class="p-specs">
+            <div class="spec-row"><span>OS</span><span>Linux, macOS, Windows, BSD</span></div>
+            <div class="spec-row"><span>Runtime</span><span>Python 3.10+ / Rich / Typer</span></div>
+            <div class="spec-row"><span>Interface</span><span>Command-line &amp; Full TUI</span></div>
+          </div>
+          <div class="p-footer">
+            <div class="cli-cmd-box">
+              <code>pip install nexus-cli</code>
+              <button class="copy-btn-mini" onclick="navigator.clipboard.writeText('pip install nexus-cli')" aria-label="Copy PIP Command">📋</button>
+            </div>
+            <span class="stub-note">Run <code>nexus cp login</code> or <code>nexus cp set &lt;url&gt;</code></span>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="app-footer">
+    <div class="footer-inner">
+      <div class="f-brand">
+        <span class="f-logo">⬡ NEXUS</span>
+        <p>Sovereign Personal Digital Infrastructure. MIT Licensed Open Source Research.</p>
+      </div>
+      <div class="f-links">
+        <a href="https://github.com/kn1ght073/nexus" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="/api/docs" id="api-docs-link">API Docs</a>
+        <a href="/health">Health Probe</a>
+      </div>
+    </div>
+    <div class="footer-sub">
+      <span>Single-variable architecture: Set <code>NEXUS_PUBLIC_URL</code> to redirect all nodes seamlessly.</span>
+    </div>
+  </footer>
+
+  <script src="/assets/script.js" defer></script>
+</body>
+</html>

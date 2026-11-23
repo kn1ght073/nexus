@@ -13,8 +13,11 @@ CONFIG_FILE_PATH = Path(os.environ.get("NEXUS_CLI_CONFIG", Path.home() / ".nexus
 class CLIConfig(BaseModel):
     api_url: str = "http://127.0.0.1:8000"
     # Hosted coordination service (Render free tier): login + node registry.
-    # Personal data stays on the node — see docs/deploy/online-access.md.
-    control_plane_url: Optional[str] = None
+    # Single variable override via NEXUS_PUBLIC_URL or NEXUS_CONTROL_PLANE_URL.
+    control_plane_url: Optional[str] = os.environ.get(
+        "NEXUS_PUBLIC_URL",
+        os.environ.get("NEXUS_CONTROL_PLANE_URL", "https://nexus-control-plane-uvi8.onrender.com")
+    )
     node_id: Optional[int] = None          # this machine's node registration
     node_api_key: Optional[str] = None     # issued once at claim
     token: Optional[str] = None            # access token (control-plane or node)

@@ -20,12 +20,15 @@ Public-internet hardening applied here:
   a 512 MB free instance.
 - /health answers with the minimum a probe needs.
 """
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.staticfiles import StaticFiles
 
 from .database import Base, SessionLocal, engine
 from .events import DomainEvent, subscribe, unsubscribe
@@ -110,11 +113,10 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if settings.expose_docs else None,
     )
 
-    # CORS: explicit origins only. The old config combined allow_origins=["*"]
-    # with allow_credentials=True, which browsers reject outright.
+    # CORS: explicit origins only.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.effective_cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
@@ -194,6 +196,17 @@ def create_app() -> FastAPI:
                 pump.cancel()
             if queue is not None:
                 unsubscribe(queue)
+
+    # --- Live Web UI Hosting ---
+    # Mount high-fidelity web showcase & operator interface at /
+    web_dir = Path(__file__).parent / "web_ui"
+    if web_dir.is_dir():
+        # Serve static assets (CSS, JS)
+        app.mount("/assets", StaticFiles(directory=str(web_dir)), name="assets")
+
+        @app.get("/", include_in_schema=False)
+        def serve_index():
+            return FileResponse(web_dir / "index.html")
 
     return app
 
