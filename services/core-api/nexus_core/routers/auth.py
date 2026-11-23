@@ -41,6 +41,7 @@ from ..schemas import (
     UserRoleUpdate,
 )
 from ..security import (
+    JWT_SECRET,
     create_token,
     decode_token,
     get_current_user,
@@ -344,11 +345,24 @@ def google_auth_start(request: GoogleStartRequest):
     )
 
     redirect_uri = request.redirect_uri or s.google_redirect_uri or f"{s.canonical_public_url}/api/auth/google/callback"
+    try:
+        import jwt as _jwt
+        payload = {
+            "nonce": nonce,
+            "code_verifier": code_verifier,
+            "redirect_uri": redirect_uri,
+            "exp": time.time() + 900,
+            "purp": "google_state",
+        }
+        state = _jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    except Exception:
+        state = secrets.token_urlsafe(32)
+
     _pending_google_oauth[state] = {
         "nonce": nonce,
         "code_verifier": code_verifier,
         "redirect_uri": redirect_uri,
-        "expires": time.time() + 600,
+        "expires": time.time() + 900,
     }
 
     client_id = s.google_client_id or "nexus-google-client-id"
@@ -377,7 +391,21 @@ def _process_google_callback(
     _sweep_google_oauth()
     s = get_settings()
     pending = _pending_google_oauth.pop(state, None)
-    if not pending or pending["expires"] < time.time():
+    if not pending:
+        try:
+            import jwt as _jwt
+            decoded = _jwt.decode(state, JWT_SECRET, algorithms=["HS256"])
+            if decoded.get("purp") == "google_state":
+                pending = {
+                    "nonce": decoded.get("nonce"),
+                    "code_verifier": decoded.get("code_verifier"),
+                    "redirect_uri": decoded.get("redirect_uri"),
+                    "expires": decoded.get("exp", 0),
+                }
+        except Exception:
+            pass
+
+    if not pending or pending.get("expires", 0) < time.time():
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     code_verifier = code_verifier_override or pending.get("code_verifier", "")
@@ -589,6 +617,19 @@ def google_auth_callback_get(
               <a href="/" style="color:#38bdf8;margin-top:16px;text-decoration:none;padding:8px 16px;border:1px solid rgba(56,189,248,0.3);border-radius:6px;">Return to Control Center</a>
             </body></html>""",
             status_code=exc.status_code,
+        )
+    except Exception as exc:
+        import traceback
+        import logging
+        logging.getLogger("nexus.auth").error("OAuth callback error: %s\n%s", exc, traceback.format_exc())
+        return HTMLResponse(
+            content=f"""<!DOCTYPE html><html><head><title>NEXUS - Authentication Failed</title></head>
+            <body style="background:#080b11;color:#f43f5e;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;box-sizing:border-box;">
+              <h2 style="margin-bottom:8px;">Authentication Failed</h2>
+              <p style="color:#94a3b8;margin-top:0;max-width:550px;text-align:center;">{exc}</p>
+              <a href="/" style="color:#38bdf8;margin-top:16px;text-decoration:none;padding:8px 16px;border:1px solid rgba(56,189,248,0.3);border-radius:6px;">Return to Control Center</a>
+            </body></html>""",
+            status_code=500,
         )
 
     # Success: Render auto-redirect HTML with localStorage population and set-cookie

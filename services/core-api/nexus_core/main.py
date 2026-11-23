@@ -44,10 +44,34 @@ settings = get_settings()
 CONTROL_PLANE_ROUTES = ("auth", "devices", "activity", "nodes", "relay")
 
 
+def _ensure_schema_compatibility(db_engine):
+    """Safely apply non-destructive column additions on existing PostgreSQL databases."""
+    url_str = str(db_engine.url)
+    if "postgresql" in url_str or "postgres" in url_str:
+        from sqlalchemy import text
+        with db_engine.connect() as conn:
+            for stmt in (
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(32) DEFAULT 'user' NOT NULL;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);",
+                "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL;",
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS family_id VARCHAR(64);",
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_via VARCHAR(32) DEFAULT 'password';",
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_used_ip VARCHAR(64);",
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS rotated_at TIMESTAMP;",
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP;",
+            ):
+                try:
+                    conn.execute(text(stmt))
+                except Exception:
+                    pass
+            conn.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create tables at boot (SQLite WAL is set per-connection in database.py)
     Base.metadata.create_all(bind=engine)
+    _ensure_schema_compatibility(engine)
     yield
 
 
