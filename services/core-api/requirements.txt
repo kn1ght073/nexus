@@ -11,7 +11,7 @@ websockets==16.0
 python-multipart==0.0.20  # inbox Form/File endpoints
 
 # Hosted control plane (Postgres on Neon/Supabase)
-psycopg[binary]==3.2.9
+psycopg2-binary==2.9.10
 
 # GitHub API requests
 requests==2.32.5
