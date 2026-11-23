@@ -36,15 +36,12 @@
 
 ## Item 1 — Core Auth, Ownership Isolation, Path Jail & Security Headers
 
-**Prerequisites**: Start local edge node in standalone mode:
-`~/.nexus-venv/bin/python -m uvicorn nexus_core.main:app --host 127.0.0.1 --port 8000`
-
 | Step | Command / action | Expected Output |
 |------|------------------|-----------------|
-| 1.1 | `nexus register --email operator@nexus.local --password Password123!` then `nexus login --email operator@nexus.local --password Password123!` | Registration successful; login succeeds; session token stored securely in OS Keyring. |
-| 1.2 | `nexus whoami` | Displays User ID, email, role (`user` or `owner`), and API endpoint. |
+| 1.1 | `nexus register --email operator@example.com --password Password123!` then `nexus login --email operator@example.com --password Password123!` | Registration successful (persisted in Neon DB); login succeeds; session token stored securely in OS Keyring. |
+| 1.2 | `nexus whoami` | Displays User ID, email (`operator@example.com`), role (`user`), and API endpoint. |
 | 1.3 | `nexus project create "Sovereign Project A"`; `nexus task add "Audit Syscall Stubs" --project 1`; `nexus project list` | Project and task created and displayed in formatted table. |
-| 1.4 | Register a second user in isolated config (`NEXUS_CLI_CONFIG=/tmp/nexus_u2.json nexus register ...`); run `nexus project list` | Second user sees empty project list (complete tenant ownership isolation). |
+| 1.4 | Register a second user in isolated config (`NEXUS_CLI_CONFIG=/tmp/nexus_u2.json nexus register --email operator2@example.com --password Password123!`); run `nexus project list` | Second user sees empty project list (complete tenant ownership isolation). |
 | 1.5 | `nexus files roots` (or `nexus file roots`) | Lists active sandboxed storage boundaries (e.g. `~/Documents`). |
 | 1.6 | Attempt directory traversal via `nexus files search` or browse outside root (`../`) | Access blocked; path traversal outside jail strictly refused. |
 | 1.7 | Perform 5 incorrect login attempts, then 1 valid login | Account locked out via rate-limiting/brute-force defense (HTTP 401 with lockout delay). |
