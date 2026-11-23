@@ -92,7 +92,7 @@ interface NexusApi {
 
 object NexusClient {
     @Volatile private var retrofit: Retrofit? = null
-    @Volatile var baseUrl: String = "http://127.0.0.1:8000/"
+    @Volatile var baseUrl: String = "https://nexus-control-plane-uvi8.onrender.com/"
         set(value) {
             field = if (value.endsWith("/")) value else "$value/"
             retrofit = null // rebuild lazily

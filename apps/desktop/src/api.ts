@@ -6,7 +6,7 @@
  * the Tauri stronghold/keyring plugin (progress.md step 4).
  */
 
-const BASE = localStorage.getItem("nexus.core") ?? "http://127.0.0.1:8000";
+const BASE = localStorage.getItem("nexus.core") ?? "https://nexus-control-plane-uvi8.onrender.com";
 
 export interface User {
   id: number;

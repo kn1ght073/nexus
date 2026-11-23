@@ -19,7 +19,7 @@ android {
         // Dev default: Core on loopback via adb reverse tcp:8000 tcp:8000.
         // LAN: set to https://nexus.local:8443 (self-signed CA pinned in
         // res/xml/network_security_config.xml during pairing).
-        buildConfigField("String", "NEXUS_CORE_URL", "\"http://127.0.0.1:8000\"")
+        buildConfigField("String", "NEXUS_CORE_URL", "\"https://nexus-control-plane-uvi8.onrender.com\"")
     }
 
     buildTypes {

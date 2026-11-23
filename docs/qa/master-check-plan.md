@@ -37,15 +37,14 @@ one sitting; they cost nothing on free tiers.
 | # | Service | What it gives us | How to set up |
 |---|---------|------------------|---------------|
 | S1 | **GitHub account + OAuth app** | repo push/pull; the GitHub linking feature (Item 10) | You already have github.com/kn1ght073/nexus. Create ONE OAuth app at **github.com/settings/developers** → "New OAuth App": name `nexus-node`, homepage any valid URL (e.g. the repo URL), callback left blank or `http://127.0.0.1:8000/api/github/authorize/callback` (the desktop flow posts the code back itself, so the redirect just needs to be *somewhere*). Note the **Client ID**, generate a **Client Secret**. Scopes stay minimal: the app requests `read:user` only. |
-| S2 | **Render account** (render.com, free tier) | hosts the control plane (auth + node registry + relay) | Sign up with the GitHub login. Render dashboard → New → **Blueprint** → select the `kn1ght073/nexus` repo → it reads `services/core-api/render.yaml` and provisions `nexus-control-plane` (free plan, health path `/health`). After first deploy, set in the dashboard: `NEXUS_DATABASE_URL` (from S3), `NEXUS_JWT_SECRET` (64-hex — `python -c "import secrets; print(secrets.token_hex(32))"`), `NEXUS_CORS_ORIGINS` (e.g. `["tauri://localhost","http://localhost:5173"]`). Expect the URL `https://nexus-control-plane.onrender.com`. |
-| S3 | **Neon or Supabase Postgres** (pick ONE) | the control plane's database (free tier) | **Neon** (neon.tech): sign up → Create project → copy the *pooled* connection string into `NEXUS_DATABASE_URL`. **Supabase** (supabase.com): New project → Project Settings → Database → Connection string (URI, use the *pooler* port 6543 for Render's free single worker). Either works; Neon is serverless-friendly, Supabase gives you a dashboard to inspect rows. |
+| S2 | **Render live control plane** (live deployment) | hosts the control plane (auth + node registry + relay) | Already deployed and active at `https://nexus-control-plane-uvi8.onrender.com` connected to production Neon DB. Health endpoint: `/health`. |
+| S3 | **Neon PostgreSQL Database** (production) | the control plane's database | Managed Neon DB instance active and attached to Render via `NEXUS_DATABASE_URL`. |
 | S4 (optional) | **Ollama** (ollama.com/download) + `ollama pull llama3.2` | local LLM for the inbox intent pipeline (Item 6) | Install the native app for your OS, pull `llama3.2` (~2 GB). Skip if you don't want to test the AI item's LLM leg — STT alone can be verified with `faster-whisper`. |
 | S5 (optional) | **Tailscale** (tailscale.com) | zero-config LAN alternative to the relay | Not required — the secure relay (Item 8) is the primary path and needs nothing installed. Only useful if you later want direct LAN speeds. |
 
-**Phase 0 checklist**: S1 client id/secret noted → S3 URL pasted into S2 →
-`curl https://nexus-control-plane.onrender.com/health` returns
-`{"status":"ok","service":"nexus-core","mode":"control-plane"}` → (S4
-optional) `ollama list` shows llama3.2.
+**Phase 0 checklist**: S1 client id/secret noted → Render control plane live →
+`curl https://nexus-control-plane-uvi8.onrender.com/health` returns
+`{"status":"ok","service":"nexus-core","mode":"control-plane"}`.
 
 **Fallback if you'd rather avoid Render entirely**: self-host the same
 control plane with `cd services/core-api && cp .env.example .env && docker
@@ -133,16 +132,16 @@ against it.
 
 ## Item 7 — Online access: control plane + node promotion (`f8c82c2`)
 
-**Setup**: Phase 0 done (Render URL live).
+**Setup**: Phase 0 done (Production Render URL live at `https://nexus-control-plane-uvi8.onrender.com`).
 
 | Step | Action | Expected |
 |------|--------|----------|
-| 7.1 | `curl https://<render-host>/health` | `"mode":"control-plane"` |
-| 7.2 | `nexus cp set --url https://<render-host>`; `nexus cp login` (same email/password as node — accounts live on the CP) | login succeeds from anywhere |
-| 7.3 | Visit any personal-data endpoint on the CP: `curl https://<host>/api/tasks -H "Auth..."` | **404** — personal routers are not mounted on the control plane |
+| 7.1 | `curl https://nexus-control-plane-uvi8.onrender.com/health` | `"mode":"control-plane"` |
+| 7.2 | `nexus cp set https://nexus-control-plane-uvi8.onrender.com`; `nexus cp login` (accounts live on the CP / Neon DB) | login succeeds from anywhere |
+| 7.3 | Visit any personal-data endpoint on the CP: `curl https://nexus-control-plane-uvi8.onrender.com/api/tasks -H "Auth..."` | **404** — personal routers are not mounted on the control plane |
 | 7.4 | `nexus node claim --name "My Laptop" --platform macos` (no `--watch`) | node registered; `nexus node resolve` returns it |
 | 7.5 | `nexus node list` | your node(s) with heartbeat freshness |
-| 7.6 | `nexus login` against the NODE (loopback) again | local node auth unaffected by CP login |
+| 7.6 | `nexus login` against the live service or local node | node auth works cleanly |
 
 ## Item 8 — Zero-port secure relay (`bac38fb`)
 

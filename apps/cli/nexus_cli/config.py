@@ -116,7 +116,10 @@ class CredentialStore:
 
 class CLIConfig(BaseModel):
     api_url: str = Field(
-        default_factory=lambda: os.environ.get("NEXUS_API_URL", "http://127.0.0.1:8000")
+        default_factory=lambda: os.environ.get(
+            "NEXUS_API_URL",
+            os.environ.get("NEXUS_PUBLIC_URL", "https://nexus-control-plane-uvi8.onrender.com"),
+        )
     )
     control_plane_url: Optional[str] = Field(
         default_factory=lambda: os.environ.get(

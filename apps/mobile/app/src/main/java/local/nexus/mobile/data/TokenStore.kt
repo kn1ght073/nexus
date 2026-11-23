@@ -43,7 +43,7 @@ class TokenStore(private val context: Context) {
     }
 
     val coreUrl: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_CORE_URL] ?: "http://127.0.0.1:8000"
+        prefs[KEY_CORE_URL] ?: "https://nexus-control-plane-uvi8.onrender.com"
     }
 
     suspend fun setCoreUrl(url: String) {

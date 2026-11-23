@@ -32,7 +32,7 @@ def isolated_config(tmp_path, monkeypatch):
 
 def test_default_config():
     cfg = load_config()
-    assert cfg.api_url == "http://127.0.0.1:8000"
+    assert cfg.api_url == "https://nexus-control-plane-uvi8.onrender.com"
     assert "render.com" in cfg.control_plane_url
     assert cfg.node_id is None
     assert cfg.token is None

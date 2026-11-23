@@ -39,9 +39,13 @@ app.add_typer(config_app, name="config")
 app.add_typer(devices_app, name="devices")
 app.add_typer(nodes_app, name="nodes")
 app.add_typer(projects_app, name="projects")
+app.add_typer(projects_app, name="project")
 app.add_typer(tasks_app, name="tasks")
+app.add_typer(tasks_app, name="task")
 app.add_typer(notes_app, name="notes")
+app.add_typer(notes_app, name="note")
 app.add_typer(files_app, name="files")
+app.add_typer(files_app, name="file")
 app.add_typer(sync_app, name="sync")
 app.add_typer(github_app, name="github")
 app.add_typer(services_app, name="services")
@@ -128,7 +132,7 @@ def version_cmd(
 
 
 @app.command("init")
-def init_cmd(url: str = typer.Option("http://127.0.0.1:8000", help="API Base URL")):
+def init_cmd(url: str = typer.Option("https://nexus-control-plane-uvi8.onrender.com", help="API Base URL")):
     """Initialize the NEXUS CLI with the backend server URL."""
     cfg = load_config()
     cfg.api_url = url.rstrip("/")

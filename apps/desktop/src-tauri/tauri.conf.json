@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 ws://127.0.0.1:8000 https://nexus.local:8443 wss://nexus.local:8443; img-src 'self' data:"
+      "csp": "default-src 'self'; connect-src 'self' https://nexus-control-plane-uvi8.onrender.com wss://nexus-control-plane-uvi8.onrender.com http://127.0.0.1:8000 ws://127.0.0.1:8000 https://nexus.local:8443 wss://nexus.local:8443; img-src 'self' data:"
     }
   },
   "bundle": {
