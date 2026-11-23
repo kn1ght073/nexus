@@ -26,7 +26,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
@@ -270,16 +270,35 @@ def create_app() -> FastAPI:
             if queue is not None:
                 unsubscribe(queue)
 
-    # --- Live Web UI Hosting ---
-    # Mount high-fidelity web showcase & operator interface at /
+    # --- Live Web Showcase & Operator Control Center Hosting ---
+    showcase_dir = Path(__file__).parent / "showcase"
     web_dir = Path(__file__).parent / "web_ui"
+
+    if showcase_dir.is_dir():
+        app.mount("/showcase", StaticFiles(directory=str(showcase_dir)), name="showcase")
+
     if web_dir.is_dir():
-        # Serve static assets (CSS, JS)
         app.mount("/assets", StaticFiles(directory=str(web_dir)), name="assets")
 
-        @app.get("/", include_in_schema=False)
-        def serve_index():
+    @app.get("/", include_in_schema=False)
+    def serve_showcase():
+        if showcase_dir.is_dir() and (showcase_dir / "index.html").is_file():
+            return FileResponse(showcase_dir / "index.html")
+        elif web_dir.is_dir():
             return FileResponse(web_dir / "index.html")
+        return {"status": "ok", "service": "nexus-core"}
+
+    @app.get("/admin", include_in_schema=False)
+    @app.get("/admin/", include_in_schema=False)
+    def serve_admin():
+        if web_dir.is_dir() and (web_dir / "index.html").is_file():
+            return FileResponse(web_dir / "index.html")
+        raise HTTPException(status_code=404, detail="Control center interface not installed")
+
+    @app.get("/console", include_in_schema=False)
+    @app.get("/dashboard", include_in_schema=False)
+    def redirect_to_admin():
+        return RedirectResponse(url="/admin", status_code=307)
 
     return app
 

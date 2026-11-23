@@ -111,9 +111,8 @@ async def register(user_in: UserCreate, request: Request, db: Session = Depends(
     if db.query(User).filter(User.email == user_in.email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
     hashed = await _run_hash(hash_password, user_in.password)
-    # First registered user automatically becomes the cluster 'owner'
-    is_first_user = db.query(User).count() == 0
-    role = "owner" if is_first_user else "user"
+    # Default to standard 'user' role; elevated privileges granted explicitly via database or owner
+    role = "user"
     user = User(email=user_in.email, hashed_password=hashed, role=role)
     db.add(user)
     db.commit()
@@ -505,8 +504,7 @@ def _process_google_callback(
         if existing_user:
             user = existing_user
         else:
-            is_first_user = db.query(User).count() == 0
-            role = "owner" if is_first_user else "user"
+            role = "user"
             user = User(
                 email=email,
                 hashed_password=None,
@@ -614,7 +612,7 @@ def google_auth_callback_get(
             <body style="background:#080b11;color:#f43f5e;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;">
               <h2 style="margin-bottom:8px;">Authentication Failed</h2>
               <p style="color:#94a3b8;margin-top:0;">{exc.detail}</p>
-              <a href="/" style="color:#38bdf8;margin-top:16px;text-decoration:none;padding:8px 16px;border:1px solid rgba(56,189,248,0.3);border-radius:6px;">Return to Control Center</a>
+              <a href="/admin" style="color:#38bdf8;margin-top:16px;text-decoration:none;padding:8px 16px;border:1px solid rgba(56,189,248,0.3);border-radius:6px;">Return to Control Center</a>
             </body></html>""",
             status_code=exc.status_code,
         )
@@ -627,7 +625,7 @@ def google_auth_callback_get(
             <body style="background:#080b11;color:#f43f5e;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;box-sizing:border-box;">
               <h2 style="margin-bottom:8px;">Authentication Failed</h2>
               <p style="color:#94a3b8;margin-top:0;max-width:550px;text-align:center;">{exc}</p>
-              <a href="/" style="color:#38bdf8;margin-top:16px;text-decoration:none;padding:8px 16px;border:1px solid rgba(56,189,248,0.3);border-radius:6px;">Return to Control Center</a>
+              <a href="/admin" style="color:#38bdf8;margin-top:16px;text-decoration:none;padding:8px 16px;border:1px solid rgba(56,189,248,0.3);border-radius:6px;">Return to Control Center</a>
             </body></html>""",
             status_code=500,
         )
@@ -653,7 +651,7 @@ def google_auth_callback_get(
       localStorage.setItem('nexus.token', '{token.access_token}');
       localStorage.setItem('nexus.refresh', '{token.refresh_token}');
     }} catch (e) {{}}
-    window.location.replace('/');
+    window.location.replace('/admin');
   </script>
 </body>
 </html>"""
