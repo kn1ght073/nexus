@@ -134,6 +134,23 @@ def create_table(title: str, columns: List[Dict[str, Any]], box_style: Any = box
     return t
 
 
+def render_table(rows: List[List[Any]], headers: List[str], title: Optional[str] = None) -> None:
+    """Render a formatted table directly to console."""
+    if is_json_mode():
+        return
+    t = Table(
+        title=f"[bold cyan]{title}[/bold cyan]" if title else None,
+        box=box.ROUNDED,
+        header_style="bold cyan",
+        show_header=True,
+    )
+    for h in headers:
+        t.add_column(h)
+    for row in rows:
+        t.add_row(*[str(cell) for cell in row])
+    console.print(t)
+
+
 def render_key_value(pairs: Dict[str, Any], title: Optional[str] = None) -> None:
     """Render a clean key-value block aligned with borders."""
     if is_json_mode():

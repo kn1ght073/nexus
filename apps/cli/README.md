@@ -280,6 +280,74 @@ nexus config reset --yes
 
 ---
 
+## Interactive TUI Control Center
+
+Launching `nexus` in an interactive terminal automatically opens the full-screen NEXUS Terminal User Interface (TUI), combining the usability of GitHub CLI with the design aesthetics of Charmbracelet tools:
+
+```bash
+nexus
+```
+
+To explicitly launch the TUI or bypass it:
+
+```bash
+# Explicit launch
+nexus ui
+
+# Bypass TUI in interactive terminals (standard CLI help)
+nexus --no-ui
+```
+
+### TUI Architecture
+
+The NEXUS TUI is built on Textual and organized into four primary zones:
+
+1. **Status Header**: Displays real-time telemetry, active version, authenticated identity (Google OAuth), connected Core API / Control Plane URL, active profile, and live latency ping.
+2. **Navigation Sidebar**: Collapsible tree organized across the 8 canonical categories with command count badges.
+3. **Command Explorer**: Live-filtered data table displaying available commands, arguments, safety ratings, and usage syntax.
+4. **Context Panel**: Comprehensive documentation, syntax breakdown, argument types, destructive warnings, and quick execution trigger.
+
+### Global Command Palette (`Ctrl+K` or `/`)
+
+Press `/` or `Ctrl+K` from any screen to open the global Command Palette. Supports fuzzy search across all command names, token paths, descriptions, and categories.
+
+### Keyboard Shortcuts Reference
+
+| Key | Action |
+| :--- | :--- |
+| `/` or `Ctrl+K` | Open Global Command Palette & Fuzzy Search |
+| `?` | Toggle Keyboard Shortcuts Help Sheet |
+| `r` | Refresh Status Header & Connection Telemetry |
+| `p` | Open Profile Switcher & Settings Dialog |
+| `w` | Launch Guided Setup Wizard |
+| `q` | Quit Application |
+| `Tab` / `Shift+Tab` | Cycle focus between Sidebar, Explorer, and Filter Input |
+| `Up` / `Down` | Navigate lists and table rows |
+| `Enter` | Activate / Execute selected command |
+| `Esc` | Close modal dialog or clear active search filter |
+
+---
+
+### Profile Management
+
+Manage multiple isolated server targets, environments, and credential sets:
+
+```bash
+# List all configured profiles
+nexus config profile list
+
+# Create a new profile pointing to a custom node or staging environment
+nexus config profile create staging --url https://staging.nexus.local
+
+# Switch active profile
+nexus config profile switch staging
+
+# Delete a profile and purge its scoped credentials
+nexus config profile delete staging --yes
+```
+
+---
+
 ### Interactive TUI
 
 #### `nexus ui`

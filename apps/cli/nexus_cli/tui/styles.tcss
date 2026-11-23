@@ -1,0 +1,255 @@
+/* NEXUS Modern Terminal User Interface Stylesheet */
+
+Screen {
+    background: #080c14;
+    color: #e2e8f0;
+    layout: vertical;
+}
+
+/* Header Area */
+#nexus-status-header {
+    height: 7;
+    background: #0d1322;
+    border-bottom: solid #0284c7;
+    padding: 0 1;
+}
+
+.header-top-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+}
+
+#nexus-brand {
+    width: 28;
+    text-style: bold;
+    color: #38bdf8;
+}
+
+#header-stats {
+    width: 1fr;
+    layout: horizontal;
+    align: right middle;
+}
+
+.stat-badge {
+    padding: 0 1;
+    margin-left: 1;
+    background: #1e293b;
+    border: none;
+    color: #94a3b8;
+}
+
+.stat-badge-active {
+    padding: 0 1;
+    margin-left: 1;
+    background: #0369a1;
+    color: #ffffff;
+    text-style: bold;
+}
+
+.stat-badge-online {
+    padding: 0 1;
+    margin-left: 1;
+    background: #14532d;
+    color: #4ade80;
+    text-style: bold;
+}
+
+.stat-badge-offline {
+    padding: 0 1;
+    margin-left: 1;
+    background: #7f1d1d;
+    color: #f87171;
+    text-style: bold;
+}
+
+.header-bottom-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    color: #64748b;
+}
+
+.header-meta-item {
+    margin-right: 3;
+}
+
+/* Main Body Layout */
+#main-body-container {
+    height: 1fr;
+    layout: horizontal;
+}
+
+/* Navigation Sidebar */
+#sidebar-container {
+    width: 32;
+    height: 100%;
+    background: #0a0f1d;
+    border-right: solid #1e293b;
+    padding: 1;
+}
+
+#sidebar-title {
+    text-style: bold;
+    color: #38bdf8;
+    margin-bottom: 1;
+    padding-left: 1;
+}
+
+#category-tree {
+    height: 1fr;
+    background: #0a0f1d;
+    border: none;
+    scrollbar-size-vertical: 1;
+}
+
+/* Explorer Panel */
+#explorer-container {
+    width: 1fr;
+    height: 100%;
+    background: #090d18;
+    padding: 1;
+    border-right: solid #1e293b;
+}
+
+#explorer-header-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+#explorer-title {
+    width: 25;
+    text-style: bold;
+    color: #38bdf8;
+}
+
+#command-filter-input {
+    width: 1fr;
+    background: #111827;
+    border: solid #1e293b;
+    color: #e2e8f0;
+}
+
+#command-filter-input:focus {
+    border: solid #38bdf8;
+}
+
+#commands-table {
+    height: 1fr;
+    background: #090d18;
+    border: solid #1e293b;
+}
+
+/* Context Panel */
+#context-container {
+    width: 38;
+    height: 100%;
+    background: #0b1120;
+    padding: 1 2;
+}
+
+#context-title {
+    text-style: bold;
+    color: #38bdf8;
+    margin-bottom: 1;
+}
+
+#context-content {
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#context-actions {
+    height: 4;
+    layout: horizontal;
+    align: center middle;
+    margin-top: 1;
+}
+
+.btn-execute {
+    background: #0284c7;
+    color: #ffffff;
+    text-style: bold;
+    border: none;
+    width: 100%;
+}
+
+.btn-execute:hover {
+    background: #0369a1;
+}
+
+.btn-destructive {
+    background: #b91c1c;
+    color: #ffffff;
+    text-style: bold;
+    border: none;
+    width: 100%;
+}
+
+.btn-destructive:hover {
+    background: #991b1b;
+}
+
+/* Modals */
+ModalScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.75);
+}
+
+.modal-box {
+    width: 72;
+    height: auto;
+    max-height: 85%;
+    background: #0f172a;
+    border: solid #0284c7;
+    padding: 1 2;
+}
+
+.modal-header {
+    text-style: bold;
+    color: #38bdf8;
+    margin-bottom: 1;
+    text-align: center;
+}
+
+.modal-footer {
+    height: 3;
+    layout: horizontal;
+    align: right middle;
+    margin-top: 1;
+}
+
+.modal-button {
+    margin-left: 1;
+}
+
+/* Command Palette */
+#palette-box {
+    width: 76;
+    height: 22;
+    background: #0d1322;
+    border: solid #38bdf8;
+    padding: 1 2;
+}
+
+#palette-search-input {
+    background: #111827;
+    border: solid #0284c7;
+    margin-bottom: 1;
+}
+
+#palette-results-list {
+    height: 14;
+    background: #0d1322;
+    border: none;
+}
+
+/* Footer Keymap */
+Footer {
+    background: #0a0f1d;
+    color: #64748b;
+    border-top: solid #1e293b;
+}

@@ -28,7 +28,7 @@ from nexus_cli.ui import console, output_json, print_error, print_success, set_j
 app = typer.Typer(
     name="nexus",
     help="NEXUS CLI — Modern Developer Interface & Edge Node Controller",
-    no_args_is_help=True,
+    no_args_is_help=False,
     add_completion=False,
 )
 
@@ -78,11 +78,23 @@ def cp_login(
 app.add_typer(cp_app, name="cp")
 
 
+def is_interactive_terminal() -> bool:
+    """Determine whether the current process is running in an interactive TTY."""
+    import sys
+    return (
+        sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and os.environ.get("NEXUS_NO_UI", "").lower() not in ("1", "true", "yes")
+        and not os.environ.get("CI")
+    )
+
+
 @app.callback(invoke_without_command=True)
 def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit.", is_eager=True),
     json_output: bool = typer.Option(False, "--json", help="Output raw machine-readable JSON."),
+    no_ui: bool = typer.Option(False, "--no-ui", help="Disable interactive TUI and use standard CLI mode."),
     verbose: bool = typer.Option(False, "--verbose", help="Enable verbose debug logging."),
 ) -> None:
     set_json_mode(json_output)
@@ -92,6 +104,23 @@ def main_callback(
         else:
             console.print(f"[bold cyan]nexus[/bold cyan] version [bold]{__version__}[/bold]")
         raise typer.Exit(ExitCode.SUCCESS)
+
+    if ctx.invoked_subcommand is None:
+        if not no_ui and not json_output and is_interactive_terminal():
+            try:
+                from nexus_cli.tui.app import NexusTUIApp
+
+                tui_app = NexusTUIApp()
+                tui_app.run()
+            except typer.Exit:
+                raise
+            except Exception as e:
+                print_error(f"Failed to launch TUI: {e}", title="TUI ERROR")
+                raise typer.Exit(1)
+            raise typer.Exit(ExitCode.SUCCESS)
+        else:
+            console.print(ctx.get_help())
+            raise typer.Exit(ExitCode.SUCCESS)
 
 
 # --- ROOT FIRST-CLASS COMMANDS ---
@@ -159,11 +188,12 @@ def status_cmd():
 def launch_tui():
     """Launch the interactive NEXUS Full-Screen TUI."""
     try:
-        from tui import NexusTUI
-        tui_app = NexusTUI()
+        from nexus_cli.tui.app import NexusTUIApp
+        tui_app = NexusTUIApp()
         tui_app.run()
-    except ImportError as e:
+    except Exception as e:
         console.print(Panel(f"Could not load TUI module.\n[dim]{e}[/dim]", title="[bold red]ERROR[/bold red]", border_style="red", expand=False))
+        raise typer.Exit(1)
 
 
 @app.command("search")
