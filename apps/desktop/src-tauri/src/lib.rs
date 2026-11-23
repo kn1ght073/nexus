@@ -17,7 +17,7 @@ pub struct HealthStatus {
 
 /// Base URL of the NEXUS Core. In dev the Core runs on loopback; for LAN
 /// deployment the Core advertises itself over mDNS as nexus.local:8443.
-const CORE_URL: &str = "http://127.0.0.1:8000";
+const CORE_URL: &str = "https://nexus-control-plane-uvi8.onrender.com";
 
 #[tauri::command]
 fn core_base_url() -> String {

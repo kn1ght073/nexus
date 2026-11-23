@@ -132,7 +132,7 @@ def version_cmd(
 
 
 @app.command("init")
-def init_cmd(url: str = typer.Option("http://127.0.0.1:8000", help="API Base URL")):
+def init_cmd(url: str = typer.Option("https://nexus-control-plane-uvi8.onrender.com", help="API Base URL")):
     """Initialize the NEXUS CLI with the backend server URL."""
     cfg = load_config()
     cfg.api_url = url.rstrip("/")
