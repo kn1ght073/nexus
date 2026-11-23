@@ -36,3 +36,7 @@ def load_config() -> CLIConfig:
 def save_config(config: CLIConfig):
     with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
         json.dump(config.model_dump(), f, indent=4)
+    try:
+        os.chmod(CONFIG_FILE_PATH, 0o600)
+    except OSError:
+        pass

@@ -5,8 +5,10 @@ file next to the package, per the deployment layout in the architecture plan
 (loopback for dev, LAN bind + firewall rule for deployment).
 """
 from functools import lru_cache
+import json
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +35,40 @@ class Settings(BaseSettings):
     # True on the hosted control plane: only auth/devices/activity/nodes
     # routers mount (no personal-data endpoints). See create_app().
     control_plane_mode: bool = False
+    allow_ephemeral_db: bool = False  # Set true to explicitly allow SQLite in control_plane_mode (dev/tests)
+
+    # --- Auth Admission Policy (F4, §E) ---
+    # Disabled by default in control-plane mode; enabled on local node.
+    allow_password_auth: bool | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    allowed_google_emails: list[str] | str = []
+    google_token_url: str = "https://oauth2.googleapis.com/token"
+    google_auth_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+
+    @property
+    def is_password_auth_allowed(self) -> bool:
+        if self.allow_password_auth is not None:
+            return self.allow_password_auth
+        return not self.control_plane_mode
+
+    @field_validator("allowed_google_emails", mode="before")
+    @classmethod
+    def _parse_allowed_emails(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [e.strip().lower() for e in v.split(",") if e.strip()]
+        if isinstance(v, list):
+            return [str(e).strip().lower() for e in v if str(e).strip()]
+        return v or []
 
     # A node counts as active while its heartbeat is younger than this.
     node_heartbeat_timeout: int = 90  # seconds

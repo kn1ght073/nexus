@@ -15,15 +15,18 @@ settings = get_settings()
 
 
 def _engine_url() -> str:
-    if settings.database_url:
-        url = settings.database_url
-        # Render/Neon/Supabase dashboards hand out postgres:// or
-        # postgresql+psycopg2:// interchangeably; SQLAlchemy's psycopg2
-        # driver accepts either, but normalize the bare scheme anyway.
+    s = get_settings()
+    if s.control_plane_mode and not s.database_url and not s.allow_ephemeral_db:
+        raise RuntimeError(
+            "NEXUS_DATABASE_URL is required when running in control-plane mode. "
+            "Refusing to silently use ephemeral SQLite."
+        )
+    if s.database_url:
+        url = s.database_url
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         return url
-    return f"sqlite:///{settings.database_path}"
+    return f"sqlite:///{s.database_path}"
 
 
 engine = create_engine(

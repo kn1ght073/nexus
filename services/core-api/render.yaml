@@ -25,3 +25,11 @@ services:
         value: "[]"                        # control plane never serves files
       - key: NEXUS_NODE_HEARTBEAT_TIMEOUT
         value: "90"
+      - key: NEXUS_ALLOWED_GOOGLE_EMAILS
+        sync: false                        # comma-separated list of allowed Google emails
+      - key: NEXUS_GOOGLE_CLIENT_ID
+        sync: false                        # Google OAuth Client ID
+      - key: NEXUS_GOOGLE_CLIENT_SECRET
+        sync: false                        # Google OAuth Client Secret (CP only)
+      - key: NEXUS_GOOGLE_REDIRECT_URI
+        sync: false                        # e.g. https://nexus-control.onrender.com/api/auth/google/callback

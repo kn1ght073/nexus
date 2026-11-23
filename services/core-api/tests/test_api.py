@@ -618,6 +618,8 @@ print("CP_MODE_OK")
         "NEXUS_DATABASE_PATH": str(db_dir / "cp.db"),
         "NEXUS_JWT_SECRET_FILE": str(db_dir / "cp_secret"),
         "NEXUS_CONTROL_PLANE_MODE": "true",
+        "NEXUS_ALLOW_EPHEMERAL_DB": "true",
+        "NEXUS_ALLOW_PASSWORD_AUTH": "true",
     }
     result = subprocess.run(
         [sys.executable, "-c", script],

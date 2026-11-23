@@ -123,13 +123,11 @@ def plan_bootstrap(
             "pydantic-settings==2.13.1",
             "email-validator==2.3.0",
             "argon2-cffi==25.1.0",
-            "PyJWT==2.12.1",
+            "PyJWT>=2.14.0",
             "websockets==16.0",
             "psycopg2-binary==2.9.10",
-            # inbox router declares Form/File endpoints; FastAPI refuses to
-            # even import those without python-multipart (RuntimeError at
-            # boot — caught live in the managed-venv demo)
-            "python-multipart==0.0.20",
+            "python-multipart>=0.0.31",
+            "cryptography>=44.0.0",
             "typer==0.23.1",
             "rich==14.3.3",
             "requests==2.32.5",

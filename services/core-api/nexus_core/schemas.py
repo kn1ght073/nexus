@@ -42,6 +42,41 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None
+
+
+class SessionOut(BaseModel):
+    id: int
+    device_id: int | None = None
+    created_via: str
+    last_used_ip: str | None = None
+    issued_at: datetime
+    expires_at: datetime
+    rotated_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GoogleStartRequest(BaseModel):
+    redirect_uri: str | None = None
+    scopes: list[str] = ["openid", "email", "profile"]
+
+
+class GoogleStartResponse(BaseModel):
+    url: str
+    state: str
+    code_verifier: str
+    expires_in: int = 600
+
+
+class GoogleCallbackRequest(BaseModel):
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=8)
+    code_verifier: str | None = None
+
+
 # --- Devices ---
 class DeviceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)

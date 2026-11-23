@@ -245,8 +245,9 @@ def test_relay_e2e_sealed_request_through_node_app(client, user_a):
         assert e2e_ok["op"] == "e2e-ok"
         node_pub = base64.b64decode(e2e_ok["node_pubkey"])
         shared = pc.x25519_shared(d_priv, node_pub)
-        session_key = pc.derive_session_key(shared, "nexus-relay-v1")
-        assert session_key == bridge.session_key, "device and node must derive the same key"
+        transcript = d_pub + node_pub
+        k_dev_to_node, k_node_to_dev = pc.derive_direction_keys(shared, transcript)
+        assert k_node_to_dev == bridge.key_node_to_dev, "device and node must derive the same key"
 
         # --- 2. sealed request through the node's own app ---
         req = {
@@ -259,7 +260,7 @@ def test_relay_e2e_sealed_request_through_node_app(client, user_a):
             ).decode(),
         }
         nonce = pc.new_nonce()
-        sealed = pc.seal_frame(session_key, nonce, json.dumps(req).encode()).decode()
+        sealed = pc.seal_frame(k_dev_to_node, nonce, json.dumps(req).encode()).decode()
         await bridge._on_frame(tx, json.dumps({
             "v": 1, "id": "r1", "op": "req", "nonce": nonce, "payload": sealed,
         }))
@@ -268,7 +269,7 @@ def test_relay_e2e_sealed_request_through_node_app(client, user_a):
         assert reply["op"] == "res" and reply["id"] == "r1"
 
         # --- 3. the device opens the sealed response ---
-        raw = pc.open_frame(session_key, reply["nonce"], reply["payload"].encode())
+        raw = pc.open_frame(k_node_to_dev, reply["nonce"], reply["payload"].encode())
         assert raw is not None, "seal must open with the shared session key"
         response = json.loads(raw)
         assert response["status"] == 201, response
@@ -289,11 +290,12 @@ def test_relay_e2e_sealed_request_through_node_app(client, user_a):
             "headers": {}, "body_b64": "",
         }
         n2 = pc.new_nonce()
-        s2 = pc.seal_frame(session_key, n2, json.dumps(bad).encode()).decode()
+        s2 = pc.seal_frame(k_dev_to_node, n2, json.dumps(bad).encode()).decode()
         await bridge._on_frame(tx, json.dumps({
             "v": 1, "id": "r3", "op": "req", "nonce": n2, "payload": s2,
         }))
-        raw3 = pc.open_frame(session_key, n2, json.loads(tx.sent[3])["payload"].encode())
+        reply3 = json.loads(tx.sent[3])
+        raw3 = pc.open_frame(k_node_to_dev, reply3["nonce"], reply3["payload"].encode())
         assert json.loads(raw3)["status"] == 401, "relay must not bypass the node's auth"
 
     asyncio.run(scenario())

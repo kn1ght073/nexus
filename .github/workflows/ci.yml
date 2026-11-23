@@ -1,9 +1,13 @@
 name: core-api CI
+
 on:
   push:
     paths: ["services/core-api/**", ".github/workflows/ci.yml"]
   pull_request:
     paths: ["services/core-api/**"]
+
+permissions:
+  contents: read
 
 jobs:
   tests:
@@ -14,8 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        # v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt pytest httpx
-      - run: python -m pytest tests/ -q
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e . -r requirements.txt
+      - name: Boot smoke test (F3 verification)
+        run: python -c "import nexus_core.main; print('Boot verification successful')"
+      - name: Run test suite
+        run: python -m pytest tests/ -q

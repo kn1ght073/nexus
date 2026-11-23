@@ -30,6 +30,9 @@ handshake).
 """
 import asyncio
 import base64
+from collections import deque
+import hashlib
+import hmac
 import json
 import time
 from typing import Any
@@ -48,10 +51,13 @@ class NodeBridge:
         self.node_id = node_id
         self.api_key = api_key
         self.app = app  # the FastAPI app to execute relayed requests against
-        self.session_key: bytes | None = None  # set after ECDH; None = no device yet
+        self.key_dev_to_node: bytes | None = None
+        self.key_node_to_dev: bytes | None = None
+        self.session_key: bytes | None = None  # set after ECDH; legacy compatibility
         self.device_pubkey: bytes | None = None
         self.ephemeral_private: bytes | None = None
         self.seen_nonces: set[str] = set()
+        self._nonces_order: deque[str] = deque(maxlen=1024)
         self.pending: dict[str, asyncio.Future] = {}
         self._ws = None
         self._task: asyncio.Task | None = None
@@ -112,10 +118,18 @@ class NodeBridge:
             if shared == b"\x00" * 32:
                 await ws.send(json.dumps({"op": "e2e-reject", "detail": "bad key"}))
                 return
-            self.session_key = crypto.derive_session_key(shared, "nexus-relay-v1")
+            transcript = self.device_pubkey + node_pub
+            self.key_dev_to_node, self.key_node_to_dev = crypto.derive_direction_keys(shared, transcript)
+            self.session_key = self.key_node_to_dev
             self.ephemeral_private = None  # zeroize: never needed again
             self.seen_nonces.clear()
-            await ws.send(json.dumps({"op": "e2e-ok", "node_pubkey": base64.b64encode(node_pub).decode()}))
+            self._nonces_order.clear()
+            transcript_mac = hmac.new(self.api_key.encode("utf-8"), transcript, hashlib.sha256).hexdigest()
+            await ws.send(json.dumps({
+                "op": "e2e-ok",
+                "node_pubkey": base64.b64encode(node_pub).decode(),
+                "transcript_mac": transcript_mac,
+            }))
             return
 
         if op == "req":
@@ -124,7 +138,7 @@ class NodeBridge:
 
     async def _on_request(self, ws, frame: dict) -> None:
         """Unwrap a sealed request, execute it locally, seal the response."""
-        if self.session_key is None:
+        if self.key_dev_to_node is None and self.session_key is None:
             await ws.send(json.dumps({"v": 1, "id": frame.get("id"), "op": "res",
                                       "error": "no session"}))
             return
@@ -133,12 +147,14 @@ class NodeBridge:
             await ws.send(json.dumps({"v": 1, "id": frame.get("id"), "op": "res",
                                       "error": "replay"}))
             return
+        if len(self._nonces_order) == self._nonces_order.maxlen:
+            oldest = self._nonces_order.popleft()
+            self.seen_nonces.discard(oldest)
         self.seen_nonces.add(nonce)
-        # cap the replay window (bounded memory)
-        if len(self.seen_nonces) > 1024:
-            self.seen_nonces = set(list(self.seen_nonces)[-512:])
+        self._nonces_order.append(nonce)
 
-        raw = crypto.open_frame(self.session_key, nonce, frame.get("payload", "").encode())
+        decrypt_key = self.key_dev_to_node or self.session_key
+        raw = crypto.open_frame(decrypt_key, nonce, frame.get("payload", "").encode())
         if raw is None:
             await ws.send(json.dumps({"v": 1, "id": frame.get("id"), "op": "res",
                                       "error": "bad seal"}))
@@ -151,11 +167,13 @@ class NodeBridge:
             return
 
         response = await self._execute(request)
+        encrypt_key = self.key_node_to_dev or self.session_key
+        res_nonce = crypto.new_nonce()
         sealed = crypto.seal_frame(
-            self.session_key, nonce, json.dumps(response).encode()
+            encrypt_key, res_nonce, json.dumps(response).encode()
         ).decode()
         await ws.send(json.dumps({"v": 1, "id": frame.get("id"), "op": "res",
-                                  "nonce": nonce, "payload": sealed}))
+                                  "nonce": res_nonce, "payload": sealed}))
 
     # ------------------------------------------------------------- execution
     async def _execute(self, request: dict) -> dict:

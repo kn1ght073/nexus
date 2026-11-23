@@ -49,13 +49,18 @@ async def submit_audio(
     """Voice capture: persist the blob to the storage root and queue STT."""
     root = Path(settings.storage_roots[0]) / "inbox"
     root.mkdir(parents=True, exist_ok=True)
-    target = root / f"{current_user.id}_{audio.filename or 'voice'}"
+    safe_name = Path(audio.filename or "voice").name
+    target = root / f"{current_user.id}_{safe_name}"
     size = 0
     with target.open("wb") as out:
         while chunk := await audio.read(1024 * 1024):
             size += len(chunk)
+            if size > settings.max_body_bytes:
+                target.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Payload too large")
             out.write(chunk)
     if size == 0:
+        target.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail="empty upload")
 
     item = InboxItem(kind="audio", content=str(target), owner_id=current_user.id, status="pending")

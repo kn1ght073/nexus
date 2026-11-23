@@ -6,9 +6,11 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 email-validator==2.3.0
 argon2-cffi==25.1.0
-PyJWT==2.12.1
+PyJWT>=2.14.0
 websockets==16.0
-python-multipart==0.0.20  # inbox Form/File endpoints
+python-multipart>=0.0.31  # inbox Form/File endpoints
+requests==2.32.5          # GitHub OAuth & external HTTP
+cryptography>=44.0.0      # Vetted AEAD (ChaCha20Poly1305), HKDF, X25519
 
 # Hosted control plane (Postgres on Neon/Supabase)
 psycopg2-binary==2.9.10

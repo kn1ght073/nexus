@@ -22,7 +22,7 @@ Public-internet hardening applied here:
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -63,13 +63,34 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Reject declared bodies larger than settings.max_body_bytes with 413."""
+    """Reject bodies larger than settings.max_body_bytes with 413 (both declared and chunked/streaming)."""
 
-    async def dispatch(self, request, call_next):
+    async def dispatch(self, request: Request, call_next):
+        max_bytes = get_settings().max_body_bytes
         declared = request.headers.get("content-length")
-        if declared and declared.isdigit() and int(declared) > settings.max_body_bytes:
+        if declared and declared.isdigit() and int(declared) > max_bytes:
             return JSONResponse({"detail": "Payload too large"}, status_code=413)
-        return await call_next(request)
+
+        # For chunked or undeclared content-length, wrap the receive callable to enforce budget
+        received = 0
+        original_receive = request.receive
+
+        async def receive_with_cap():
+            nonlocal received
+            message = await original_receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > max_bytes:
+                    raise HTTPException(status_code=413, detail="Payload too large")
+            return message
+
+        request._receive = receive_with_cap
+        try:
+            return await call_next(request)
+        except HTTPException as exc:
+            if exc.status_code == 413:
+                return JSONResponse({"detail": "Payload too large"}, status_code=413)
+            raise
 
 
 def create_app() -> FastAPI:

@@ -146,12 +146,39 @@ def register(
 
 @app.command()
 def logout():
-    """Forget the stored credentials."""
+    """Revoke credentials server-side and clear local storage."""
+    if config.token:
+        try:
+            requests.post(
+                f"{config.api_url}/api/auth/logout",
+                headers={"Authorization": f"Bearer {config.token}"},
+                json={"refresh_token": config.refresh_token},
+                timeout=3,
+            )
+        except Exception:
+            pass
+        if config.control_plane_url and config.control_plane_url != config.api_url:
+            try:
+                requests.post(
+                    f"{config.control_plane_url}/api/auth/logout",
+                    headers={"Authorization": f"Bearer {config.token}"},
+                    json={"refresh_token": config.refresh_token},
+                    timeout=3,
+                )
+            except Exception:
+                pass
     config.token = None
     config.refresh_token = None
     config.email = None
+    config.node_id = None
+    config.node_api_key = None
     save_config(config)
-    console.print(Panel("Credentials cleared.", title="[bold green]Logged out[/bold green]", border_style="green", expand=False))
+    try:
+        from pathlib import Path as _P
+        _P("nexus_node.json").unlink(missing_ok=True)
+    except Exception:
+        pass
+    console.print(Panel("Credentials cleared and session revoked.", title="[bold green]Logged out[/bold green]", border_style="green", expand=False))
 
 
 @app.command()
@@ -797,13 +824,18 @@ def node_claim(
         import json as _j
         from pathlib import Path as _Path
 
-        _Path("nexus_node.json").write_text(
+        node_file = _Path("nexus_node.json")
+        node_file.write_text(
             _j.dumps({
                 "control_plane_url": base,
                 "node_id": node["id"],
                 "api_key": node["api_key"],
             }, indent=2), encoding="utf-8",
         )
+        try:
+            node_file.chmod(0o600)
+        except OSError:
+            pass
         console.print(
             Panel(
                 f"Node [bold cyan]{node['name']}[/bold cyan] (#{node['id']}) is now the [bold green]active main server[/bold green].\n"

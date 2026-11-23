@@ -24,17 +24,15 @@ services):
 
 3. E2E SEALING: every request/response payload is sealed with a session
    key agreed between the DEVICE and the NODE alone (X25519 ECDH over the
-   control plane — standard ephemeral Diffie-Hellman; the courier sees
-   only public keys and ciphertext). On top of confidentiality this means
-   a compromised control plane STILL cannot read or forge user data —
-   the trust base collapses to the two endpoints you own.
+   control plane with ChaCha20Poly1305 AEAD and direction-separated keys).
+   The control plane routes frames without ability to inspect or forge
+   plaintext.
 
 4. AUTHORIZATION: relayed requests run through the node's normal FastAPI
    stack — the device's scoped token is enforced there, so ownership
    filtering and scope checks apply exactly as on the LAN.
 
-Routes live in routers/relay.py; crypto helpers here (pure-Python X25519
-~40 lines — verified against the `cryptography` package in tests).
+Routes live in routers/relay.py; crypto helpers here.
 """
 import base64
 import hashlib
@@ -42,9 +40,14 @@ import hmac
 import secrets
 from typing import Optional
 
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
 
 # ---------------------------------------------------------------------------
-# X25519 (RFC 7748) — pure Python so the Core has zero crypto dependencies.
+# X25519 (RFC 7748) — pure Python Montgomery ladder.
 # The test suite cross-verifies against the `cryptography` package.
 # ---------------------------------------------------------------------------
 P = 2**255 - 19
@@ -53,7 +56,6 @@ _A24 = 121665
 
 def _x25519_mult(k: int, u: int) -> int:
     """Scalar multiplication on Curve25519 (Montgomery ladder, RFC 7748)."""
-    # RFC 7748: ignore the most significant bit of the u-coordinate.
     u &= (1 << 255) - 1
     k &= (1 << 255) - 8
     x1, x2, z2, x3, z3 = u, 1, 0, u, 1
@@ -104,8 +106,37 @@ def x25519_shared(private: bytes, peer_public: bytes) -> bytes:
 
 
 def derive_session_key(shared_secret: bytes, context: str) -> bytes:
-    """SHA256(shared_secret || context) — domain-separated key derivation."""
-    return hashlib.sha256(shared_secret + b"|" + context.encode()).digest()
+    """Derive a 32-byte key using HKDF-SHA256."""
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=context.encode("utf-8"),
+    )
+    return hkdf.derive(shared_secret)
+
+
+def derive_direction_keys(shared_secret: bytes, transcript: bytes = b"") -> tuple[bytes, bytes]:
+    """Derive distinct direction keys via HKDF-SHA256 (dev->node and node->dev).
+    
+    Prevents key/nonce reuse across directions.
+    """
+    salt = hashlib.sha256(transcript).digest() if transcript else b"nexus-relay-v2-salt"
+    k_dev_to_node = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        info=b"dev>node:nexus-relay-v2",
+    ).derive(shared_secret)
+
+    k_node_to_dev = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        info=b"node>dev:nexus-relay-v2",
+    ).derive(shared_secret)
+
+    return k_dev_to_node, k_node_to_dev
 
 
 def generate_pairing_code() -> str:
@@ -114,12 +145,7 @@ def generate_pairing_code() -> str:
 
 
 def pairing_code_challenge(code: str, salt: str) -> str:
-    """Constant-time-verifiable challenge for storing/transmitting the code.
-
-    The control plane stores only salt+challenge (never the plaintext), the
-    same pattern as password hashing. HMAC-SHA256 keyed with the salt keeps
-    guessing offline impossible even if the DB leaks.
-    """
+    """Constant-time-verifiable challenge for storing/transmitting the code."""
     return hmac.new(salt.encode(), code.encode(), hashlib.sha256).hexdigest()
 
 
@@ -132,43 +158,49 @@ def new_salt() -> str:
 
 
 def new_nonce() -> str:
-    """32 hex chars of entropy for frame nonces (replay defense)."""
-    return secrets.token_hex(16)
+    """24 hex chars (12 bytes) of entropy for ChaCha20Poly1305 frame nonces."""
+    return secrets.token_hex(12)
 
 
-def seal_frame(key: bytes, nonce: str, plaintext: bytes) -> bytes:
-    """Encrypt one relay frame: HMAC(key, nonce||ciphertext) || ciphertext.
+def _normalize_nonce(nonce: str | bytes) -> bytes:
+    """Normalize input nonce to 12 bytes for ChaCha20Poly1305."""
+    if isinstance(nonce, str):
+        try:
+            raw = bytes.fromhex(nonce)
+            if len(raw) >= 12:
+                return raw[:12]
+        except ValueError:
+            pass
+        return hashlib.sha256(nonce.encode("utf-8")).digest()[:12]
+    if isinstance(nonce, bytes):
+        if len(nonce) == 12:
+            return nonce
+        if len(nonce) > 12:
+            return nonce[:12]
+        return hashlib.sha256(nonce).digest()[:12]
+    raise ValueError(f"Invalid nonce type: {type(nonce)}")
 
-    The payload is masked with a nonce-seeded keystream, then tagged —
-    dependency-free authenticated encryption. (AES-GCM via `cryptography`
-    can replace this transparently later — same interface.)
+
+def seal_frame(key: bytes, nonce: str | bytes, plaintext: bytes) -> bytes:
+    """Encrypt one relay frame using ChaCha20Poly1305 AEAD.
+    
+    Returns base64-encoded ciphertext + 16-byte Poly1305 tag.
     """
-    mask = hashlib.sha256(key + nonce.encode()).digest()
-    stream = bytearray()
-    while len(stream) < len(plaintext):
-        mask = hashlib.sha256(key + mask).digest()
-        stream.extend(mask)
-    ciphertext = bytes(p ^ stream[i] for i, p in enumerate(plaintext))
-    tag = hmac.new(key, nonce.encode() + ciphertext, hashlib.sha256).digest()
-    return base64.b64encode(tag + ciphertext)
+    n_bytes = _normalize_nonce(nonce)
+    chacha = ChaCha20Poly1305(key)
+    ciphertext_and_tag = chacha.encrypt(n_bytes, plaintext, None)
+    return base64.b64encode(ciphertext_and_tag)
 
 
-def open_frame(key: bytes, nonce: str, sealed: bytes) -> Optional[bytes]:
-    """Verify + decrypt one relay frame; None on tamper or bad encoding."""
+def open_frame(key: bytes, nonce: str | bytes, sealed: bytes) -> Optional[bytes]:
+    """Verify + decrypt one relay frame using ChaCha20Poly1305 AEAD.
+    
+    Returns decrypted plaintext or None if tampered or invalid.
+    """
     try:
         raw = base64.b64decode(sealed, validate=False)
-    except Exception:
-        return None  # malformed/tampered base64 is just a bad frame
-    if len(raw) < 32:
+        n_bytes = _normalize_nonce(nonce)
+        chacha = ChaCha20Poly1305(key)
+        return chacha.decrypt(n_bytes, raw, None)
+    except (InvalidTag, Exception):
         return None
-    tag, ciphertext = raw[:32], raw[32:]
-    expected = hmac.new(key, nonce.encode() + ciphertext, hashlib.sha256).digest()
-    if not hmac.compare_digest(tag, expected):
-        return None
-    mask = hashlib.sha256(key + nonce.encode()).digest()
-    stream = bytearray()
-    while len(stream) < len(ciphertext):
-        mask = hashlib.sha256(key + mask).digest()
-        stream.extend(mask)
-    return bytes(c ^ stream[i] for i, c in enumerate(ciphertext))
-

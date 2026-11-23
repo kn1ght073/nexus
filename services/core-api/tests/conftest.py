@@ -37,6 +37,7 @@ def env(storage_root, tmp_path_factory):
     db_dir = tmp_path_factory.mktemp("db")
     overrides = {
         "NEXUS_DATABASE_PATH": str(db_dir / "test.db"),
+        "NEXUS_DATABASE_URL": "",  # Protect ambient Postgres from being hit/dropped during tests (F20)
         "NEXUS_JWT_SECRET_FILE": str(db_dir / "jwt_secret"),
         # list[str] fields are JSON-decoded from env by pydantic-settings
         "NEXUS_STORAGE_ROOTS": json.dumps([str(storage_root)]),

@@ -5,6 +5,7 @@ Replaces the mock auth (mock-token-123 / auto-created users) that the Errors
 first boot and persisted next to the database; tokens carry the user id,
 device id and scope so the dependency chain can enforce least privilege.
 """
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
@@ -66,11 +67,17 @@ def verify_password(hashed: str, password: str) -> bool:
         return False  # malformed hash etc.
 
 
+def hash_token(token: str) -> str:
+    """SHA256 hex digest of token for server-side session registry."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def create_token(
     user_id: int,
     token_type: Literal["access", "refresh"] = "access",
     device_id: int | None = None,
     scope: str = "user",
+    jti: str | None = None,
 ) -> str:
     if token_type == "access":
         expiry = datetime.now(timezone.utc) + timedelta(minutes=_settings.access_token_minutes)
@@ -80,6 +87,7 @@ def create_token(
         "sub": str(user_id),
         "type": token_type,
         "scope": scope,
+        "jti": jti or secrets.token_hex(16),
         "exp": expiry,
         "iat": datetime.now(timezone.utc),
     }

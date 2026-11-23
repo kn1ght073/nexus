@@ -121,6 +121,19 @@ _pending_authorize: dict[str, dict] = {}   # state -> {user_id, expires}
 _highlights_cache: dict[int, dict] = {}    # user_id -> {payload, expires}
 
 
+def _sweep_pending_oauth():
+    now = time.time()
+    for k in list(_pending_device.keys()):
+        if _pending_device[k].get("expires", 0) < now:
+            _pending_device.pop(k, None)
+    for k in list(_pending_authorize.keys()):
+        if _pending_authorize[k].get("expires", 0) < now:
+            _pending_authorize.pop(k, None)
+    for k in list(_highlights_cache.keys()):
+        if _highlights_cache[k].get("expires", 0) < now:
+            _highlights_cache.pop(k, None)
+
+
 def _github_login(ep: str) -> str:
     return f"{_settings.github_login_base.rstrip('/')}/{ep.lstrip('/')}"
 
@@ -194,6 +207,11 @@ def device_start(
 ):
     """Begin the gh-CLI-style device flow: returns the user code to enter at
     github.com/login/device plus the device_code this client will poll."""
+    _sweep_pending_oauth()
+    user_pending = sum(1 for v in _pending_device.values() if v.get("user_id") == current_user.id)
+    if user_pending >= 5:
+        raise HTTPException(status_code=429, detail="Too many pending device authorizations")
+
     if not _settings.github_client_id:
         raise HTTPException(
             status_code=503,
@@ -276,6 +294,11 @@ def authorize_url(
     'Connect GitHub' button. The returned state is bound to this user and
     single-use; the app opens the URL in a browser and then posts the
     code+state it received back to /authorize/callback."""
+    _sweep_pending_oauth()
+    user_pending = sum(1 for v in _pending_authorize.values() if v.get("user_id") == current_user.id)
+    if user_pending >= 5:
+        raise HTTPException(status_code=429, detail="Too many pending authorizations")
+
     if not _settings.github_client_id:
         raise HTTPException(status_code=503, detail="GitHub linking is not configured (missing client id).")
     scopes = (body.scopes if body and body.scopes else None) or _settings.github_scopes

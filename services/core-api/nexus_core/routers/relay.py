@@ -201,6 +201,16 @@ def complete_pairing(request: PairingCompleteRequest, db: Session = Depends(get_
     relaying that token to the node gives it exactly those powers.
     """
     session, owner_id = _validate_pairing(db, request.pairing_id, request.code)
+    # Atomic transition from pending to completed (F13)
+    rows = (
+        db.query(PairingSession)
+        .filter(PairingSession.id == session.id, PairingSession.status == "pending")
+        .update({"status": "completed"}, synchronize_session=False)
+    )
+    db.commit()
+    if rows != 1:
+        raise HTTPException(status_code=409, detail="Pairing session already redeemed or completed")
+
     device = Device(
         name=request.device_name or "Paired device",
         platform=request.platform,
@@ -209,7 +219,6 @@ def complete_pairing(request: PairingCompleteRequest, db: Session = Depends(get_
         owner_id=owner_id,
     )
     db.add(device)
-    session.status = "completed"
     db.commit()
     db.refresh(device)
     node = db.query(Node).filter(Node.owner_id == owner_id, Node.is_active.is_(True)).first()
@@ -302,7 +311,17 @@ async def device_attach_socket(websocket: WebSocket):
     device_id = None
     node_id = None
     try:
-        hello = json.loads(await websocket.receive_text())
+        try:
+            raw_hello = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            hello = json.loads(raw_hello)
+        except asyncio.TimeoutError:
+            await websocket.send_json({"ok": False, "detail": "Handshake timed out"})
+            await websocket.close(code=4408)
+            return
+        except Exception:
+            await websocket.close(code=4400)
+            return
+
         try:
             session, owner_id = _validate_pairing(db, hello.get("pairing_id", -1), hello.get("code", ""))
         except HTTPException as exc:
@@ -314,6 +333,18 @@ async def device_attach_socket(websocket: WebSocket):
             await websocket.close(code=4429)
             return
 
+        # Atomic transition from pending to completed (F13)
+        rows = (
+            db.query(PairingSession)
+            .filter(PairingSession.id == session.id, PairingSession.status == "pending")
+            .update({"status": "completed"}, synchronize_session=False)
+        )
+        db.commit()
+        if rows != 1:
+            await websocket.send_json({"ok": False, "detail": "Pairing session already redeemed"})
+            await websocket.close(code=4409)
+            return
+
         device = Device(
             name=hello.get("device_name") or "Paired device",
             platform=hello.get("platform", "android"),
@@ -322,7 +353,6 @@ async def device_attach_socket(websocket: WebSocket):
             owner_id=owner_id,
         )
         db.add(device)
-        session.status = "completed"
         db.commit()
         db.refresh(device)
         device_id = device.id
