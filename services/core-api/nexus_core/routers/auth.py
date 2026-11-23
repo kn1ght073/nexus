@@ -388,9 +388,25 @@ def google_auth_callback(
     if not email:
         raise HTTPException(status_code=400, detail="Google identity missing email")
 
-    # Enforce admission allowlist
+    # Enforce admission allowlist (supports exact emails, @domain.com, or *@domain.com)
     if s.allowed_google_emails:
-        if email not in s.allowed_google_emails:
+        allowed = False
+        domain = email.split("@")[-1] if "@" in email else ""
+        for rule in s.allowed_google_emails:
+            rule_clean = rule.strip().lower()
+            if rule_clean == email:
+                allowed = True
+                break
+            # Domain pattern support: "@domain.com" or "*@domain.com" or "domain.com"
+            if rule_clean.startswith("*@"):
+                if domain == rule_clean[2:]:
+                    allowed = True
+                    break
+            elif rule_clean.startswith("@"):
+                if domain == rule_clean[1:]:
+                    allowed = True
+                    break
+        if not allowed:
             log_activity(db, user_id=None, action="auth.google_rejected", detail=f"email not allowed: {email}")
             db.commit()
             raise HTTPException(status_code=403, detail="Email is not authorized for admission")

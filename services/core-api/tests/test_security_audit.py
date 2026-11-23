@@ -205,15 +205,18 @@ def test_google_auth_allowlist_admission_gate(client, monkeypatch):
     assert r_reject.status_code == 403
     assert "Email is not authorized for admission" in r_reject.json()["detail"]
 
-    # Flow for authorized email
+    # Flow for authorized email (also tests domain wildcard pattern)
+    monkeypatch.setenv("NEXUS_ALLOWED_GOOGLE_EMAILS", "*@company.com, admin@nexus.com")
+    settings_mod.get_settings.cache_clear()
+
     r_start2 = client.post("/api/auth/google/start", json={})
     state2 = r_start2.json()["state"]
 
     authorized_claims = {
         "sub": "google-admin-002",
-        "email": "allowed@example.com",
+        "email": "employee@company.com",
         "email_verified": True,
-        "name": "Allowed Admin",
+        "name": "Company Employee",
     }
     good_code = "mock_token_" + base64.urlsafe_b64encode(json.dumps(authorized_claims).encode()).decode()
 
