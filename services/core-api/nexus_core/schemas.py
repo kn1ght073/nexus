@@ -26,6 +26,7 @@ class UserLogin(BaseModel):
 class UserOut(BaseModel):
     id: int
     email: EmailStr
+    role: str = "user"
     is_active: bool
     created_at: datetime
 

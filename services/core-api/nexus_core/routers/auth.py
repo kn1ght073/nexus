@@ -107,11 +107,14 @@ async def register(user_in: UserCreate, request: Request, db: Session = Depends(
     if db.query(User).filter(User.email == user_in.email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
     hashed = await _run_hash(hash_password, user_in.password)
-    user = User(email=user_in.email, hashed_password=hashed)
+    # First registered user automatically becomes the cluster 'owner'
+    is_first_user = db.query(User).count() == 0
+    role = "owner" if is_first_user else "user"
+    user = User(email=user_in.email, hashed_password=hashed, role=role)
     db.add(user)
     db.commit()
     db.refresh(user)
-    log_activity(db, user_id=user.id, action="user.registered", detail=user.email)
+    log_activity(db, user_id=user.id, action="user.registered", detail=f"{user.email} (role: {role})")
     db.commit()
     return user
 
@@ -245,6 +248,46 @@ def logout(
     log_activity(db, user_id=current_user.id, action="user.logout", detail="")
     db.commit()
     return {"ok": True}
+
+
+@router.get("/sessions", response_model=list[SessionOut])
+def list_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List active and historical authentication sessions for the authenticated identity."""
+    return (
+        db.query(SessionRecord)
+        .filter(SessionRecord.user_id == current_user.id)
+        .order_by(SessionRecord.issued_at.desc())
+        .limit(50)
+        .all()
+    )
+
+
+@router.delete("/sessions/{session_id}")
+def revoke_session(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke an active session and all related tokens in its rotation lineage."""
+    sess = db.query(SessionRecord).filter(
+        SessionRecord.id == session_id,
+        SessionRecord.user_id == current_user.id,
+    ).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Invalidate whole token family to guarantee revocation
+    db.query(SessionRecord).filter(
+        SessionRecord.family_id == sess.family_id,
+        SessionRecord.user_id == current_user.id,
+    ).update({"revoked_at": utcnow()}, synchronize_session=False)
+
+    log_activity(db, user_id=current_user.id, action="auth.session_revoked", detail=f"session_id={session_id}")
+    db.commit()
+    return {"ok": True, "detail": "Session revoked"}
 
 
 @router.get("/sessions", response_model=list[SessionOut])
@@ -435,10 +478,13 @@ def google_auth_callback(
         if existing_user:
             user = existing_user
         else:
+            is_first_user = db.query(User).count() == 0
+            role = "owner" if is_first_user else "user"
             user = User(
                 email=email,
                 hashed_password=None,
                 display_name=id_claims.get("name") or email.split("@")[0],
+                role=role,
                 is_active=True,
             )
             db.add(user)
