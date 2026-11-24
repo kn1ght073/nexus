@@ -3,6 +3,8 @@ import {
   getServerUrl,
   saveAuthTokens,
   getAccessToken,
+  getHostToken,
+  setHostToken,
   clearAuthTokens,
   DEFAULT_SERVER_URL,
 } from '../src/api/client';
@@ -26,7 +28,11 @@ describe('NEXUS Mobile ApiClient & Token Handling', () => {
     await saveAuthTokens('jwt_access_123', 'jwt_refresh_456');
     expect(getAccessToken()).toBe('jwt_access_123');
 
+    await setHostToken('node_host_token_789');
+    expect(getHostToken()).toBe('node_host_token_789');
+
     await clearAuthTokens();
     expect(getAccessToken()).toBeNull();
+    expect(getHostToken()).toBeNull();
   });
 });

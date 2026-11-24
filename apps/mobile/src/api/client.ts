@@ -3,12 +3,14 @@ import { getSecureItem, setSecureItem, deleteSecureItem } from '../utils/secureS
 export const DEFAULT_SERVER_URL = 'https://nexus-control-plane-uvi8.onrender.com';
 const SERVER_URL_KEY = 'nexus_server_url';
 const HOST_URL_KEY = 'nexus_host_url';
+const HOST_TOKEN_KEY = 'nexus_host_token';
 const LAST_SYNC_KEY = 'nexus_last_sync_timestamp';
 const ACCESS_TOKEN_KEY = 'nexus_access_token';
 const REFRESH_TOKEN_KEY = 'nexus_refresh_token';
 
 let activeServerUrl = DEFAULT_SERVER_URL;
 let activeHostUrl: string | null = null;
+let activeHostToken: string | null = null;
 let activeAccessToken: string | null = null;
 let activeRefreshToken: string | null = null;
 
@@ -21,13 +23,14 @@ export async function initApiClient(): Promise<{ serverUrl: string; hostUrl: str
   if (storedHost) {
     activeHostUrl = storedHost.trim().replace(/\/+$/, '');
   }
+  activeHostToken = await getSecureItem(HOST_TOKEN_KEY);
   activeAccessToken = await getSecureItem(ACCESS_TOKEN_KEY);
   activeRefreshToken = await getSecureItem(REFRESH_TOKEN_KEY);
 
   return {
     serverUrl: activeServerUrl,
     hostUrl: activeHostUrl,
-    hasToken: Boolean(activeAccessToken),
+    hasToken: Boolean(activeAccessToken || activeHostToken),
   };
 }
 
@@ -45,6 +48,19 @@ export function getHostUrl(): string | null {
   return activeHostUrl;
 }
 
+export function getHostToken(): string | null {
+  return activeHostToken;
+}
+
+export async function setHostToken(token: string | null): Promise<void> {
+  activeHostToken = token;
+  if (token) {
+    await setSecureItem(HOST_TOKEN_KEY, token);
+  } else {
+    await deleteSecureItem(HOST_TOKEN_KEY);
+  }
+}
+
 export async function setHostUrl(url: string | null): Promise<void> {
   if (url) {
     const normalized = url.trim().replace(/\/+$/, '');
@@ -52,8 +68,33 @@ export async function setHostUrl(url: string | null): Promise<void> {
     await setSecureItem(HOST_URL_KEY, normalized);
   } else {
     activeHostUrl = null;
+    activeHostToken = null;
     await deleteSecureItem(HOST_URL_KEY);
+    await deleteSecureItem(HOST_TOKEN_KEY);
   }
+}
+
+export async function exchangeCpTokenOnHost(hostUrl: string, cpToken: string): Promise<string | null> {
+  try {
+    const norm = hostUrl.trim().replace(/\/+$/, '');
+    const res = await fetch(`${norm}/api/auth/cp-exchange`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cpToken}`,
+      },
+      body: JSON.stringify({ token: cpToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (data?.access_token) {
+      await setHostToken(data.access_token);
+      return data.access_token;
+    }
+  } catch (err) {
+    console.warn('[ApiClient] Failed to exchange CP token on host:', err);
+  }
+  return null;
 }
 
 export async function autoDiscoverHost(): Promise<{
@@ -91,12 +132,14 @@ export async function autoDiscoverHost(): Promise<{
       const probe = await testConnection(lanUrl);
       if (probe.ok) {
         await setHostUrl(lanUrl);
+        await exchangeCpTokenOnHost(lanUrl, activeAccessToken);
         return { discovered: true, activeHostUrl: lanUrl, mode: 'lan', node };
       }
     }
 
     // 2. Global route fallback via encrypted control-plane relay
     await setHostUrl(proxyUrl);
+    await exchangeCpTokenOnHost(proxyUrl, activeAccessToken);
     return { discovered: true, activeHostUrl: proxyUrl, mode: 'relay', node };
   } catch (err) {
     console.warn('[ApiClient] Automatic host discovery error:', err);
@@ -170,8 +213,10 @@ export async function saveAuthTokens(access: string, refresh: string): Promise<v
 export async function clearAuthTokens(): Promise<void> {
   activeAccessToken = null;
   activeRefreshToken = null;
+  activeHostToken = null;
   await deleteSecureItem(ACCESS_TOKEN_KEY);
   await deleteSecureItem(REFRESH_TOKEN_KEY);
+  await deleteSecureItem(HOST_TOKEN_KEY);
 }
 
 interface RequestOptions extends RequestInit {
@@ -202,7 +247,8 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
                               cleanPath.startsWith('/api/sync') ||
                               cleanPath.startsWith('/api/host');
 
-  const baseUrl = (isPersonalDataRoute && activeHostUrl) ? activeHostUrl : activeServerUrl;
+  const isHostTarget = Boolean(isPersonalDataRoute && activeHostUrl);
+  const baseUrl = isHostTarget ? activeHostUrl! : activeServerUrl;
   const fullUrl = `${baseUrl}${cleanPath}`;
 
   const headers: Record<string, string> = {
@@ -211,8 +257,12 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
     ...(options.headers as Record<string, string> || {}),
   };
 
-  if (activeAccessToken) {
-    headers['Authorization'] = `Bearer ${activeAccessToken}`;
+  const tokenToUse = isHostTarget ? (activeHostToken || activeAccessToken) : activeAccessToken;
+  if (tokenToUse) {
+    headers['Authorization'] = `Bearer ${tokenToUse}`;
+  }
+  if (isHostTarget && activeHostToken && activeAccessToken && activeAccessToken !== activeHostToken) {
+    headers['X-Nexus-Node-Authorization'] = `Bearer ${activeHostToken}`;
   }
 
   const controller = new AbortController();
@@ -225,6 +275,13 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+
+    if (response.status === 401 && isHostTarget && activeAccessToken) {
+      const exchanged = await exchangeCpTokenOnHost(activeHostUrl!, activeAccessToken);
+      if (exchanged) {
+        return apiClient<T>(path, options);
+      }
+    }
 
     if (response.status === 401 && activeRefreshToken && !path.includes('/auth/refresh')) {
       const refreshed = await tryRefreshToken();
