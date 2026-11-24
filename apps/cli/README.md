@@ -298,14 +298,29 @@ nexus ui
 nexus --no-ui
 ```
 
-### TUI Architecture
+### TUI Cockpit Architecture & Workspace Views
 
-The NEXUS TUI is built on Textual and organized into four primary zones:
+The NEXUS TUI is a desktop-grade personal infrastructure cockpit running inside the terminal, built on Textual and organized into four coordinated zones:
 
-1. **Status Header**: Displays real-time telemetry, active version, authenticated identity (Google OAuth), connected Core API / Control Plane URL, active profile, and live latency ping.
-2. **Navigation Sidebar**: Collapsible tree organized across the 8 canonical categories with command count badges.
-3. **Command Explorer**: Live-filtered data table displaying available commands, arguments, safety ratings, and usage syntax.
-4. **Context Panel**: Comprehensive documentation, syntax breakdown, argument types, destructive warnings, and quick execution trigger.
+1. **Status Header**: Displays real-time telemetry, active CLI version, authenticated identity (Google OAuth), connected Core API / Control Plane URL, active profile, local node binding, and live rolling latency (min/max/avg). Supports privacy email masking.
+2. **Navigation Sidebar**: Collapsible tree organized across two dedicated hierarchies:
+   - **Workspace Views**: Direct access to all 12 operational cockpit sections.
+   - **Command Explorer**: Canonical command categories with badge counters and filtered search.
+3. **Interactive Workspace (Central Stage)**: Switchable multi-view container hosting:
+   - **📊 Overview Dashboard (Default)**: ServerHub-inspired monitoring dashboard with account card, node & control plane card, fleet status, sync overview, CPU/RAM/Disk gauges, recent activity stream, and quick-action toolbar.
+   - **👤 Account & Identity**: Sovereign identity profile, Google OAuth link state, GitHub integration, active sessions, and privacy email masking toggle.
+   - **📱 Device Management**: Interactive hardware fleet table, search filter, device inspection card, pairing workflow, and revocation with safety confirmations.
+   - **🖥️ Edge Nodes**: Claimed edge compute and storage nodes, heartbeat telemetry, liveness checks, and 8-character claim code redemption.
+   - **🌐 Network & Relay**: Mesh topology monitor, active encrypted WebSocket tunnels, E2EE X25519 ECDH + ChaCha20-Poly1305 protocol status, and live ASCII topology diagram.
+   - **🔄 Synchronization**: Engine health, delta tracking across projects, tasks, and notes, per-device sync table, zero-conflict invariants, and manual sync pull.
+   - **📁 Files & Storage**: Super File inspired dual-pane browser with breadcrumbs, directory tree, live plaintext/config file preview pane, deep search, and jailed root path safety.
+   - **📋 Notes & Tasks**: Sticky-note Kanban productivity board with 3-column task execution (Pending, In Progress, Completed), Sticky Notes Wall, and Project progress tracking.
+   - **⚙️ Local Services**: Local machine and edge compute manager for STT (faster-whisper), LLM Runtime (Ollama), Bootstrap virtualenv, and Node Bridge daemon.
+   - **🩺 Diagnostics Doctor**: Automated diagnostics engine with PASS/WARN/FAIL indicators, detailed failure cause explanations, remediation commands, and redacted report export.
+   - **🛡️ Activity & Security**: Immutable sovereign audit event timeline with category/action filters, redacted payload inspection, and audit export.
+   - **🛠️ Settings & Profiles**: Theme customization (Dark, Synthwave, Light), compact mode toggle, email privacy masking, startup view preferences, and profile switching.
+   - **⚡ Command Explorer**: Unified discovery table with live filtering, argument requirements, and safety levels.
+4. **Context Panel**: Selected resource information, command descriptions, parameter syntax, destructive confirmation warnings, and contextual execution triggers.
 
 ### Global Command Palette (`Ctrl+K` or `/`)
 
@@ -315,15 +330,16 @@ Press `/` or `Ctrl+K` from any screen to open the global Command Palette. Suppor
 
 | Key | Action |
 | :--- | :--- |
+| `1` - `9`, `0` | Quick Jump between Cockpit Workspace Views (1: Overview, 2: Account, 3: Devices, 4: Nodes, 5: Network, 6: Sync, 7: Files, 8: Tasks/Notes, 9: Doctor, 0: Activity) |
 | `/` or `Ctrl+K` | Open Global Command Palette & Fuzzy Search |
 | `?` | Toggle Keyboard Shortcuts Help Sheet |
-| `r` | Refresh Status Header & Connection Telemetry |
+| `r` | Refresh Status Header & Active View Telemetry |
 | `p` | Open Profile Switcher & Settings Dialog |
 | `w` | Launch Guided Setup Wizard |
 | `q` | Quit Application |
-| `Tab` / `Shift+Tab` | Cycle focus between Sidebar, Explorer, and Filter Input |
+| `Tab` / `Shift+Tab` | Cycle focus between Sidebar, Workspace, and Context Panel |
 | `Up` / `Down` | Navigate lists and table rows |
-| `Enter` | Activate / Execute selected command |
+| `Enter` | Activate / Execute selected item or command |
 | `Esc` | Close modal dialog or clear active search filter |
 
 ---

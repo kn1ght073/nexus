@@ -56,6 +56,14 @@ Screen {
     text-style: bold;
 }
 
+.stat-badge-degraded {
+    padding: 0 1;
+    margin-left: 1;
+    background: #854d0e;
+    color: #fde047;
+    text-style: bold;
+}
+
 .stat-badge-offline {
     padding: 0 1;
     margin-left: 1;
@@ -104,6 +112,357 @@ Screen {
     scrollbar-size-vertical: 1;
 }
 
+/* Central Content Switcher */
+#main-content-switcher {
+    width: 1fr;
+    height: 100%;
+    background: #080c14;
+}
+
+/* Overview Dashboard */
+#overview-scroll-container {
+    width: 100%;
+    height: 100%;
+    padding: 1;
+}
+
+#overview-welcome-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+    border-bottom: solid #1e293b;
+}
+
+#overview-welcome-title {
+    text-style: bold;
+    color: #38bdf8;
+    width: 1fr;
+}
+
+#overview-refresh-time {
+    color: #64748b;
+}
+
+#overview-actions-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+.btn-quick-act {
+    margin-right: 1;
+    height: 3;
+    min-width: 14;
+    background: #1e293b;
+    color: #38bdf8;
+    border: none;
+    text-style: bold;
+}
+
+.btn-quick-act:hover {
+    background: #0284c7;
+    color: #ffffff;
+}
+
+.overview-cards-row {
+    height: auto;
+    min-height: 11;
+    layout: horizontal;
+    margin-bottom: 1;
+}
+
+.overview-card {
+    width: 1fr;
+    height: auto;
+    min-height: 11;
+    background: #0f172a;
+    border: solid #1e293b;
+    padding: 1;
+    margin-right: 1;
+}
+
+.overview-card:last-child {
+    margin-right: 0;
+}
+
+.overview-full-card {
+    width: 100%;
+    height: auto;
+    background: #0f172a;
+    border: solid #1e293b;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+.card-header {
+    text-style: bold;
+    color: #38bdf8;
+    border-bottom: solid #1e293b;
+    margin-bottom: 1;
+    padding-bottom: 0;
+}
+
+.card-header-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+.card-body {
+    height: auto;
+    color: #e2e8f0;
+}
+
+.btn-sm {
+    height: 3;
+    padding: 0 1;
+    margin-left: 1;
+    min-width: 10;
+    border: none;
+    background: #1e293b;
+    color: #e2e8f0;
+}
+
+.btn-sm:hover {
+    background: #0284c7;
+    color: #ffffff;
+}
+
+/* Generic View Headers */
+.view-header-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+    border-bottom: solid #1e293b;
+}
+
+.view-title {
+    text-style: bold;
+    color: #38bdf8;
+    width: 1fr;
+}
+
+.header-actions {
+    layout: horizontal;
+    align: right middle;
+    width: auto;
+}
+
+.details-row {
+    height: auto;
+    layout: horizontal;
+    margin-bottom: 1;
+}
+
+.details-box {
+    width: 1fr;
+    background: #0f172a;
+    border: solid #1e293b;
+    padding: 1;
+    margin-right: 1;
+}
+
+.details-box:last-child {
+    margin-right: 0;
+}
+
+.box-title {
+    text-style: bold;
+    color: #38bdf8;
+    margin-bottom: 1;
+    border-bottom: solid #1e293b;
+}
+
+.config-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+    padding: 0 1;
+    background: #0d1322;
+    border: solid #1e293b;
+}
+
+.config-label {
+    width: 1fr;
+    color: #94a3b8;
+}
+
+.ascii-diagram {
+    color: #38bdf8;
+    padding: 1;
+    background: #0b1120;
+    border: solid #1e293b;
+}
+
+/* Domain Views Containers */
+#account-scroll-container,
+#network-scroll-container,
+#sync-scroll-container,
+#services-scroll-container,
+#settings-scroll-container {
+    width: 100%;
+    height: 100%;
+    padding: 1;
+}
+
+#devices-container,
+#nodes-container,
+#files-container,
+#productivity-container,
+#diagnostics-container,
+#activity-container {
+    width: 100%;
+    height: 100%;
+    padding: 1;
+}
+
+#devices-split-body,
+#nodes-split-body,
+#files-dual-pane,
+#activity-split-body,
+#diagnostics-split-body {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#devices-table-container,
+#nodes-table-container,
+#files-list-pane,
+#activity-table-container,
+#diag-table-container {
+    width: 1fr;
+    height: 100%;
+    margin-right: 1;
+}
+
+#device-details-card,
+#node-details-card,
+#files-preview-pane,
+#activity-details-card,
+#diag-details-card {
+    width: 38;
+    height: 100%;
+}
+
+#device-action-buttons,
+#node-action-buttons,
+#files-action-buttons,
+#activity-action-buttons,
+#diag-action-buttons {
+    height: 3;
+    layout: horizontal;
+    align: right middle;
+    margin-top: 1;
+}
+
+#files-breadcrumb-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    background: #0d1322;
+    border: solid #1e293b;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.breadcrumb-label {
+    color: #64748b;
+    margin-right: 1;
+}
+
+#files-breadcrumb-path {
+    color: #38bdf8;
+    text-style: bold;
+}
+
+/* Kanban Board for Notes & Tasks */
+#kanban-action-bar,
+#notes-action-bar,
+#projects-action-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+.kanban-section-title {
+    width: 1fr;
+    text-style: bold;
+    color: #94a3b8;
+}
+
+#kanban-columns-container {
+    height: 1fr;
+    min-height: 24;
+    layout: horizontal;
+    margin-bottom: 1;
+}
+
+.kanban-column {
+    width: 1fr;
+    height: 100%;
+    background: #0b1120;
+    border: solid #1e293b;
+    padding: 1;
+    margin-right: 1;
+}
+
+.kanban-column:last-child {
+    margin-right: 0;
+}
+
+.kanban-col-header {
+    text-style: bold;
+    text-align: center;
+    color: #38bdf8;
+    border-bottom: solid #1e293b;
+    margin-bottom: 1;
+    padding-bottom: 0;
+}
+
+.kanban-cards-area {
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#notes-cards-container {
+    height: auto;
+    min-height: 20;
+    padding: 1;
+    background: #0b1120;
+    border: solid #1e293b;
+}
+
+#projects-table-container {
+    height: 1fr;
+    min-height: 20;
+}
+
+/* Settings Controls */
+.btn-group-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+.form-inline-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-top: 1;
+}
+
+.form-inline-row Input {
+    width: 1fr;
+    margin-right: 1;
+}
+
 /* Explorer Panel */
 #explorer-container {
     width: 1fr;
@@ -137,7 +496,17 @@ Screen {
     border: solid #38bdf8;
 }
 
-#commands-table {
+#commands-table,
+#overview-activity-table,
+#account-sessions-table,
+#devices-table,
+#nodes-table,
+#relay-links-table,
+#sync-devices-table,
+#files-table,
+#projects-table,
+#diagnostics-table,
+#activity-table {
     height: 1fr;
     background: #090d18;
     border: solid #1e293b;
@@ -148,6 +517,7 @@ Screen {
     width: 38;
     height: 100%;
     background: #0b1120;
+    border-left: solid #1e293b;
     padding: 1 2;
 }
 
@@ -247,9 +617,58 @@ ModalScreen {
     border: none;
 }
 
+#profiles-option-list {
+    height: 6;
+    min-height: 4;
+    background: #0d1322;
+    border: solid #1e293b;
+    margin-bottom: 1;
+}
+
 /* Footer Keymap */
 Footer {
     background: #0a0f1d;
     color: #64748b;
     border-top: solid #1e293b;
+}
+
+/* Themes */
+.theme-synthwave {
+    background: #18002e;
+    color: #ff71ce;
+}
+
+.theme-synthwave #nexus-brand,
+.theme-synthwave .view-title,
+.theme-synthwave .card-header,
+.theme-synthwave .box-title {
+    color: #01cdfe;
+}
+
+.theme-synthwave .overview-card,
+.theme-synthwave .overview-full-card,
+.theme-synthwave .details-box {
+    background: #2b0c48;
+    border: solid #05ffa1;
+}
+
+.theme-light {
+    background: #f8fafc;
+    color: #1e293b;
+}
+
+.theme-light #nexus-status-header,
+.theme-light #sidebar-container,
+.theme-light #context-container {
+    background: #e2e8f0;
+    color: #0f172a;
+    border: solid #cbd5e1;
+}
+
+.theme-light .overview-card,
+.theme-light .overview-full-card,
+.theme-light .details-box {
+    background: #ffffff;
+    border: solid #cbd5e1;
+    color: #1e293b;
 }

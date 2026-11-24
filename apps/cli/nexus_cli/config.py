@@ -16,6 +16,20 @@ def get_config_path() -> Path:
     return Path(os.environ.get("NEXUS_CLI_CONFIG", Path.home() / ".nexus-cli.json"))
 
 
+def mask_email_address(email: Optional[str]) -> str:
+    """Mask email for privacy, e.g. 'john.doe@example.com' -> 'j***e@example.com'."""
+    if not email:
+        return "Unset"
+    if "@" not in email:
+        return "***"
+    user_part, domain = email.split("@", 1)
+    if len(user_part) <= 2:
+        masked_user = user_part[0] + "***"
+    else:
+        masked_user = user_part[0] + "***" + user_part[-1]
+    return f"{masked_user}@{domain}"
+
+
 # Backward-compatible global reference
 CONFIG_FILE_PATH = get_config_path()
 
@@ -147,7 +161,11 @@ class CLIConfig(BaseModel):
     # UI Preferences
     theme: str = "dark"  # dark, synthwave, light
     accent_color: str = "cyan"
-    default_view: str = "dashboard"
+    default_view: str = "overview"
+    mask_email: bool = False
+    compact_mode: bool = False
+    show_sidebar: bool = True
+    show_context_panel: bool = True
     favourites: List[str] = Field(default_factory=list)
     recent_commands: List[str] = Field(default_factory=list)
 
@@ -300,7 +318,11 @@ def load_config() -> CLIConfig:
         profiles=parsed_profiles,
         theme=data.get("theme", "dark"),
         accent_color=data.get("accent_color", "cyan"),
-        default_view=data.get("default_view", "dashboard"),
+        default_view=data.get("default_view", "overview"),
+        mask_email=bool(data.get("mask_email", False)),
+        compact_mode=bool(data.get("compact_mode", False)),
+        show_sidebar=bool(data.get("show_sidebar", True)),
+        show_context_panel=bool(data.get("show_context_panel", True)),
         favourites=data.get("favourites", []),
         recent_commands=data.get("recent_commands", []),
         api_url=api_url,
@@ -340,6 +362,10 @@ def save_config(config: CLIConfig) -> None:
     raw["theme"] = config.theme
     raw["accent_color"] = config.accent_color
     raw["default_view"] = config.default_view
+    raw["mask_email"] = config.mask_email
+    raw["compact_mode"] = config.compact_mode
+    raw["show_sidebar"] = config.show_sidebar
+    raw["show_context_panel"] = config.show_context_panel
     raw["favourites"] = config.favourites
     raw["recent_commands"] = config.recent_commands
 
