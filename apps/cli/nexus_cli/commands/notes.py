@@ -1,5 +1,7 @@
 """Note capture and listing commands."""
 
+from typing import Optional
+
 import typer
 
 from ..client import get_client
@@ -67,17 +69,21 @@ def list_notes(
 def add_note(
     title: str = typer.Argument(..., help="Title of the note"),
     content: str = typer.Argument(..., help="Body content of the note"),
+    project_id: Optional[int] = typer.Option(None, "--project", "-p", help="Optional project ID"),
 ):
     """Add a quick sovereign note."""
     client = get_client()
     n = None
     source = "Remote Node"
+    body = {"title": title, "content": content}
+    if project_id is not None:
+        body["project_id"] = project_id
     try:
         with status_spinner("Saving note…"):
-            resp = client.post("/api/notes", json={"title": title, "content": content})
+            resp = client.post("/api/notes", json=body)
         n = resp.json()
     except Exception:
-        n = create_local_note(title=title, content=content)
+        n = create_local_note(title=title, content=content, project_id=project_id)
         source = "Local Sovereign Store"
 
     if is_json_mode():

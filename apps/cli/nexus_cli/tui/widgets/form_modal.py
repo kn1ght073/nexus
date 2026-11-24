@@ -13,9 +13,10 @@ from ...registry import CommandMetadata
 class ParameterFormModal(ModalScreen[Optional[Tuple[Dict[str, Any], Dict[str, Any]]]]):
     """Dynamic form dialog for capturing command arguments prior to execution."""
 
-    def __init__(self, command: CommandMetadata) -> None:
+    def __init__(self, command: CommandMetadata, initial_values: Optional[Dict[str, Any]] = None) -> None:
         super().__init__()
         self.command = command
+        self.initial_values = initial_values or {}
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal-box"):
@@ -34,7 +35,9 @@ class ParameterFormModal(ModalScreen[Optional[Tuple[Dict[str, Any], Dict[str, An
                 placeholder = f"Enter {arg.name}..."
                 if arg.default is not None:
                     placeholder += f" [Default: {arg.default}]"
-                yield Input(placeholder=placeholder, id=f"arg_{arg.name}")
+                init_val = self.initial_values.get(arg.name)
+                val_str = str(init_val) if init_val is not None else ""
+                yield Input(value=val_str, placeholder=placeholder, id=f"arg_{arg.name}")
 
             # Options inputs
             for opt in self.command.options:

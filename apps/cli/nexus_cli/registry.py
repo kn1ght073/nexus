@@ -538,18 +538,23 @@ def _handle_notes_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRes
 def _handle_notes_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     title = args.get("title", "")
     content = args.get("content", "")
+    pid = args.get("project_id") or opts.get("project") or opts.get("project_id")
+    project_id_val = int(pid) if pid is not None and str(pid).isdigit() else None
     data = None
     source = "Remote Node"
+    body: Dict[str, Any] = {"title": title, "content": content}
+    if project_id_val is not None:
+        body["project_id"] = project_id_val
     try:
         client = get_client()
-        resp = client.post("/api/notes", json={"title": title, "content": content}, timeout=5)
+        resp = client.post("/api/notes", json=body, timeout=5)
         if resp.status_code in (200, 201):
             data = resp.json()
         else:
-            data = create_local_note(title=title, content=content)
+            data = create_local_note(title=title, content=content, project_id=project_id_val)
             source = "Local Sovereign Store"
     except Exception:
-        data = create_local_note(title=title, content=content)
+        data = create_local_note(title=title, content=content, project_id=project_id_val)
         source = "Local Sovereign Store"
 
     return CommandResult(
@@ -1176,10 +1181,11 @@ def get_registry() -> CommandRegistry:
             command_tokens=["notes", "add"],
             summary="Create a new markdown note",
             detailed_description="Creates a note record synchronized across all paired devices.",
-            usage="nexus notes add <title> [content]",
+            usage="nexus notes add <title> [content] [project_id]",
             args=[
                 CommandArg(name="title", description="Note title", type="str"),
                 CommandArg(name="content", description="Initial body text", type="str", required=False, default=""),
+                CommandArg(name="project_id", description="Associated Project ID", type="int", required=False, default=None),
             ],
             requires_auth=True,
         ),

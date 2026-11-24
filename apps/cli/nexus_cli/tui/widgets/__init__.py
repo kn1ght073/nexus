@@ -12,7 +12,13 @@ from .header import StatusHeader
 from .help_modal import HelpModal
 from .network_view import NetworkView
 from .nodes_view import NodesView
-from .notes_tasks_view import NotesTasksView
+from .notes_tasks_view import (
+    AddNoteToProjectModal,
+    AddTaskToProjectModal,
+    ConfirmDeleteProjectModal,
+    NotesTasksView,
+    ProjectDetailModal,
+)
 from .overview import OverviewDashboard
 from .palette import CommandPaletteModal
 from .result_modal import ExecutionResultModal
@@ -26,8 +32,11 @@ from .wizard import SetupWizardModal
 __all__ = [
     "AccountView",
     "ActivityView",
+    "AddNoteToProjectModal",
+    "AddTaskToProjectModal",
     "CommandExplorer",
     "CommandPaletteModal",
+    "ConfirmDeleteProjectModal",
     "ContextPanel",
     "DevicesView",
     "DiagnosticsView",
@@ -40,6 +49,7 @@ __all__ = [
     "NotesTasksView",
     "OverviewDashboard",
     "ParameterFormModal",
+    "ProjectDetailModal",
     "ServicesView",
     "SettingsModal",
     "SettingsView",

@@ -202,6 +202,10 @@ class NexusTUIApp(App):
             self.query_one("#view-overview", OverviewDashboard).refresh_dashboard()
         except Exception:
             pass
+        try:
+            self.query_one("#view-notes-tasks", NotesTasksView).refresh_all_data()
+        except Exception:
+            pass
 
     # Domain view message handlers
     def on_account_view_action_triggered(self, event: AccountView.ActionTriggered) -> None:
@@ -362,15 +366,25 @@ class NexusTUIApp(App):
         if event.action_id == "add_task":
             cmd = get_registry().get("tasks.add")
             if cmd:
-                self.execute_command_flow(cmd)
+                self.execute_command_flow(cmd, default_args=event.data)
         elif event.action_id == "add_note":
             cmd = get_registry().get("notes.add")
             if cmd:
-                self.execute_command_flow(cmd)
+                self.execute_command_flow(cmd, default_args=event.data)
         elif event.action_id == "add_project":
             cmd = get_registry().get("projects.create")
             if cmd:
-                self.execute_command_flow(cmd)
+                self.execute_command_flow(cmd, default_args=event.data)
+        elif event.action_id == "open_project":
+            try:
+                prod = self.query_one("#view-notes-tasks", NotesTasksView)
+                prod.open_project(event.data.get("project_id"))
+            except Exception:
+                pass
+        elif event.action_id == "delete_project":
+            cmd = get_registry().get("projects.delete")
+            if cmd:
+                self.execute_command_flow(cmd, default_args=event.data)
 
     def on_productivity_view_action(self, event: NotesTasksView.ProductivityAction) -> None:
         self.on_notes_tasks_view_productivity_action(event)
@@ -420,7 +434,11 @@ class NexusTUIApp(App):
         except Exception:
             pass
 
-        has_args = bool(cmd.args) and not default_args
+        has_missing_args = any(
+            a.required and (not default_args or default_args.get(a.name) is None or default_args.get(a.name) == "")
+            for a in cmd.args
+        )
+        has_args = bool(cmd.args) and (not default_args or has_missing_args)
         has_required_options = any(not o.is_flag for o in cmd.options) and not default_opts
 
         if has_args or has_required_options or cmd.is_destructive:
@@ -429,21 +447,23 @@ class NexusTUIApp(App):
                     return
                 args_dict, opts_dict = form_data
                 if default_args:
-                    args_dict.update(default_args)
+                    merged_args = dict(default_args)
+                    merged_args.update(args_dict)
+                    args_dict = merged_args
                 if default_opts:
-                    opts_dict.update(default_opts)
+                    merged_opts = dict(default_opts)
+                    merged_opts.update(opts_dict)
+                    opts_dict = merged_opts
                 reg = get_registry()
                 res = reg.execute(cmd.id, args=args_dict, options=opts_dict)
-                if cmd.id in ("auth.logout", "auth.login"):
-                    self.refresh_all_views()
+                self.refresh_all_views()
                 self.push_screen(ExecutionResultModal(res))
 
-            self.push_screen(ParameterFormModal(cmd), on_form_submit)
+            self.push_screen(ParameterFormModal(cmd, initial_values=default_args), on_form_submit)
         else:
             reg = get_registry()
             res = reg.execute(cmd.id, args=default_args or {}, options=default_opts or {})
-            if cmd.id in ("auth.logout", "auth.login"):
-                self.refresh_all_views()
+            self.refresh_all_views()
             self.push_screen(ExecutionResultModal(res))
 
     def action_palette(self) -> None:

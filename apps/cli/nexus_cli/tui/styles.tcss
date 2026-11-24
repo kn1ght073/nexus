@@ -529,6 +529,69 @@ Button.-success {
     min-height: 20;
 }
 
+#projects-table-hint {
+    height: 1;
+    color: #64748b;
+    margin-top: 1;
+}
+
+#project-detail-action-bar {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+#project-detail-action-bar Button {
+    margin-left: 1;
+}
+
+#project-detail-container {
+    height: 1fr;
+    min-height: 24;
+}
+
+.project-summary-box {
+    height: auto;
+    background: #0b1120;
+    border: solid #1e293b;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+#project-contents-container {
+    height: 1fr;
+    min-height: 20;
+    layout: horizontal;
+}
+
+.proj-content-block {
+    width: 1fr;
+    height: 100%;
+    background: #0b1120;
+    border: solid #1e293b;
+    padding: 1;
+    margin-right: 1;
+}
+
+.proj-content-block:last-child {
+    margin-right: 0;
+}
+
+.proj-items-scroll {
+    height: 1fr;
+    overflow-y: auto;
+}
+
+.project-modal-box {
+    width: 86;
+    height: 85%;
+    max-height: 90%;
+    background: #0f172a;
+    border: solid #0284c7;
+    padding: 1 2;
+}
+
 /* Settings Controls */
 .btn-group-row {
     height: 3;
@@ -1071,6 +1134,8 @@ Screen.theme-synthwave {
 .theme-synthwave .details-box,
 .theme-synthwave #unauth-account-container,
 .theme-synthwave .kanban-column,
+.theme-synthwave .project-summary-box,
+.theme-synthwave .proj-content-block,
 .theme-synthwave #notes-cards-container {
     background: #2b0c48;
     border: solid #05ffa1;
@@ -1449,6 +1514,8 @@ Screen.theme-light {
 .theme-light .details-box,
 .theme-light #unauth-account-container,
 .theme-light .kanban-column,
+.theme-light .project-summary-box,
+.theme-light .proj-content-block,
 .theme-light #notes-cards-container {
     background: #ffffff;
     border: solid #cbd5e1;
