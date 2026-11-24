@@ -27,6 +27,7 @@
 
 | Step | Command / action | Expected Output |
 |------|------------------|-----------------|
+| 0.0 | `pip install git+https://github.com/kn1ght073/nexus.git` | CLI packages directly from GitHub with bundled Textual TCSS; `nexus` binary provisioned without PyPI dependency. |
 | 0.1 | `nexus --version` | `nexus version 0.2.0` |
 | 0.2 | `nexus doctor` | Formatted diagnostic table displaying: Runtime (`PASS`), Python version, Credential Store (`Keyring` or file fallback), Config file (`mode: 0o600`), and live Control Plane connectivity. |
 | 0.3 | `nexus doctor --json` | Valid machine-readable JSON containing `{"status": "...", "checks": [...]}`. |

@@ -14,10 +14,27 @@ NEXUS CLI is a professional, high-performance developer tool and edge node contr
 
 ## Installation
 
-Install in editable mode using `uv` (recommended) or `pip`:
+### Direct from GitHub (Recommended)
+
+Install the CLI directly without PyPI registration:
+
+```bash
+# Standard user/environment install
+pip install git+https://github.com/kn1ght073/nexus.git
+
+# Or isolated application install via pipx (recommended for global command use)
+pipx install git+https://github.com/kn1ght073/nexus.git
+
+# Or via uv
+uv tool install git+https://github.com/kn1ght073/nexus.git
+```
+
+### Local Development / Editable Mode
 
 ```bash
 uv pip install -e apps/cli
+# Or:
+pip install -e apps/cli
 ```
 
 Verify your installation:
@@ -25,6 +42,14 @@ Verify your installation:
 ```bash
 nexus --version
 nexus doctor
+```
+
+### Interactive Cockpit TUI
+
+Launch without arguments to enter the full-screen interactive cockpit:
+
+```bash
+nexus
 ```
 
 ---
@@ -50,16 +75,16 @@ nexus status
 
 ### Authentication & Account Identity
 
-#### `nexus auth login`
-Log in to NEXUS Core and store session tokens securely in the OS Keyring.
-```bash
-nexus auth login --email user@example.com --password secret
-```
+> **Policy Notice**: Account creation and login are strictly governed by Google OAuth. Traditional password registration and login endpoints are disabled across the infrastructure.
 
-#### `nexus auth register`
-Register a new account on the connected node.
+#### `nexus auth login`
+Authenticate using Google OAuth and store session tokens securely in the OS Keyring.
 ```bash
-nexus auth register --email user@example.com --password secret
+# Interactive Google OAuth browser flow:
+nexus auth login
+
+# Or supply pre-authenticated token:
+nexus auth login --token <SESSION_TOKEN>
 ```
 
 #### `nexus auth whoami`

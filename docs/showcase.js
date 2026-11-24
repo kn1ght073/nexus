@@ -67,8 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 3. Interactive Terminal Tabs
   const terminalSnippets = {
-    login: `<span class="cmd-prompt">$</span> nexus cp login --email operator@nexus.internal
+    login: `<span class="cmd-prompt">$</span> nexus login
 <span class="dim">Connecting to control plane: https://nexus-control-plane-uvi8.onrender.com</span>
+<span class="dim">Opening Google OAuth authentication in browser...</span>
 <span class="success">✓ Authenticated successfully. Session key locked in system keychain.</span>
 
 <span class="cmd-prompt">$</span> nexus whoami

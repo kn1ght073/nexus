@@ -26,3 +26,6 @@ py-modules = ["main", "config", "tui"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["nexus_cli*"]
+
+[tool.setuptools.package-data]
+"nexus_cli.tui" = ["*.tcss"]

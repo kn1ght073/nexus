@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexus-cli"
+version = "0.2.0"
+description = "NEXUS Control Center — Sovereign Personal Digital Infrastructure Ecosystem CLI & TUI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "requests>=2.31.0",
+    "pydantic>=2.4.2",
+    "keyring>=25.0.0",
+    "textual>=0.50.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/kn1ght073/nexus"
+Documentation = "https://github.com/kn1ght073/nexus/tree/main/docs"
+Repository = "https://github.com/kn1ght073/nexus.git"
+Issues = "https://github.com/kn1ght073/nexus/issues"
+"Control Plane" = "https://nexus-control-plane-uvi8.onrender.com"
+"Control Center" = "https://nexus-control-center.onrender.com"
+
+[project.scripts]
+nexus = "nexus_cli.cli:app"
+
+[tool.setuptools.package-dir]
+"" = "apps/cli"
+
+[tool.setuptools.packages.find]
+where = ["apps/cli"]
+include = ["nexus_cli*"]
+
+[tool.setuptools.package-data]
+"nexus_cli.tui" = ["*.tcss"]
