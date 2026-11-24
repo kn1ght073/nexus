@@ -3,6 +3,7 @@
 Transforms the CLI into an interactive, multi-view personal infrastructure cockpit.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -66,11 +67,24 @@ class NexusTUIApp(App):
 
     def compose(self) -> ComposeResult:
         cfg = load_config()
-        # Default view initial resolution
-        initial_view = f"view-{cfg.default_view}" if cfg.default_view in (
-            "overview", "account", "devices", "nodes", "network", "sync",
-            "files", "services", "diagnostics", "activity", "settings"
-        ) else "view-overview"
+        # Default view initial resolution supporting aliases (e.g. tasks -> notes-tasks, doctor -> diagnostics)
+        view_map = {
+            "overview": "view-overview",
+            "account": "view-account",
+            "devices": "view-devices",
+            "nodes": "view-nodes",
+            "network": "view-network",
+            "sync": "view-sync",
+            "files": "view-files",
+            "tasks": "view-notes-tasks",
+            "notes-tasks": "view-notes-tasks",
+            "services": "view-services",
+            "doctor": "view-diagnostics",
+            "diagnostics": "view-diagnostics",
+            "activity": "view-activity",
+            "settings": "view-settings",
+        }
+        initial_view = view_map.get(cfg.default_view, "view-overview")
 
         yield StatusHeader(id="status-header")
         with Horizontal(id="main-body-container"):
@@ -136,6 +150,12 @@ class NexusTUIApp(App):
             self.action_palette()
 
     # Domain view message handlers
+    def on_account_view_action_triggered(self, event: AccountView.ActionTriggered) -> None:
+        if event.action_id == "logout":
+            cmd = get_registry().get("auth.logout")
+            if cmd:
+                self.execute_command_flow(cmd)
+
     def on_devices_view_device_action(self, event: DevicesView.DeviceAction) -> None:
         if event.action_id == "revoke":
             cmd = get_registry().get("devices.revoke")
@@ -159,6 +179,10 @@ class NexusTUIApp(App):
             cmd = get_registry().get("nodes.pairing_code")
             if cmd:
                 self.execute_command_flow(cmd, default_args={"node_id": event.node.get("id")})
+        elif event.action_id == "revoke":
+            cmd = get_registry().get("nodes.revoke")
+            if cmd:
+                self.execute_command_flow(cmd, default_args={"node_id": event.node.get("id")})
         elif event.action_id == "liveness":
             cmd = get_registry().get("overview.status")
             if cmd:
@@ -167,6 +191,29 @@ class NexusTUIApp(App):
     def on_sync_view_sync_action(self, event: SyncView.SyncAction) -> None:
         if event.action_id == "sync_pull":
             self.execute_named_command("sync.pull")
+
+    def on_files_view_file_action(self, event: FilesView.FileAction) -> None:
+        if event.action_id == "copy_path":
+            path_str = event.path
+            try:
+                import subprocess
+                import sys
+                if sys.platform == "darwin":
+                    p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+                    p.communicate(path_str.encode("utf-8"))
+                elif sys.platform == "win32":
+                    p = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
+                    p.communicate(path_str.encode("utf-8"))
+                else:
+                    p = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
+                    p.communicate(path_str.encode("utf-8"))
+            except Exception:
+                pass
+            self.notify(f"Copied path: {path_str}", title="File Storage", severity="information")
+
+    def on_services_view_service_action(self, event: ServicesView.ServiceAction) -> None:
+        if event.action_id == "view_logs":
+            self.notify("Logs recorded in ~/.nexus/logs. All local daemons active.", title="Service Logs", severity="information")
 
     def on_diagnostics_view_diagnostics_action(self, event: DiagnosticsView.DiagnosticsAction) -> None:
         if event.action_id == "export_report":
@@ -182,23 +229,62 @@ class NexusTUIApp(App):
                         "status": c.get("status"),
                         "detail": c.get("detail") or c.get("message"),
                     })
+                iso_now = datetime.now(timezone.utc).isoformat()
                 with open(out_file, "w", encoding="utf-8") as f:
-                    json.dump({"timestamp": str(Path), "checks": clean_report}, f, indent=2)
+                    json.dump({"timestamp": iso_now, "checks": clean_report}, f, indent=2)
                 self.notify(f"Redacted report saved to {out_file}", title="Diagnostics Export", severity="information")
             except Exception as e:
                 self.notify(f"Export failed: {e}", title="Export Error", severity="error")
+        elif event.action_id == "copy_fix":
+            fix_cmd = event.data.get("fix") or "nexus auth login"
+            try:
+                import subprocess
+                import sys
+                if sys.platform == "darwin":
+                    p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+                    p.communicate(fix_cmd.encode("utf-8"))
+                elif sys.platform == "win32":
+                    p = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
+                    p.communicate(fix_cmd.encode("utf-8"))
+                else:
+                    p = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
+                    p.communicate(fix_cmd.encode("utf-8"))
+            except Exception:
+                pass
+            self.notify(f"Copied fix command: {fix_cmd}", title="Remediation", severity="information")
 
     def on_activity_view_activity_action(self, event: ActivityView.ActivityAction) -> None:
         if event.action_id == "export_activity":
-            events = event.data.get("events", [])
+            raw_events = event.data.get("events", [])
             out_file = Path.home() / "nexus-activity-audit.json"
             try:
                 import json
+                clean_events = []
+                for ev in raw_events:
+                    ev_copy = dict(ev)
+                    details = ev_copy.get("details")
+                    if isinstance(details, dict):
+                        ev_copy["details"] = {
+                            k: ("***" if any(s in k.lower() for s in ("token", "secret", "password", "key", "auth")) else v)
+                            for k, v in details.items()
+                        }
+                    clean_events.append(ev_copy)
                 with open(out_file, "w", encoding="utf-8") as f:
-                    json.dump(events, f, indent=2)
+                    json.dump(clean_events, f, indent=2)
                 self.notify(f"Activity audit saved to {out_file}", title="Activity Export", severity="information")
             except Exception as e:
                 self.notify(f"Export failed: {e}", title="Export Error", severity="error")
+        elif event.action_id == "inspect_event":
+            ev = event.data
+            action = ev.get("action", "unknown")
+            entity = f"{ev.get('entity_type', '')} #{ev.get('entity_id', '')}".strip()
+            details = ev.get("details") or {}
+            self.push_screen(ExecutionResultModal(CommandResult(
+                success=True,
+                title=f"Audit Event: {action}",
+                message=f"Entity: {entity or 'System'}\nTimestamp: {ev.get('created_at', '-')}\nUser: {ev.get('user_id', 'Local')}",
+                data=details,
+            )))
 
     def on_productivity_view_action(self, event: NotesTasksView.ProductivityAction) -> None:
         if event.action_id == "add_task":

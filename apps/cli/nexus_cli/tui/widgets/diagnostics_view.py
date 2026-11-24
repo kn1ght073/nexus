@@ -112,6 +112,11 @@ class DiagnosticsView(Static):
             c = self._checks_by_id[event.row_key.value]
             self._display_check(c)
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.row_key and event.row_key.value in self._checks_by_id:
+            c = self._checks_by_id[event.row_key.value]
+            self._display_check(c)
+
     def _display_check(self, c: Dict[str, Any]) -> None:
         self.selected_check = c
         cat = c.get("category", "General")

@@ -298,3 +298,118 @@ async def test_responsive_layout_resizing():
         await pilot.pause()
         assert ctx.display is True
         assert sidebar.display is True
+
+
+def test_mask_email_address_boundaries():
+    assert mask_email_address("") == "Unset"
+    assert mask_email_address(None) == "Unset"
+    assert mask_email_address("plainstring") == "***"
+    assert mask_email_address("@domain.com") == "***@domain.com"
+    assert mask_email_address("a@domain.com") == "a***@domain.com"
+    assert mask_email_address("ab@domain.com") == "a***@domain.com"
+    assert mask_email_address("abc@domain.com") == "a***c@domain.com"
+    assert mask_email_address("john.doe@nexus.internal") == "j***e@nexus.internal"
+
+
+@pytest.mark.anyio
+async def test_initial_view_alias_mapping():
+    cfg = load_config()
+    cfg.default_view = "doctor"
+    save_config(cfg)
+    app1 = NexusTUIApp()
+    async with app1.run_test():
+        switcher = app1.query_one("#main-content-switcher", ContentSwitcher)
+        assert switcher.current == "view-diagnostics"
+
+    cfg.default_view = "tasks"
+    save_config(cfg)
+    app2 = NexusTUIApp()
+    async with app2.run_test():
+        switcher = app2.query_one("#main-content-switcher", ContentSwitcher)
+        assert switcher.current == "view-notes-tasks"
+
+
+@pytest.mark.anyio
+async def test_notes_tasks_search_filtering():
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        prod_view = app.query_one(NotesTasksView)
+        # Populate notes cache directly
+        prod_view._notes_cache = [
+            {"id": 1, "title": "Buy groceries", "content": "Milk and eggs", "updated_at": "2026-11-24T10:00:00"},
+            {"id": 2, "title": "Kernel module bypass", "content": "Direct syscall hook", "updated_at": "2026-11-24T10:00:00"},
+        ]
+        # Switch to notes tab
+        prod_view._set_tab("notes")
+        inp = prod_view.query_one("#notes-search-input", Input)
+        inp.value = "syscall"
+        await pilot.pause()
+
+        notes_static = prod_view.query_one("#notes-cards-static", Static)
+        rendered = str(notes_static.render())
+        assert "Kernel module bypass" in rendered
+        assert "Buy groceries" not in rendered
+
+
+@pytest.mark.anyio
+async def test_diagnostics_export_valid_timestamp(tmp_path, monkeypatch):
+    import json
+    export_dir = tmp_path / "home"
+    export_dir.mkdir()
+    monkeypatch.setattr("pathlib.Path.home", lambda: export_dir)
+
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        diag_view = app.query_one(DiagnosticsView)
+        diag_view._checks_cache = [
+            {"category": "Runtime", "name": "Python", "status": "pass", "detail": "3.11.16"},
+        ]
+        btn_export = diag_view.query_one("#btn-diag-export")
+        btn_export.press()
+        await pilot.pause()
+
+        report_file = export_dir / "nexus-diagnostic-report.json"
+        assert report_file.exists()
+        with open(report_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert "timestamp" in data
+        assert data["timestamp"] != "<class 'pathlib.Path'>"
+        assert "T" in data["timestamp"]  # ISO formatted datetime
+
+
+@pytest.mark.anyio
+async def test_activity_export_sanitizes_credentials(tmp_path, monkeypatch):
+    import json
+    export_dir = tmp_path / "home"
+    export_dir.mkdir()
+    monkeypatch.setattr("pathlib.Path.home", lambda: export_dir)
+
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        act_view = app.query_one(ActivityView)
+        act_view._events_cache = [
+            {
+                "id": 101,
+                "action": "auth.login",
+                "entity_type": "User",
+                "details": {
+                    "access_token": "secret_bearer_token_12345",
+                    "api_key": "private_api_key_xyz",
+                    "client": "desktop_cli",
+                },
+            }
+        ]
+        btn_export = act_view.query_one("#btn-act-export")
+        btn_export.press()
+        await pilot.pause()
+
+        audit_file = export_dir / "nexus-activity-audit.json"
+        assert audit_file.exists()
+        with open(audit_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert len(data) == 1
+        details = data[0]["details"]
+        assert details["access_token"] == "***"
+        assert details["api_key"] == "***"
+        assert details["client"] == "desktop_cli"
+

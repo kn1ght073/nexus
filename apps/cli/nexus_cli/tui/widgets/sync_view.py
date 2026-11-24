@@ -1,6 +1,7 @@
 """Synchronization Center Widget for NEXUS Control Center."""
 
 from datetime import datetime
+import platform
 from typing import Any, Dict, Optional
 
 from textual.app import ComposeResult
@@ -141,7 +142,7 @@ class SyncView(Static):
                     "0",
                 )
             if not devices:
-                table.add_row("Current Machine", "macOS", "[bold green]● Synced (Online)[/bold green]", now_str, "0")
+                table.add_row("Current Machine", platform.system(), "[bold green]● Synced (Online)[/bold green]", now_str, "0")
         except Exception:
             pass
 

@@ -126,6 +126,11 @@ class ActivityView(Static):
             ev = self._events_by_id[event.row_key.value]
             self._display_event(ev)
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.row_key and event.row_key.value in self._events_by_id:
+            ev = self._events_by_id[event.row_key.value]
+            self.post_message(self.ActivityAction("inspect_event", ev))
+
     def _display_event(self, ev: Dict[str, Any]) -> None:
         self.selected_event = ev
         created = (ev.get("created_at") or "")[:19].replace("T", " ") or "N/A"

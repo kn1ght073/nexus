@@ -23,6 +23,8 @@ def mask_email_address(email: Optional[str]) -> str:
     if "@" not in email:
         return "***"
     user_part, domain = email.split("@", 1)
+    if not user_part:
+        return f"***@{domain}"
     if len(user_part) <= 2:
         masked_user = user_part[0] + "***"
     else:

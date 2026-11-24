@@ -127,6 +127,11 @@ class NodesView(Static):
             node = self._nodes_by_id[event.row_key.value]
             self._display_node(node)
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.row_key and event.row_key.value in self._nodes_by_id:
+            node = self._nodes_by_id[event.row_key.value]
+            self.post_message(self.NodeAction("liveness", node))
+
     def _display_node(self, node: Dict[str, Any]) -> None:
         self.selected_node = node
         cfg = load_config()

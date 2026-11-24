@@ -122,6 +122,11 @@ class DevicesView(Static):
             dev = self._devices_by_id[event.row_key.value]
             self._display_device(dev)
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.row_key and event.row_key.value in self._devices_by_id:
+            dev = self._devices_by_id[event.row_key.value]
+            self.post_message(self.DeviceAction("inspect", dev))
+
     def _display_device(self, dev: Dict[str, Any]) -> None:
         self.selected_device = dev
         online_str = "[bold green]Online[/bold green]" if dev.get("is_online") else "[dim]Offline[/dim]"

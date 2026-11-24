@@ -288,7 +288,7 @@ def _handle_github_status(args: Dict[str, Any], opts: Dict[str, Any]) -> Command
 
 def _handle_devices_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
-    resp = client.get("/devices", timeout=5)
+    resp = client.get("/api/devices", timeout=5)
     devices = resp.json()
     if not isinstance(devices, list):
         devices = []
@@ -307,7 +307,7 @@ def _handle_devices_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
 def _handle_devices_inspect(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     dev_id = args.get("device_id")
     client = get_client()
-    resp = client.get(f"/devices/{dev_id}", timeout=5)
+    resp = client.get(f"/api/devices/{dev_id}", timeout=5)
     dev = resp.json()
     lines = [
         f"ID: {dev.get('id')}",
@@ -327,7 +327,7 @@ def _handle_devices_inspect(args: Dict[str, Any], opts: Dict[str, Any]) -> Comma
 def _handle_devices_revoke(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     dev_id = args.get("device_id")
     client = get_client()
-    client.delete(f"/devices/{dev_id}", timeout=5)
+    client.delete(f"/api/devices/{dev_id}", timeout=5)
     return CommandResult(
         success=True,
         title="Device Revoked",
@@ -337,7 +337,7 @@ def _handle_devices_revoke(args: Dict[str, Any], opts: Dict[str, Any]) -> Comman
 
 def _handle_nodes_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
-    resp = client.get("/nodes", timeout=5)
+    resp = client.get("/api/nodes", timeout=5)
     nodes = resp.json()
     if not isinstance(nodes, list):
         nodes = []
@@ -356,7 +356,7 @@ def _handle_nodes_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRes
 def _handle_nodes_claim(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     code = args.get("claim_code")
     client = get_client()
-    resp = client.post("/nodes/claim", json={"claim_code": code}, timeout=8)
+    resp = client.post("/api/nodes/claim", json={"claim_code": code}, timeout=8)
     data = resp.json()
     return CommandResult(
         success=True,
@@ -366,9 +366,49 @@ def _handle_nodes_claim(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRe
     )
 
 
+def _handle_nodes_pairing_code(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
+    client = get_client()
+    try:
+        resp = client.post("/api/nodes/pair", timeout=8)
+        data = resp.json()
+        code = data.get("code", "000000")
+        exp = data.get("expires_at", "15 minutes")
+        return CommandResult(
+            success=True,
+            title="Node Pairing Code",
+            message=f"Pairing Code: {code}\nExpires: {exp}\nUse this code to attach a new edge device to this node.",
+            data=data,
+        )
+    except Exception as e:
+        return CommandResult(
+            success=False,
+            title="Pairing Code Failed",
+            error=str(e),
+        )
+
+
+def _handle_nodes_revoke(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
+    node_id = args.get("node_id")
+    client = get_client()
+    try:
+        client.delete(f"/api/nodes/{node_id}", timeout=8)
+        return CommandResult(
+            success=True,
+            title="Node Revoked",
+            message=f"Node {node_id} authorization was revoked.",
+            data={"node_id": node_id},
+        )
+    except Exception as e:
+        return CommandResult(
+            success=False,
+            title="Node Revocation Failed",
+            error=str(e),
+        )
+
+
 def _handle_files_roots(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
-    resp = client.get("/storage/roots", timeout=5)
+    resp = client.get("/api/files/roots", timeout=5)
     roots = resp.json()
     if not isinstance(roots, list):
         roots = []
@@ -390,7 +430,7 @@ def _handle_files_search(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
     params: Dict[str, Any] = {"q": query}
     if path:
         params["path"] = path
-    resp = client.get("/storage/search", params=params, timeout=10)
+    resp = client.get("/api/files/search", params=params, timeout=10)
     data = resp.json()
     files = data if isinstance(data, list) else data.get("results", [])
     lines = [f"Found {len(files)} matches for query '{query}':"]
@@ -406,7 +446,7 @@ def _handle_files_search(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
 
 def _handle_notes_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
-    resp = client.get("/notes", timeout=5)
+    resp = client.get("/api/notes", timeout=5)
     notes = resp.json()
     if not isinstance(notes, list):
         notes = []
@@ -425,7 +465,7 @@ def _handle_notes_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResu
     title = args.get("title", "")
     content = args.get("content", "")
     client = get_client()
-    resp = client.post("/notes", json={"title": title, "content": content}, timeout=5)
+    resp = client.post("/api/notes", json={"title": title, "content": content}, timeout=5)
     data = resp.json()
     return CommandResult(
         success=True,
@@ -438,7 +478,7 @@ def _handle_notes_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResu
 def _handle_notes_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     note_id = args.get("note_id")
     client = get_client()
-    client.delete(f"/notes/{note_id}", timeout=5)
+    client.delete(f"/api/notes/{note_id}", timeout=5)
     return CommandResult(
         success=True,
         title="Note Deleted",
@@ -448,7 +488,7 @@ def _handle_notes_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
 
 def _handle_projects_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
-    resp = client.get("/projects", timeout=5)
+    resp = client.get("/api/projects", timeout=5)
     projects = resp.json()
     if not isinstance(projects, list):
         projects = []
@@ -467,7 +507,7 @@ def _handle_projects_create(args: Dict[str, Any], opts: Dict[str, Any]) -> Comma
     title = args.get("title", "")
     desc = args.get("description", "")
     client = get_client()
-    resp = client.post("/projects", json={"title": title, "description": desc}, timeout=5)
+    resp = client.post("/api/projects", json={"title": title, "description": desc}, timeout=5)
     data = resp.json()
     return CommandResult(
         success=True,
@@ -480,7 +520,7 @@ def _handle_projects_create(args: Dict[str, Any], opts: Dict[str, Any]) -> Comma
 def _handle_projects_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     proj_id = args.get("project_id")
     client = get_client()
-    client.delete(f"/projects/{proj_id}", timeout=5)
+    client.delete(f"/api/projects/{proj_id}", timeout=5)
     return CommandResult(
         success=True,
         title="Project Deleted",
@@ -490,7 +530,7 @@ def _handle_projects_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> Comma
 
 def _handle_tasks_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
-    resp = client.get("/tasks", timeout=5)
+    resp = client.get("/api/tasks", timeout=5)
     tasks = resp.json()
     if not isinstance(tasks, list):
         tasks = []
@@ -513,7 +553,7 @@ def _handle_tasks_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResu
     if pid is not None and str(pid).isdigit():
         body["project_id"] = int(pid)
     client = get_client()
-    resp = client.post("/tasks", json=body, timeout=5)
+    resp = client.post("/api/tasks", json=body, timeout=5)
     data = resp.json()
     return CommandResult(
         success=True,
@@ -526,7 +566,7 @@ def _handle_tasks_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResu
 def _handle_tasks_done(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     task_id = args.get("task_id")
     client = get_client()
-    resp = client.put(f"/tasks/{task_id}", json={"status": "completed"}, timeout=5)
+    resp = client.put(f"/api/tasks/{task_id}", json={"status": "completed"}, timeout=5)
     return CommandResult(
         success=True,
         title="Task Completed",
@@ -538,7 +578,7 @@ def _handle_tasks_done(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRes
 def _handle_tasks_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     task_id = args.get("task_id")
     client = get_client()
-    client.delete(f"/tasks/{task_id}", timeout=5)
+    client.delete(f"/api/tasks/{task_id}", timeout=5)
     return CommandResult(
         success=True,
         title="Task Deleted",
@@ -549,7 +589,7 @@ def _handle_tasks_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
 def _handle_sync_status(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
     try:
-        resp = client.get("/sync/status", timeout=5)
+        resp = client.get("/api/sync/status", timeout=5)
         data = resp.json()
         lines = [
             f"Sync State: {data.get('state', 'synced')}",
@@ -572,10 +612,35 @@ def _handle_sync_status(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRe
         )
 
 
+def _handle_sync_pull(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
+    client = get_client()
+    since = args.get("since") or opts.get("since")
+    payload = {"since": since} if since else {}
+    try:
+        resp = client.post("/api/sync/pull", json=payload, timeout=8)
+        body = resp.json()
+        changes = body.get("changes", {})
+        counts = {k: len(v) for k, v in changes.items()}
+        total = sum(counts.values())
+        msg = f"Synced {total} change(s) from node.\nServer Time: {body.get('server_time')}\n• Projects: {counts.get('projects', 0)}\n• Tasks: {counts.get('tasks', 0)}\n• Notes: {counts.get('notes', 0)}"
+        return CommandResult(
+            success=True,
+            title="Sync Pull Complete",
+            message=msg,
+            data=body,
+        )
+    except Exception as e:
+        return CommandResult(
+            success=False,
+            title="Sync Pull Failed",
+            error=str(e),
+        )
+
+
 def _handle_services_status(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     client = get_client()
     try:
-        resp = client.get("/services/status", timeout=5)
+        resp = client.get("/api/services/status", timeout=5)
         data = resp.json()
         lines = ["Local Microservices Status:"]
         for s_name, s_info in (data.items() if isinstance(data, dict) else []):
@@ -859,6 +924,35 @@ def get_registry() -> CommandRegistry:
         ),
         handler=_handle_nodes_claim,
     )
+    reg.register(
+        CommandMetadata(
+            id="nodes.pairing_code",
+            name="Generate Node Pairing Code",
+            category=CommandCategory.DEVICES_NODES,
+            command_tokens=["nodes", "pair"],
+            summary="Mint a temporary 6-digit numeric pairing code for edge onboarding",
+            detailed_description="Generates an ephemeral 6-digit pairing code to securely attach edge devices to this node.",
+            usage="nexus nodes pair",
+            requires_auth=True,
+        ),
+        handler=_handle_nodes_pairing_code,
+    )
+    reg.register(
+        CommandMetadata(
+            id="nodes.revoke",
+            name="Revoke Edge Node",
+            category=CommandCategory.DEVICES_NODES,
+            command_tokens=["nodes", "revoke"],
+            summary="Revoke an edge compute or storage node",
+            detailed_description="Permanently unbinds the edge node from your account and invalidates its API key.",
+            usage="nexus nodes revoke <node_id>",
+            args=[CommandArg(name="node_id", description="ID of node to revoke", type="str")],
+            is_destructive=True,
+            destructive_prompt="Are you sure you want to revoke this edge node? It will disconnect from your private mesh.",
+            requires_auth=True,
+        ),
+        handler=_handle_nodes_revoke,
+    )
 
     # --- 4. FILES & KNOWLEDGE ---
     reg.register(
@@ -1057,6 +1151,19 @@ def get_registry() -> CommandRegistry:
             requires_auth=True,
         ),
         handler=_handle_sync_status,
+    )
+    reg.register(
+        CommandMetadata(
+            id="sync.pull",
+            name="Pull Sync Delta",
+            category=CommandCategory.SYNCHRONIZATION,
+            command_tokens=["sync", "pull"],
+            summary="Pull incremental entity changes since cursor",
+            detailed_description="Fetches recent deltas for projects, tasks, and notes from primary node.",
+            usage="nexus sync pull",
+            requires_auth=True,
+        ),
+        handler=_handle_sync_pull,
     )
 
     # --- 7. LOCAL SERVICES ---

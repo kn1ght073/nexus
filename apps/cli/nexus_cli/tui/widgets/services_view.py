@@ -117,69 +117,74 @@ class ServicesView(Static):
         self.app.call_from_thread(self._render_probe_results, results)
 
     def _render_probe_results(self, res: Dict[str, Any]) -> None:
-        # LLM
-        llm = res["llm"]
-        badge_llm = self.query_one("#badge-svc-llm", Label)
-        desc_llm = self.query_one("#desc-svc-llm", Static)
-        badge_llm.remove_class("stat-badge-online")
-        badge_llm.remove_class("stat-badge-offline")
+        if not self.is_mounted:
+            return
+        try:
+            # LLM
+            llm = res["llm"]
+            badge_llm = self.query_one("#badge-svc-llm", Label)
+            desc_llm = self.query_one("#desc-svc-llm", Static)
+            badge_llm.remove_class("stat-badge-online")
+            badge_llm.remove_class("stat-badge-offline")
 
-        if llm["running"]:
-            badge_llm.update("● RUNNING")
-            badge_llm.add_class("stat-badge-online")
-            desc_llm.update(
-                f"[bold green]Ollama daemon is active on port 11434.[/bold green] (Version: {llm['version']})\n"
-                "[white]Supports sovereign local LLM inference without sending prompts off-device.[/white]"
-            )
-        else:
-            badge_llm.update("○ IDLE / STOPPED")
-            badge_llm.add_class("stat-badge-offline")
-            desc_llm.update(
-                "[dim]Ollama is not running on 127.0.0.1:11434.[/dim]\n"
-                "[dim]To enable local LLM processing: install Ollama from ollama.ai and start the app.[/dim]"
-            )
+            if llm["running"]:
+                badge_llm.update("● RUNNING")
+                badge_llm.add_class("stat-badge-online")
+                desc_llm.update(
+                    f"[bold green]Ollama daemon is active on port 11434.[/bold green] (Version: {llm['version']})\n"
+                    "[white]Supports sovereign local LLM inference without sending prompts off-device.[/white]"
+                )
+            else:
+                badge_llm.update("○ IDLE / STOPPED")
+                badge_llm.add_class("stat-badge-offline")
+                desc_llm.update(
+                    "[dim]Ollama is not running on 127.0.0.1:11434.[/dim]\n"
+                    "[dim]To enable local LLM processing: install Ollama from ollama.ai and start the app.[/dim]"
+                )
 
-        # STT
-        stt = res["stt"]
-        badge_stt = self.query_one("#badge-svc-stt", Label)
-        desc_stt = self.query_one("#desc-svc-stt", Static)
-        badge_stt.remove_class("stat-badge-online")
-        badge_stt.remove_class("stat-badge-offline")
+            # STT
+            stt = res["stt"]
+            badge_stt = self.query_one("#badge-svc-stt", Label)
+            desc_stt = self.query_one("#desc-svc-stt", Static)
+            badge_stt.remove_class("stat-badge-online")
+            badge_stt.remove_class("stat-badge-offline")
 
-        if stt["installed"]:
-            badge_stt.update("● READY")
-            badge_stt.add_class("stat-badge-online")
-            desc_stt.update(
-                "[bold green]faster-whisper is installed in the local environment.[/bold green]\n"
-                "[white]Supports offline high-speed speech-to-text transcription via CTranslate2.[/white]"
-            )
-        else:
-            badge_stt.update("○ OPTIONAL (NOT INSTALLED)")
-            badge_stt.add_class("stat-badge")
-            desc_stt.update(
-                "[dim]faster-whisper is optional. To install: run 'nexus bootstrap' or pip install faster-whisper.[/dim]"
-            )
+            if stt["installed"]:
+                badge_stt.update("● READY")
+                badge_stt.add_class("stat-badge-online")
+                desc_stt.update(
+                    "[bold green]faster-whisper is installed in the local environment.[/bold green]\n"
+                    "[white]Supports offline high-speed speech-to-text transcription via CTranslate2.[/white]"
+                )
+            else:
+                badge_stt.update("○ OPTIONAL (NOT INSTALLED)")
+                badge_stt.add_class("stat-badge")
+                desc_stt.update(
+                    "[dim]faster-whisper is optional. To install: run 'nexus bootstrap' or pip install faster-whisper.[/dim]"
+                )
 
-        # Daemon
-        daemon = res["daemon"]
-        badge_dmn = self.query_one("#badge-svc-daemon", Label)
-        desc_dmn = self.query_one("#desc-svc-daemon", Static)
-        badge_dmn.remove_class("stat-badge-online")
-        badge_dmn.remove_class("stat-badge-offline")
+            # Daemon
+            daemon = res["daemon"]
+            badge_dmn = self.query_one("#badge-svc-daemon", Label)
+            desc_dmn = self.query_one("#desc-svc-daemon", Static)
+            badge_dmn.remove_class("stat-badge-online")
+            badge_dmn.remove_class("stat-badge-offline")
 
-        if daemon["connected"]:
-            badge_dmn.update("● CONNECTED")
-            badge_dmn.add_class("stat-badge-online")
-            desc_dmn.update(
-                f"[bold green]Connected to Core Control Plane.[/bold green] Machine Role: node-{daemon['node_id'] or 'standalone'}\n"
-                "[white]Secure reverse WebSocket tunnel coordinates remote client attachment without opening inbound ports.[/white]"
-            )
-        else:
-            badge_dmn.update("● DISCONNECTED")
-            badge_dmn.add_class("stat-badge-offline")
-            desc_dmn.update(
-                "[dim]Node is currently disconnected from the control plane.[/dim]"
-            )
+            if daemon["connected"]:
+                badge_dmn.update("● CONNECTED")
+                badge_dmn.add_class("stat-badge-online")
+                desc_dmn.update(
+                    f"[bold green]Connected to Core Control Plane.[/bold green] Machine Role: node-{daemon['node_id'] or 'standalone'}\n"
+                    "[white]Secure reverse WebSocket tunnel coordinates remote client attachment without opening inbound ports.[/white]"
+                )
+            else:
+                badge_dmn.update("● DISCONNECTED")
+                badge_dmn.add_class("stat-badge-offline")
+                desc_dmn.update(
+                    "[dim]Node is currently disconnected from the control plane.[/dim]"
+                )
+        except Exception:
+            pass
 
         # Update Context Panel
         try:

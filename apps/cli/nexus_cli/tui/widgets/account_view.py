@@ -1,6 +1,7 @@
 """Account and Sovereign Identity Center Widget for NEXUS Control Center."""
 
 from datetime import datetime
+import platform
 from typing import Any, Dict, Optional
 
 from textual.app import ComposeResult

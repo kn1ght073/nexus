@@ -181,25 +181,12 @@ class NotesTasksView(Static):
             pass
 
         # 2. Render Notes Wall (Sticky-notes styled cards)
-        note_cards = []
-        for n in notes:
-            nid = n.get("id")
-            title = n.get("title", "Untitled Note")
-            content = (n.get("content") or "").replace("\n", " ")
-            preview = content[:80] + ("…" if len(content) > 80 else "")
-            upd = (n.get("updated_at") or "")[:19].replace("T", " ")
-
-            card_box = (
-                f"┌─ [bold cyan]📌 Note #{nid}: {title}[/bold cyan] ─────────\n"
-                f"│ [white]{preview}[/white]\n"
-                f"└─ [dim]Updated: {upd}[/dim]\n"
-            )
-            note_cards.append(card_box)
-
+        filter_q = ""
         try:
-            self.query_one("#notes-cards-static", Static).update("\n".join(note_cards) or "[dim]No sovereign notes saved. Click 'Create Note' to start.[/dim]")
+            filter_q = self.query_one("#notes-search-input", Input).value
         except Exception:
             pass
+        self._render_notes_wall(filter_q)
 
         # 3. Render Projects Table
         try:
@@ -245,6 +232,39 @@ class NotesTasksView(Static):
             )
         except Exception:
             pass
+
+    def _render_notes_wall(self, filter_q: str = "") -> None:
+        q = filter_q.strip().lower()
+        note_cards = []
+        for n in self._notes_cache:
+            nid = n.get("id")
+            title = n.get("title", "Untitled Note")
+            content = (n.get("content") or "").replace("\n", " ")
+            if q and (q not in title.lower() and q not in content.lower()):
+                continue
+            preview = content[:80] + ("…" if len(content) > 80 else "")
+            upd = (n.get("updated_at") or "")[:19].replace("T", " ")
+
+            card_box = (
+                f"┌─ [bold cyan]📌 Note #{nid}: {title}[/bold cyan] ─────────\n"
+                f"│ [white]{preview}[/white]\n"
+                f"└─ [dim]Updated: {upd}[/dim]\n"
+            )
+            note_cards.append(card_box)
+
+        try:
+            empty_msg = f"[dim]No notes matching '{filter_q}'.[/dim]" if q else "[dim]No sovereign notes saved. Click 'Create Note' to start.[/dim]"
+            self.query_one("#notes-cards-static", Static).update("\n".join(note_cards) or empty_msg)
+        except Exception:
+            pass
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "notes-search-input":
+            self._render_notes_wall(filter_q=event.value)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "notes-search-input":
+            self._render_notes_wall(filter_q=event.value)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id
