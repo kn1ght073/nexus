@@ -3,10 +3,10 @@
 **Scope**: Comprehensive manual and automated verification covering core node hardening, owner isolation, path jail, sync engine, scoped tokens, desktop/mobile interfaces, live control-plane promotion (`https://nexus-control-plane-uvi8.onrender.com`), edge relay routing, GitHub device flow, and modern CLI v0.2.0 diagnostic capabilities.
 
 **Automated verification baseline**:
-- 106 automated tests in `services/core-api/tests/` (API security, token scopes, client console, GitHub flow, online access)
-- 24 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine)
-- 17-step end-to-end device flow check in `scripts/e2e_github_cli.py`
-- 24-step complete stack orchestration check in `scripts/demo_setup.py`
+- 104 automated tests in `services/core-api/tests/` (API security, token scopes, client console, GitHub flow, online access)
+- 42 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, Textual TUI pilot suite)
+- 16-step end-to-end device flow check in `scripts/e2e_github_cli.py`
+- 25-step complete stack orchestration check in `scripts/demo_setup.py`
 
 ---
 
@@ -150,18 +150,36 @@
 Run the automated test matrix to ensure 100% test passing rate:
 
 ```bash
-# 1. Modular CLI Test Suite (24 tests)
+# 1. Modular CLI Test Suite (42 tests: registry, profiles, TUI pilot, dispatch)
 PYTHONPATH=apps/cli services/core-api/.venv/bin/pytest apps/cli/tests/
 
-# 2. GitHub CLI E2E Verification (17 checks)
+# 2. GitHub CLI E2E Verification (16 checks)
 services/core-api/.venv/bin/python scripts/e2e_github_cli.py
 
-# 3. Stack Bootstrap & Demo Verification (24 checks)
+# 3. Stack Bootstrap & Demo Verification (25 checks)
 services/core-api/.venv/bin/python scripts/demo_setup.py
 
-# 4. Core API Test Suite (106 tests)
+# 4. Core API Test Suite (104 tests)
 services/core-api/.venv/bin/pytest services/core-api/tests/
 ```
+
+---
+
+## Item 11 — Interactive Terminal User Interface (TUI) & Command Registry
+
+| Step | Command / action | Expected Output |
+|------|------------------|-----------------|
+| 11.1 | `nexus` (in interactive terminal) | Opens full-screen NEXUS TUI Control Center with 4 zones: Status Header, Navigation Sidebar, Command Explorer, and Context Panel. |
+| 11.2 | `nexus --no-ui` or non-interactive pipe (`nexus \| cat`) | Emits clean CLI help output without launching full-screen TUI. |
+| 11.3 | `nexus ui` | Explicitly launches full-screen TUI control center. |
+| 11.4 | Press `/` or `Ctrl+K` inside TUI | Opens Global Command Palette with fuzzy search across all 32 operations and categories. |
+| 11.5 | Navigation Sidebar | Tree with 8 canonical categories: `Overview`, `Account & Identity`, `Devices & Nodes`, `Files & Knowledge`, `Projects & Productivity`, `Synchronization`, `Local Services`, `Settings & Setup` with real command counts. |
+| 11.6 | Press `Enter` or click "Execute Command" on command requiring arguments | Opens dynamic `ParameterFormModal` with typed inputs. |
+| 11.7 | Attempt destructive operation in TUI (`nexus notes delete`, `nexus config reset`, `nexus devices revoke`) | Shows warning modal prompting confirmation before executing. |
+| 11.8 | Press `w` in TUI | Launches interactive First-Run Setup Wizard. |
+| 11.9 | Press `p` in TUI or `nexus config profile list` | Lists all configured profiles with active indicator. |
+| 11.10 | `nexus config profile create staging --url https://staging.nexus.local` followed by `nexus config profile switch staging` | Creates profile and switches active target, isolating session credentials. |
+| 11.11 | Press `?` in TUI | Displays comprehensive keyboard shortcuts cheat-sheet modal. |
 
 ---
 
