@@ -492,6 +492,30 @@ Button.-success {
     overflow-y: auto;
 }
 
+.kanban-card-btn-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+.kanban-card-btn-row Button {
+    margin-right: 1;
+}
+
+.notes-card-btn-row {
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+.notes-card-btn-row Button {
+    margin-right: 1;
+}
+
 #notes-cards-container {
     height: auto;
     min-height: 20;

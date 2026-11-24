@@ -358,7 +358,7 @@ class NexusTUIApp(App):
                 data=details,
             )))
 
-    def on_productivity_view_action(self, event: NotesTasksView.ProductivityAction) -> None:
+    def on_notes_tasks_view_productivity_action(self, event: NotesTasksView.ProductivityAction) -> None:
         if event.action_id == "add_task":
             cmd = get_registry().get("tasks.add")
             if cmd:
@@ -371,6 +371,9 @@ class NexusTUIApp(App):
             cmd = get_registry().get("projects.create")
             if cmd:
                 self.execute_command_flow(cmd)
+
+    def on_productivity_view_action(self, event: NotesTasksView.ProductivityAction) -> None:
+        self.on_notes_tasks_view_productivity_action(event)
 
     def on_settings_view_settings_changed(self, event: SettingsView.SettingsChanged) -> None:
         header = self.query_one("#status-header", StatusHeader)

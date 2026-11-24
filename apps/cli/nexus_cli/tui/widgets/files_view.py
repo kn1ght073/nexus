@@ -16,6 +16,7 @@ from textual.widgets import Button, DataTable, Input, Label, Static
 
 from ...client import get_client
 from ...config import load_config
+from ...local_store import list_local_storage_files, search_local_storage_files, ensure_storage_root
 from .context import ContextPanel
 
 
@@ -82,6 +83,11 @@ class FilesView(Static):
                 files = r.json()
         except Exception:
             pass
+        if not files:
+            try:
+                files = list_local_storage_files(target_path)
+            except Exception:
+                pass
 
         self.app.call_from_thread(self._render_directory, target_path or "", files)
 
@@ -157,8 +163,11 @@ class FilesView(Static):
                 # Safe read of small files if local path exists
                 preview_text = ""
                 try:
-                    if os.path.exists(p) and os.path.isfile(p):
-                        with open(p, "r", encoding="utf-8", errors="replace") as pf:
+                    full_p = p
+                    if not os.path.exists(full_p):
+                        full_p = str(ensure_storage_root() / p)
+                    if os.path.exists(full_p) and os.path.isfile(full_p):
+                        with open(full_p, "r", encoding="utf-8", errors="replace") as pf:
                             preview_text = "".join(pf.readlines()[:20])
                 except Exception:
                     pass
@@ -209,6 +218,11 @@ class FilesView(Static):
                 files = r.json()
         except Exception:
             pass
+        if not files:
+            try:
+                files = search_local_storage_files(query)
+            except Exception:
+                pass
         self.app.call_from_thread(self._render_directory, f"search:{query}", files)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

@@ -421,14 +421,28 @@ def _handle_nodes_revoke(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
 
 
 def _handle_files_roots(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
-    client = get_client()
-    resp = client.get("/api/files/roots", timeout=5)
-    roots = resp.json()
-    if not isinstance(roots, list):
-        roots = []
-    lines = [f"Configured storage roots: {len(roots)}"]
+    roots = []
+    source = "Remote Node"
+    try:
+        client = get_client()
+        resp = client.get("/api/files/roots", timeout=5)
+        if resp.status_code == 200:
+            roots = resp.json()
+            if not isinstance(roots, list):
+                roots = []
+        else:
+            from .local_store import ensure_storage_root
+            roots = [str(ensure_storage_root())]
+            source = "Local Sovereign Store"
+    except Exception:
+        from .local_store import ensure_storage_root
+        roots = [str(ensure_storage_root())]
+        source = "Local Sovereign Store"
+
+    lines = [f"Configured storage roots ({source}): {len(roots)}"]
     for r in roots:
-        lines.append(f"• {r.get('path', r)} ({r.get('name', 'root')})")
+        p = r.get("path", r) if isinstance(r, dict) else r
+        lines.append(f"• {p}")
     return CommandResult(
         success=True,
         title="Storage Roots",
@@ -440,14 +454,35 @@ def _handle_files_roots(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRe
 def _handle_files_search(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     query = args.get("query", "")
     path = opts.get("path") or args.get("path")
-    client = get_client()
-    params: Dict[str, Any] = {"q": query}
-    if path:
-        params["path"] = path
-    resp = client.get("/api/files/search", params=params, timeout=10)
-    data = resp.json()
-    files = data if isinstance(data, list) else data.get("results", [])
-    lines = [f"Found {len(files)} matches for query '{query}':"]
+    files = []
+    source = "Remote Node"
+    try:
+        client = get_client()
+        params: Dict[str, Any] = {"q": query}
+        if path:
+            params["path"] = path
+        resp = client.get("/api/files/search", params=params, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            files = data if isinstance(data, list) else data.get("results", [])
+        else:
+            from .local_store import search_local_storage_files
+            files = search_local_storage_files(query)
+            source = "Local Sovereign Store"
+    except Exception:
+        from .local_store import search_local_storage_files
+        files = search_local_storage_files(query)
+        source = "Local Sovereign Store"
+
+    lines = [f"Found {len(files)} matches for query '{query}' ({source}):"]
+    for f in files[:20]:
+        lines.append(f"• {f.get('path', f)}")
+    return CommandResult(
+        success=True,
+        title=f"File Search: '{query}'",
+        message="\n".join(lines),
+        data=files,
+    )
     for f in files[:20]:
         lines.append(f"• {f.get('path', f)}")
     return CommandResult(

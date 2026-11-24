@@ -217,3 +217,86 @@ def delete_local_note(note_id: int) -> bool:
             return cur.rowcount > 0
     finally:
         conn.close()
+
+
+# --- Storage Roots & File Browsing ---
+
+STORAGE_ROOT = Path.home() / ".nexus" / "storage"
+
+
+def ensure_storage_root() -> Path:
+    STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    # Seed default sample files if empty
+    docs_dir = STORAGE_ROOT / "documents"
+    docs_dir.mkdir(exist_ok=True)
+    welcome_file = docs_dir / "welcome_to_nexus.txt"
+    if not welcome_file.exists():
+        welcome_file.write_text(
+            "Welcome to NEXUS Sovereign Storage!\nThis directory is jailed inside ~/.nexus/storage.\n"
+            "All your local sovereign files, scripts, and exports are preserved here.\n",
+            encoding="utf-8",
+        )
+    projects_dir = STORAGE_ROOT / "projects"
+    projects_dir.mkdir(exist_ok=True)
+    sample_spec = projects_dir / "architecture_spec.json"
+    if not sample_spec.exists():
+        sample_spec.write_text(
+            json.dumps({"ecosystem": "NEXUS", "storage": "sovereign", "version": "0.2.0"}, indent=2),
+            encoding="utf-8",
+        )
+    return STORAGE_ROOT
+
+
+def list_local_storage_files(relative_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    root = ensure_storage_root()
+    target_dir = root
+    if relative_path:
+        clean_rel = relative_path.strip().lstrip("/")
+        candidate = (root / clean_rel).resolve()
+        if candidate.is_relative_to(root) and candidate.is_dir():
+            target_dir = candidate
+
+    files = []
+    try:
+        for entry in sorted(target_dir.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            try:
+                rel = entry.relative_to(root).as_posix()
+                is_dir = entry.is_dir()
+                size = entry.stat().st_size if not is_dir else 4096
+                files.append({
+                    "name": entry.name,
+                    "path": rel,
+                    "is_dir": is_dir,
+                    "size": size,
+                    "modified_at": datetime.fromtimestamp(entry.stat().st_mtime).isoformat(),
+                })
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return files
+
+
+def search_local_storage_files(query: str) -> List[Dict[str, Any]]:
+    root = ensure_storage_root()
+    q = query.lower()
+    results = []
+    try:
+        for entry in root.rglob("*"):
+            if q in entry.name.lower():
+                try:
+                    rel = entry.relative_to(root).as_posix()
+                    is_dir = entry.is_dir()
+                    size = entry.stat().st_size if not is_dir else 4096
+                    results.append({
+                        "name": entry.name,
+                        "path": rel,
+                        "is_dir": is_dir,
+                        "size": size,
+                        "modified_at": datetime.fromtimestamp(entry.stat().st_mtime).isoformat(),
+                    })
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return results
