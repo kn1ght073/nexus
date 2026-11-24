@@ -11,6 +11,7 @@ import { Card } from '../../../src/components/Card';
 import { EmptyState } from '../../../src/components/EmptyState';
 import { apiClient } from '../../../src/api/client';
 import { NoteOut } from '../../../src/api/types';
+import { getLocalNotes, saveLocalNote, deleteLocalNote } from '../../../src/api/workspaceStore';
 
 export default function NotesScreen() {
   const { colors } = useTheme();
@@ -24,25 +25,39 @@ export default function NotesScreen() {
 
   const { data: notes, isLoading, refetch } = useQuery<NoteOut[]>({
     queryKey: ['notes'],
-    queryFn: () => apiClient<NoteOut[]>('/api/notes'),
+    queryFn: async () => {
+      try {
+        const remote = await apiClient<NoteOut[]>('/api/notes');
+        return remote;
+      } catch (err: any) {
+        return await getLocalNotes();
+      }
+    },
   });
 
   const createNoteMutation = useMutation({
-    mutationFn: () =>
-      apiClient<NoteOut>('/api/notes', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: title.trim(),
-          content: content.trim(),
-          tags: tags.trim() || undefined,
-        }),
-      }),
+    mutationFn: async () => {
+      const payload = {
+        title: title.trim(),
+        content: content.trim(),
+        tags: tags.trim() || undefined,
+      };
+      try {
+        return await apiClient<NoteOut>('/api/notes', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      } catch (err: any) {
+        return await saveLocalNote(payload);
+      }
+    },
     onSuccess: () => {
       setTitle('');
       setContent('');
       setTags('');
       setShowAdd(false);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['accountOverview'] });
     },
     onError: (err: any) => {
       Alert.alert('Note Creation Failed', err.message);
@@ -50,9 +65,16 @@ export default function NotesScreen() {
   });
 
   const deleteNoteMutation = useMutation({
-    mutationFn: (id: number) => apiClient(`/api/notes/${id}`, { method: 'DELETE' }),
+    mutationFn: async (id: number) => {
+      try {
+        await apiClient(`/api/notes/${id}`, { method: 'DELETE' });
+      } catch (err: any) {
+        await deleteLocalNote(id);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['accountOverview'] });
     },
   });
 
@@ -66,7 +88,12 @@ export default function NotesScreen() {
           onPress={() => router.back()}
           style={styles.backBtn}
         />
-        <Text style={[styles.topTitle, { color: colors.textPrimary }]}>Notes & Ideas</Text>
+        <View style={styles.titleContainer}>
+          <Text style={[styles.topTitle, { color: colors.textPrimary }]}>Notes & Ideas</Text>
+          <Text style={[styles.topSubtitle, { color: colors.textMuted }]}>
+            Sovereign Knowledge Vault
+          </Text>
+        </View>
         <Button
           title=""
           icon={<Plus size={18} color="#FFFFFF" />}
@@ -179,9 +206,17 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     borderRadius: 12,
   },
+  titleContainer: {
+    alignItems: 'center',
+  },
   topTitle: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  topSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 1,
   },
   createCard: {
     marginHorizontal: 20,
@@ -198,7 +233,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   noteTitle: {
     fontSize: 16,
@@ -208,12 +243,12 @@ const styles = StyleSheet.create({
   noteBody: {
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 10,
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+    marginTop: 10,
   },
   tagBadge: {
     paddingHorizontal: 8,

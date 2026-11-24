@@ -11,6 +11,12 @@ import { Card } from '../../../src/components/Card';
 import { EmptyState } from '../../../src/components/EmptyState';
 import { apiClient } from '../../../src/api/client';
 import { TaskOut } from '../../../src/api/types';
+import {
+  getLocalTasks,
+  saveLocalTask,
+  updateLocalTask,
+  deleteLocalTask,
+} from '../../../src/api/workspaceStore';
 
 export default function TasksScreen() {
   const { colors } = useTheme();
@@ -22,19 +28,32 @@ export default function TasksScreen() {
 
   const { data: tasks, isLoading, refetch } = useQuery<TaskOut[]>({
     queryKey: ['tasks'],
-    queryFn: () => apiClient<TaskOut[]>('/api/tasks'),
+    queryFn: async () => {
+      try {
+        const remote = await apiClient<TaskOut[]>('/api/tasks');
+        return remote;
+      } catch (err: any) {
+        return await getLocalTasks();
+      }
+    },
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: (title: string) =>
-      apiClient<TaskOut>('/api/tasks', {
-        method: 'POST',
-        body: JSON.stringify({ title, status: 'pending' }),
-      }),
+    mutationFn: async (title: string) => {
+      try {
+        return await apiClient<TaskOut>('/api/tasks', {
+          method: 'POST',
+          body: JSON.stringify({ title, status: 'pending' }),
+        });
+      } catch (err: any) {
+        return await saveLocalTask({ title, status: 'pending' });
+      }
+    },
     onSuccess: () => {
       setNewTaskTitle('');
       setShowAdd(false);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['accountOverview'] });
     },
     onError: (err: any) => {
       Alert.alert('Task Creation Failed', err.message);
@@ -42,20 +61,32 @@ export default function TasksScreen() {
   });
 
   const toggleTaskMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      apiClient<TaskOut>(`/api/tasks/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status }),
-      }),
+    mutationFn: async ({ id, status }: { id: number; status: 'pending' | 'in_progress' | 'completed' | 'cancelled' }) => {
+      try {
+        return await apiClient<TaskOut>(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        });
+      } catch (err: any) {
+        return await updateLocalTask(id, { status });
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 
   const deleteTaskMutation = useMutation({
-    mutationFn: (id: number) => apiClient(`/api/tasks/${id}`, { method: 'DELETE' }),
+    mutationFn: async (id: number) => {
+      try {
+        await apiClient(`/api/tasks/${id}`, { method: 'DELETE' });
+      } catch (err: any) {
+        await deleteLocalTask(id);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['accountOverview'] });
     },
   });
 
@@ -74,7 +105,12 @@ export default function TasksScreen() {
           onPress={() => router.back()}
           style={styles.backBtn}
         />
-        <Text style={[styles.topTitle, { color: colors.textPrimary }]}>Tasks & Objectives</Text>
+        <View style={styles.titleContainer}>
+          <Text style={[styles.topTitle, { color: colors.textPrimary }]}>Tasks & Objectives</Text>
+          <Text style={[styles.topSubtitle, { color: colors.textMuted }]}>
+            Sovereign Action Items
+          </Text>
+        </View>
         <Button
           title=""
           icon={<Plus size={18} color="#FFFFFF" />}
@@ -165,7 +201,7 @@ export default function TasksScreen() {
 
                 <TouchableOpacity
                   onPress={() => deleteTaskMutation.mutate(item.id)}
-                  style={styles.delTouch}
+                  style={styles.deleteTouch}
                 >
                   <Trash2 size={16} color={colors.textMuted} />
                 </TouchableOpacity>
@@ -179,9 +215,7 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -189,61 +223,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
-  backBtn: {
-    width: 44,
-    height: 44,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    borderRadius: 12,
-  },
-  addBtn: {
-    width: 44,
-    height: 44,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    borderRadius: 12,
-  },
-  topTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  createBox: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  list: {
-    padding: 20,
-    paddingTop: 4,
-  },
-  taskCard: {
-    marginVertical: 4,
-    paddingVertical: 12,
-  },
-  taskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  checkTouch: {
-    padding: 2,
-  },
-  taskInfo: {
-    flex: 1,
-  },
-  taskTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  metaText: {
-    fontSize: 11,
-  },
-  delTouch: {
-    padding: 6,
-  },
+  backBtn: { width: 44, height: 44, paddingHorizontal: 0, paddingVertical: 0, borderRadius: 12 },
+  addBtn: { width: 44, height: 44, paddingHorizontal: 0, paddingVertical: 0, borderRadius: 12 },
+  titleContainer: { alignItems: 'center' },
+  topTitle: { fontSize: 18, fontWeight: '700' },
+  topSubtitle: { fontSize: 11, fontWeight: '500', marginTop: 1 },
+  createBox: { marginHorizontal: 20, marginBottom: 12 },
+  list: { padding: 20, paddingTop: 4 },
+  taskCard: { marginBottom: 10 },
+  taskRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  checkTouch: { padding: 4 },
+  taskInfo: { flex: 1 },
+  taskTitle: { fontSize: 15, fontWeight: '600' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  metaText: { fontSize: 11 },
+  deleteTouch: { padding: 8 },
 });
