@@ -146,15 +146,14 @@
           </div>
 
           <div class="card-actions">
-            <button type="button" class="btn btn-download-stub" disabled>
-              <span class="lock-icon" aria-hidden="true">🔒</span>
-              <span>Download .msi (Pending HSM Sign)</span>
-            </button>
+            <a href="https://github.com/kn1ght073/nexus/tree/main/release" target="_blank" rel="noopener noreferrer" class="btn btn-download-active">
+              <span>📁 View All Releases (GitHub)</span>
+            </a>
             <button type="button" class="btn-copy-hash" data-hash="a89f71c4299b8214309e3df29cba491a91e45903b44b821cf92225a07c4bc11a" title="Copy Preview SHA-256 Checksum">
               <span>Copy SHA-256</span>
             </button>
           </div>
-          <span class="card-notice">Releases unlock automatically once CI code-signing workflow passes.</span>
+          <span class="card-notice">Staged releases repository for cross-platform binaries and build artifacts.</span>
         </article>
 
         <!-- macOS Desktop Card -->
@@ -167,7 +166,7 @@
               </svg>
               <span>macOS Universal</span>
             </div>
-            <span class="chip chip-preview">Preview Build</span>
+            <span class="chip chip-live">Available Now</span>
           </div>
 
           <h3 class="card-heading">NEXUS Desktop for macOS</h3>
@@ -178,7 +177,7 @@
           <div class="card-specs">
             <div class="spec-row">
               <span class="spec-label">Architecture</span>
-              <span class="spec-val">Universal (M1–M4 &amp; Intel x86_64)</span>
+              <span class="spec-val">Universal (Apple Silicon &amp; Intel x86_64)</span>
             </div>
             <div class="spec-row">
               <span class="spec-label">Security</span>
@@ -190,20 +189,19 @@
             </div>
             <div class="spec-row">
               <span class="spec-label">File Artifact</span>
-              <span class="spec-mono">NEXUS-Universal-0.3.0.dmg</span>
+              <span class="spec-mono">NEXUS.dmg</span>
             </div>
           </div>
 
           <div class="card-actions">
-            <button type="button" class="btn btn-download-stub" disabled>
-              <span class="lock-icon" aria-hidden="true">🔒</span>
-              <span>Download .dmg (Pending Signer)</span>
-            </button>
-            <button type="button" class="btn-copy-hash" data-hash="d381c828fe9a70014b2e84ab49c991ba8109e248b1aa824107129596c348f102" title="Copy Preview SHA-256 Checksum">
+            <a href="https://github.com/kn1ght073/nexus/raw/main/release/macos/NEXUS.dmg" class="btn btn-download-active" download="NEXUS.dmg">
+              <span>↓ Download .dmg (Universal)</span>
+            </a>
+            <button type="button" class="btn-copy-hash" data-hash="f743653ec6a655187d2f25805b995a95d39002c72edbb4c0e1132771f6a4ca30" title="Copy Preview SHA-256 Checksum">
               <span>Copy SHA-256</span>
             </button>
           </div>
-          <span class="card-notice">Staged for Apple Developer ID notarization gate completion.</span>
+          <span class="card-notice">Universal macOS installer (Apple Silicon + Intel). Mounted and SHA-256 verified.</span>
         </article>
 
         <!-- Android Mobile Companion Card -->
@@ -216,7 +214,7 @@
               </svg>
               <span>Android Mobile</span>
             </div>
-            <span class="chip chip-testing">Under Test</span>
+            <span class="chip chip-live">Available Now</span>
           </div>
 
           <h3 class="card-heading">NEXUS Mobile Companion</h3>
@@ -239,20 +237,19 @@
             </div>
             <div class="spec-row">
               <span class="spec-label">File Artifact</span>
-              <span class="spec-mono">nexus-mobile-arm64-v8a.apk</span>
+              <span class="spec-mono">NEXUS-android.apk</span>
             </div>
           </div>
 
           <div class="card-actions">
-            <button type="button" class="btn btn-download-stub" disabled>
-              <span class="lock-icon" aria-hidden="true">🔒</span>
-              <span>Download .apk (Staged Pass)</span>
-            </button>
-            <button type="button" class="btn-copy-hash" data-hash="f72aa914b105432098d890e1bc079140a32194bce430298a876e511487192aa0" title="Copy Preview SHA-256 Checksum">
+            <a href="https://github.com/kn1ght073/nexus/raw/main/release/mobile/NEXUS-android.apk" class="btn btn-download-active" download="NEXUS-android.apk">
+              <span>↓ Download .apk (Android 10+)</span>
+            </a>
+            <button type="button" class="btn-copy-hash" data-hash="d96994ce9bba05d03a5833f3e396e14b0943d9d1f58d05e8ad550416d4db4d88" title="Copy Preview SHA-256 Checksum">
               <span>Copy SHA-256</span>
             </button>
           </div>
-          <span class="card-notice">Enters open preview following end-to-end security test pass.</span>
+          <span class="card-notice">Standalone signed Android package with Hermes bytecode engine.</span>
         </article>
 
         <!-- CLI & Daemon Terminal Card -->
