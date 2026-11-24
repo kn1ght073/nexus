@@ -253,6 +253,12 @@ class NoteCreate(BaseModel):
     project_id: int | None = None
 
 
+class NoteUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    content: str | None = Field(default=None, min_length=1)
+    project_id: int | None = None
+
+
 class NoteOut(BaseModel):
     id: int
     title: str

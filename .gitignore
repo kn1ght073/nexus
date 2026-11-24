@@ -18,6 +18,9 @@ build/
 *.dex
 *.class
 local.properties
+
+# Allow release artifacts
+!release/**
 # OS generated files
 .DS_Store
 Thumbs.db

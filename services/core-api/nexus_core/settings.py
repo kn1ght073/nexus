@@ -167,7 +167,13 @@ class Settings(BaseSettings):
     max_search_depth: int = 6
 
     # --- CORS (tauri://localhost + vite dev server; never "*") ---
-    cors_origins: list[str] = ["tauri://localhost", "http://localhost:5173"]
+    cors_origins: list[str] = [
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+        "http://localhost:5173",
+        "http://localhost:1420",
+    ]
 
     @property
     def effective_cors_origins(self) -> list[str]:

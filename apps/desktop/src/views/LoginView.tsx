@@ -6,10 +6,17 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [hostStatus, setHostStatus] = useState<string>("Checking host...");
+
+  useEffect(() => {
+    api.health()
+      .then((h) => setHostStatus(`Host Online (${h.service})`))
+      .catch(() => setHostStatus(`Host offline or connecting to relay (${api.getBaseUrl()})`));
+  }, []);
 
   async function handleGoogleLogin() {
     setError(null);
-    const googleStartUrl = `${api.baseUrl}/api/auth/google/start`;
+    const googleStartUrl = `${api.getBaseUrl()}/api/auth/google/start`;
     try {
       if ((window as any).__TAURI__?.shell?.open) {
         await (window as any).__TAURI__.shell.open(googleStartUrl);
@@ -31,7 +38,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
       await api.loginWithToken(tokenInput.trim());
       onLogin();
     } catch (err) {
-      setError("Invalid session token or control plane unreachable.");
+      setError("Invalid session token or host unreachable. Check the token and try again.");
     } finally {
       setBusy(false);
     }
@@ -39,64 +46,67 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className="login-wrap">
-      <div className="login-card">
-        <h1>NEXUS</h1>
-        <p className="subtitle">Personal Digital Infrastructure — Sovereign & Hardened</p>
+      <div className="login-card card">
+        <div className="login-header">
+          <div className="login-logo">⬡</div>
+          <h1>NEXUS</h1>
+          <p className="subtitle">Personal Sovereign Digital Infrastructure</p>
+        </div>
 
-        <div style={{ margin: "16px 0", textAlign: "center" }}>
-          <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "16px" }}>
-            Identity registration & authentication are strictly managed via <b>Google OAuth</b>.
+        <div className="host-badge-pill">
+          <span className="status-dot online" />
+          <span className="mono text-xs">{hostStatus}</span>
+        </div>
+
+        <div className="login-body">
+          <p className="login-desc">
+            Identity and device federation are secured via Google OAuth. Authenticate to connect this desktop interface to your primary Mac host.
           </p>
 
           <button
             type="button"
+            className="btn-google"
             onClick={handleGoogleLogin}
-            style={{
-              width: "100%",
-              padding: "10px",
-              background: "#0284c7",
-              color: "#fff",
-              border: "none",
-              borderRadius: "6px",
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: "12px",
-            }}
           >
-            Sign in with Google OAuth
+            <span className="google-icon">G</span>
+            <span>Continue with Google</span>
           </button>
         </div>
 
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error-banner">{error}</div>}
 
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "14px", marginTop: "12px" }}>
-          <button
-            type="button"
-            className="linklike"
-            onClick={() => setShowTokenInput(!showTokenInput)}
-            style={{ display: "block", width: "100%", textAlign: "center", marginBottom: "10px" }}
-          >
-            {showTokenInput ? "Hide session token input" : "Or enter session token from Web / CLI"}
-          </button>
+        <div className="token-divider">
+          <span>OR AUTHENTICATE WITH TOKEN</span>
+        </div>
 
-          {showTokenInput && (
-            <form onSubmit={submitToken}>
-              <label>
-                Session Token
-                <input
-                  type="password"
-                  value={tokenInput}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenInput(e.target.value)}
-                  placeholder="eyJhbGciOiJIUzI1NiIsIn..."
-                  required
-                />
-              </label>
-
-              <button type="submit" disabled={busy} style={{ width: "100%", marginTop: "8px" }}>
-                {busy ? "Verifying…" : "Authenticate with Token"}
+        <div className="token-section">
+          {!showTokenInput ? (
+            <button
+              type="button"
+              className="linklike"
+              onClick={() => setShowTokenInput(true)}
+            >
+              Enter session token from CLI / Web →
+            </button>
+          ) : (
+            <form onSubmit={submitToken} className="token-form">
+              <label className="dim text-xs">JWT SESSION TOKEN</label>
+              <input
+                type="password"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsIn..."
+                required
+              />
+              <button type="submit" className="btn-primary" disabled={busy}>
+                {busy ? "Verifying Session..." : "Authorize Session"}
               </button>
             </form>
           )}
+        </div>
+
+        <div className="login-foot">
+          <span className="dim text-xs">Authoritative Database: Local SQLite on Mac</span>
         </div>
       </div>
     </div>
@@ -104,12 +114,26 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
 }
 
 export function CoreStatus() {
-  const [health, setHealth] = useState<string>("checking…");
+  const [health, setHealth] = useState<string>("Checking...");
+  const [online, setOnline] = useState<boolean | null>(null);
+
   useEffect(() => {
     api
       .health()
-      .then((h) => setHealth(`${h.service} — ${h.status}`))
-      .catch((e) => setHealth(`Control plane unreachable at ${api.baseUrl} (${String(e)})`));
+      .then((h) => {
+        setHealth(`${h.service}`);
+        setOnline(true);
+      })
+      .catch(() => {
+        setHealth(`Offline`);
+        setOnline(false);
+      });
   }, []);
-  return <div className="core-status">Control Plane: {health}</div>;
+
+  return (
+    <div className="core-status">
+      <span className={`status-dot ${online ? "online" : "offline"}`} />
+      <span className="text-xs dim">Host: {health}</span>
+    </div>
+  );
 }

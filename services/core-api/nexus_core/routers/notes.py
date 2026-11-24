@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..deps import bump_revision, log_activity, owned_project_or_404, publish_event
 from ..database import get_db
 from ..models import Note, User
-from ..schemas import NoteCreate, NoteOut
+from ..schemas import NoteCreate, NoteOut, NoteUpdate
 from ..security import get_current_user
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -62,6 +62,30 @@ def get_note(
     current_user: User = Depends(get_current_user),
 ):
     return _owned_note_or_404(db, current_user, note_id)
+
+
+@router.patch("/{note_id}", response_model=NoteOut)
+def update_note(
+    note_id: int,
+    note_in: NoteUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    note = _owned_note_or_404(db, current_user, note_id)
+    if note_in.project_id is not None:
+        owned_project_or_404(db, current_user, note_in.project_id)
+        note.project_id = note_in.project_id
+    if note_in.title is not None:
+        note.title = note_in.title
+    if note_in.content is not None:
+        note.content = note_in.content
+    bump_revision(note)
+    db.commit()
+    db.refresh(note)
+    log_activity(db, user_id=current_user.id, action="note.updated", detail=note.title)
+    publish_event("NOTE_UPDATED", current_user.id, {"note_id": note.id, "title": note.title})
+    db.commit()
+    return note
 
 
 @router.delete("/{note_id}", status_code=204)
