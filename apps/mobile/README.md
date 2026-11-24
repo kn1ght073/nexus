@@ -1,60 +1,69 @@
-# NEXUS Mobile (Android) — scaffold
+# NEXUS Mobile Companion (Expo + React Native)
 
-The capture & control client (Minor project 2): Kotlin + Jetpack Compose,
-talking REST to the NEXUS Core API on the Windows Node. Offline-friendly by
-design (Room cache + revision-based sync are the next milestone — see the
-root `progress.md`).
+Official mobile application for the NEXUS sovereign personal digital infrastructure ecosystem.
 
-> **Status**: source scaffold — login, quick-capture task list, task
-> completion wired to the real Core endpoints; tokens in
-> EncryptedSharedPreferences. Build locally in Android Studio.
+## Key Features
 
-## Build & run (dev)
+- **Sovereign Cockpit Dashboard**: Live infrastructure status, active node indicator, device counters, and real-time audit event streams.
+- **Google OAuth Authentication & Hardware Isolation**: OpenID Connect with PKCE S256, cryptographically random nonce/state, and hardware keychain isolation (`expo-secure-store`).
+- **Hardware Fleet & Device Management**: Register mobile clients with scoped permissions, view device capabilities, track liveness, and revoke compromised sessions.
+- **Node Pairing via QR Code & Numeric Passcodes**: Pair edge compute servers using the camera scanner or 6-digit one-time passcodes (`/api/pairing/exchange`).
+- **Personal Workspace & Storage**: Full mobile management of Projects, Tasks (with daily deadlines and completion toggles), Notes (with tag indexing), and sandboxed Storage Roots browsing.
+- **Incremental Sync Engine**: Delta synchronization pulling changes via server revisions (`/api/sync/pull`) with offline resilience.
+- **Mobile Doctor Diagnostics**: End-to-end runtime diagnostic probes matching `nexus doctor`.
+- **Adaptive Visual System**: Restrained deep charcoal & electric cyan styling with dark and light theme switching.
+
+---
+
+## Local Development & Setup
+
+### Prerequisites
+
+- Node.js 18+ (tested on Node v26)
+- npm / yarn
+- Expo CLI (`npx expo`)
+
+### Install Dependencies
 
 ```bash
-# 1. Core on the Windows Node (or your dev machine):
-cd ../../services/core-api
-uvicorn nexus_core.main:app --host 0.0.0.0 --port 8000   # LAN bind
-
-# 2. Phone + dev PC on the same LAN; then in Android Studio:
-#    open apps/mobile, set NEXUS_CORE_URL in app/build.gradle.kts to
-#    http://<your-dev-pc-ip>:8000  (or use adb reverse for loopback)
-adb reverse tcp:8000 tcp:8000     # loopback alternative
-
-# 3. Build:
-gradle wrapper --gradle-version 8.9   # first time only (wrapper not committed)
-./gradlew :app:assembleDebug
-adb install app/build/outputs/apk/debug/app-debug.apk
+cd apps/mobile
+npm install --legacy-peer-deps
 ```
 
-LAN TLS deployment (production): the Node runs `https://nexus.local:8443`
-with a self-signed CA. Export the CA, drop it at
-`app/src/main/res/raw/nexus_node_ca.pem`, and uncomment the trust-anchors
-block in `res/xml/network_security_config.xml` (pairing flow, plan §5).
+### Typecheck & Test
 
-## Layout
+```bash
+npm run typecheck
+npm test
+```
+
+### Run Locally
+
+```bash
+# Start Expo development server:
+npm start
+
+# Or launch directly on Android / iOS / Web:
+npm run android
+npm run ios
+npm run web
+```
+
+---
+
+## Architecture
 
 ```text
 apps/mobile/
-├── settings.gradle.kts · build.gradle.kts · gradle/libs.versions.toml  # AGP 8.5 / Kotlin 2.0 / Compose BOM
-└── app/
-    ├── build.gradle.kts           # deps: retrofit+moshi, okhttp, room, datastore, security-crypto
-    ├── proguard-rules.pro
-    └── src/main/
-        ├── AndroidManifest.xml    # INTERNET + RECORD_AUDIO; networkSecurityConfig
-        ├── res/xml/network_security_config.xml  # loopback cleartext for dev; LAN CA pinning
-        ├── res/values/            # strings, theme
-        └── java/local/nexus/mobile/
-            ├── MainActivity.kt    # Compose entry: login or tasks
-            ├── api/NexusApi.kt    # Retrofit interface + DTOs (auth, tasks, notes, devices)
-            ├── data/TokenStore.kt # EncryptedSharedPreferences token store + core URL
-            └── ui/ViewModels.kt   # LoginViewModel, TasksViewModel + screens
+├── app/                  # Expo Router file-based routes
+│   ├── _layout.tsx       # Theme, React Query, and Auth Providers
+│   ├── (auth)/           # Onboarding, server endpoint selection, Google OAuth
+│   └── (app)/            # Cockpit, Devices, Nodes, Workspace, Sync, Settings
+├── src/
+│   ├── api/              # Typed client with token rotation & 401 interceptor
+│   ├── components/       # Card, Button, Input, MetricBox, StatusBadge, EmptyState
+│   ├── context/          # AuthContext and ThemeContext
+│   ├── theme/            # Color palettes and semantic design tokens
+│   └── utils/            # Platform-backed SecureStore wrapper
+└── tests/                # Jest unit and integration test suite
 ```
-
-## Next milestones (see progress.md)
-
-1. Room offline cache of tasks/notes/… + `/sync/pull` since-revision cursor +
-   `/sync/push` on reconnect (the sync engine landed in Core step 2)
-2. Voice capture: MediaRecorder → POST /inbox job → Node Whisper STT
-3. Foreground-service WebSocket for live notifications (LAN-only, no FCM)
-4. Camera/file upload via the chunked file-sync API
