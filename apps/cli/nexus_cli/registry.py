@@ -721,8 +721,10 @@ def _handle_tasks_done(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRes
     data = None
     try:
         client = get_client()
-        resp = client.put(f"/api/tasks/{task_id}", json={"status": "completed"}, timeout=5)
-        if resp.status_code == 200:
+        resp = client.patch(f"/api/tasks/{task_id}/status", json={"status": "completed"}, timeout=5)
+        if resp.status_code in (404, 405):
+            resp = client.post(f"/api/tasks/{task_id}/done", timeout=5)
+        if resp.status_code in (200, 201):
             data = resp.json()
     except Exception:
         pass

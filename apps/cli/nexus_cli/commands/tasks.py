@@ -122,7 +122,9 @@ def done_task(task_id: int = typer.Argument(..., help="ID of task to complete"))
     t = None
     try:
         with status_spinner(f"Completing task #{task_id}…"):
-            resp = client.put(f"/api/tasks/{task_id}", json={"status": "completed"})
+            resp = client.patch(f"/api/tasks/{task_id}/status", json={"status": "completed"})
+            if resp.status_code in (404, 405):
+                resp = client.post(f"/api/tasks/{task_id}/done")
         t = resp.json()
     except Exception:
         t = update_local_task_status(task_id, status="completed")

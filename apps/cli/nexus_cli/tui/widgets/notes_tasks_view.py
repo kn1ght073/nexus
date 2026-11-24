@@ -38,6 +38,30 @@ from ...local_store import (
 from .context import ContextPanel
 
 
+def _get_project_files_for(project_id: Any, project_title: str = "") -> List[Dict[str, Any]]:
+    """Helper to retrieve documents and files linked to a specific project."""
+    files: List[Dict[str, Any]] = []
+    pid = str(project_id) if project_id is not None else ""
+    pname = (project_title or "").lower()
+    try:
+        if pid:
+            files = list_local_storage_files(f"projects/{pid}")
+        if not files:
+            all_files = list_local_storage_files("projects")
+            matched = []
+            for f in all_files:
+                path_l = f.get("path", "").lower()
+                name_l = f.get("name", "").lower()
+                if pid and pid in path_l:
+                    matched.append(f)
+                elif pname and pname in name_l:
+                    matched.append(f)
+            files = matched if matched else [f for f in all_files if not f.get("is_dir")]
+    except Exception:
+        pass
+    return files
+
+
 class AddTaskToProjectModal(ModalScreen[Optional[Dict[str, Any]]]):
     """Modal dialog for creating and linking a task directly to a project."""
 
@@ -62,33 +86,43 @@ class AddTaskToProjectModal(ModalScreen[Optional[Dict[str, Any]]]):
         if event.button.id == "btn-cancel-task":
             self.dismiss(None)
             return
-
         if event.button.id == "btn-submit-task":
-            title = self.query_one("#input-modal-task-title", Input).value.strip()
-            desc = self.query_one("#input-modal-task-desc", Input).value.strip()
-            if not title:
-                try:
-                    self.notify("Task title is required", title="Validation Error", severity="error")
-                except Exception:
-                    pass
-                return
+            self._submit_task()
 
-            task_data = None
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "input-modal-task-title":
+            desc_inp = self.query_one("#input-modal-task-desc", Input)
+            if not desc_inp.value.strip():
+                desc_inp.focus()
+                return
+        self._submit_task()
+
+    def _submit_task(self) -> None:
+        title = self.query_one("#input-modal-task-title", Input).value.strip()
+        desc = self.query_one("#input-modal-task-desc", Input).value.strip()
+        if not title:
+            try:
+                self.notify("Task title is required", title="Validation Error", severity="error")
+            except Exception:
+                pass
+            return
+
+        pid_int = int(self.project_id) if str(self.project_id).isdigit() else self.project_id
+        # Always record in local sovereign store immediately (0ms instant response)
+        task_data = create_local_task(title=title, project_id=pid_int, description=desc or None)
+
+        def worker_sync():
             try:
                 client = get_client()
-                body: Dict[str, Any] = {"title": title, "project_id": self.project_id}
+                body: Dict[str, Any] = {"title": title, "project_id": pid_int}
                 if desc:
                     body["description"] = desc
-                resp = client.post("/api/tasks", json=body, timeout=4)
-                if resp.status_code in (200, 201):
-                    task_data = resp.json()
+                client.post("/api/tasks", json=body, timeout=4)
             except Exception:
                 pass
 
-            if not task_data:
-                task_data = create_local_task(title=title, project_id=self.project_id, description=desc or None)
-
-            self.dismiss(task_data)
+        self.run_worker(worker_sync, thread=True)
+        self.dismiss(task_data)
 
     def key_escape(self) -> None:
         self.dismiss(None)
@@ -118,31 +152,41 @@ class AddNoteToProjectModal(ModalScreen[Optional[Dict[str, Any]]]):
         if event.button.id == "btn-cancel-note":
             self.dismiss(None)
             return
-
         if event.button.id == "btn-submit-note":
-            title = self.query_one("#input-modal-note-title", Input).value.strip()
-            content = self.query_one("#input-modal-note-content", Input).value.strip()
-            if not title or not content:
-                try:
-                    self.notify("Both note title and content are required", title="Validation Error", severity="error")
-                except Exception:
-                    pass
-                return
+            self._submit_note()
 
-            note_data = None
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "input-modal-note-title":
+            content_inp = self.query_one("#input-modal-note-content", Input)
+            if not content_inp.value.strip():
+                content_inp.focus()
+                return
+        self._submit_note()
+
+    def _submit_note(self) -> None:
+        title = self.query_one("#input-modal-note-title", Input).value.strip()
+        content = self.query_one("#input-modal-note-content", Input).value.strip()
+        if not title or not content:
+            try:
+                self.notify("Both note title and content are required", title="Validation Error", severity="error")
+            except Exception:
+                pass
+            return
+
+        pid_int = int(self.project_id) if str(self.project_id).isdigit() else self.project_id
+        # Always record in local sovereign store immediately (0ms instant response)
+        note_data = create_local_note(title=title, content=content, project_id=pid_int)
+
+        def worker_sync():
             try:
                 client = get_client()
-                body: Dict[str, Any] = {"title": title, "content": content, "project_id": self.project_id}
-                resp = client.post("/api/notes", json=body, timeout=4)
-                if resp.status_code in (200, 201):
-                    note_data = resp.json()
+                body: Dict[str, Any] = {"title": title, "content": content, "project_id": pid_int}
+                client.post("/api/notes", json=body, timeout=4)
             except Exception:
                 pass
 
-            if not note_data:
-                note_data = create_local_note(title=title, content=content, project_id=self.project_id)
-
-            self.dismiss(note_data)
+        self.run_worker(worker_sync, thread=True)
+        self.dismiss(note_data)
 
     def key_escape(self) -> None:
         self.dismiss(None)
@@ -218,47 +262,68 @@ class ProjectDetailModal(ModalScreen[None]):
                         yield Static("Loading documents...", id="modal-proj-files-static")
 
     def on_mount(self) -> None:
-        self.refresh_modal_data()
+        # Load instantly from sovereign local store
+        self._load_local_data()
+        self._render_modal_contents()
+        # Async background sync
+        self.run_worker(self._async_fetch, thread=True)
 
-    def refresh_modal_data(self) -> None:
+    def _load_local_data(self) -> None:
+        try:
+            tasks = list_local_tasks()
+            notes = list_local_notes()
+            projects = list_local_projects()
+            self._tasks = [t for t in tasks if t.get("project_id") is not None and str(t.get("project_id")) == str(self.project_id)]
+            self._notes = [n for n in notes if n.get("project_id") is not None and str(n.get("project_id")) == str(self.project_id)]
+            proj = next((p for p in projects if str(p.get("id")) == str(self.project_id)), None)
+            if not proj:
+                proj = {"id": self.project_id, "title": f"Project #{self.project_id}", "status": "active", "description": ""}
+            self._project = proj
+        except Exception:
+            pass
+
+    def _async_fetch(self) -> None:
         client = get_client()
         tasks = []
         try:
-            r = client.get("/api/tasks", timeout=4)
+            r = client.get("/api/tasks", timeout=2)
             if r.status_code == 200:
                 tasks = r.json()
         except Exception:
             pass
-        if not tasks:
-            tasks = list_local_tasks()
-
         notes = []
         try:
-            r = client.get("/api/notes", timeout=4)
+            r = client.get("/api/notes", timeout=2)
             if r.status_code == 200:
                 notes = r.json()
         except Exception:
             pass
-        if not notes:
-            notes = list_local_notes()
-
         projects = []
         try:
-            r = client.get("/api/projects", timeout=4)
+            r = client.get("/api/projects", timeout=2)
             if r.status_code == 200:
                 projects = r.json()
         except Exception:
             pass
-        if not projects:
-            projects = list_local_projects()
 
-        self._tasks = [t for t in tasks if str(t.get("project_id")) == str(self.project_id)]
-        self._notes = [n for n in notes if str(n.get("project_id")) == str(self.project_id)]
-        proj = next((p for p in projects if str(p.get("id")) == str(self.project_id)), None)
-        if not proj:
-            proj = {"id": self.project_id, "title": f"Project #{self.project_id}", "status": "active", "description": ""}
-        self._project = proj
+        if tasks or notes or projects:
+            self.app.call_from_thread(self._apply_fetched_data, tasks, notes, projects)
+
+    def _apply_fetched_data(self, tasks: list, notes: list, projects: list) -> None:
+        if tasks:
+            self._tasks = [t for t in tasks if t.get("project_id") is not None and str(t.get("project_id")) == str(self.project_id)]
+        if notes:
+            self._notes = [n for n in notes if n.get("project_id") is not None and str(n.get("project_id")) == str(self.project_id)]
+        if projects:
+            proj = next((p for p in projects if str(p.get("id")) == str(self.project_id)), None)
+            if proj:
+                self._project = proj
         self._render_modal_contents()
+
+    def refresh_modal_data(self) -> None:
+        self._load_local_data()
+        self._render_modal_contents()
+        self.run_worker(self._async_fetch, thread=True)
 
     def _render_modal_contents(self) -> None:
         try:
@@ -286,9 +351,21 @@ class ProjectDetailModal(ModalScreen[None]):
                 tasks_scroll.mount(Static("[dim]No tasks associated with this project yet.[/dim]"))
             else:
                 for t in self._tasks:
+                    tid = t.get("id")
                     st = t.get("status", "pending")
                     st_badge = "✓" if st == "completed" else "🔄" if st == "in_progress" else "⏳"
-                    tasks_scroll.mount(Static(f"[bold cyan]{st_badge} [{t.get('id')}][/bold cyan] {t.get('title')}"))
+                    tasks_scroll.mount(Static(f"[bold cyan]{st_badge} [{tid}][/bold cyan] {t.get('title')}"))
+                    btn_row = Horizontal(classes="kanban-card-btn-row")
+                    tasks_scroll.mount(btn_row)
+                    if st == "pending":
+                        btn_row.mount(Button("▶ Start", id=f"modal-task-start-{tid}", variant="primary", classes="btn-sm"))
+                        btn_row.mount(Button("✓ Done", id=f"modal-task-done-{tid}", variant="success", classes="btn-sm"))
+                    elif st == "in_progress":
+                        btn_row.mount(Button("⏳ Pending", id=f"modal-task-pend-{tid}", classes="btn-sm"))
+                        btn_row.mount(Button("✓ Done", id=f"modal-task-done-{tid}", variant="success", classes="btn-sm"))
+                    else:
+                        btn_row.mount(Button("↩ Reopen", id=f"modal-task-reopen-{tid}", classes="btn-sm"))
+                    btn_row.mount(Button("🗑 Del", id=f"modal-task-del-{tid}", variant="error", classes="btn-sm"))
 
             # Notes
             notes_scroll = self.query_one("#modal-proj-notes-scroll", VerticalScroll)
@@ -297,19 +374,17 @@ class ProjectDetailModal(ModalScreen[None]):
                 notes_scroll.mount(Static("[dim]No notes associated with this project yet.[/dim]"))
             else:
                 for n in self._notes:
+                    nid = n.get("id")
                     preview = (n.get("content") or "").replace("\n", " ")[:80]
-                    notes_scroll.mount(Static(f"📌 [bold cyan]#{n.get('id')}[/bold cyan] {n.get('title')}\n[dim]{preview}[/dim]"))
+                    notes_scroll.mount(Static(f"📌 [bold cyan]#{nid}[/bold cyan] {n.get('title')}\n[dim]{preview}[/dim]"))
+                    btn_row = Horizontal(classes="notes-card-btn-row")
+                    notes_scroll.mount(btn_row)
+                    btn_row.mount(Button(f"🗑 Delete Note #{nid}", id=f"modal-note-del-{nid}", variant="error", classes="btn-sm"))
 
             # Files
             files_scroll = self.query_one("#modal-proj-files-scroll", VerticalScroll)
             files_scroll.remove_children()
-            files = []
-            try:
-                files = list_local_storage_files(f"projects/{self.project_id}")
-                if not files:
-                    files = [f for f in list_local_storage_files("projects") if not f.get("is_dir")]
-            except Exception:
-                pass
+            files = _get_project_files_for(self.project_id, pname)
             if not files:
                 files_scroll.mount(Static("[dim]No files found in storage for this project.[/dim]"))
             else:
@@ -341,8 +416,9 @@ class ProjectDetailModal(ModalScreen[None]):
         elif btn_id == "btn-modal-delete":
             def on_delete_confirmed(confirmed: Optional[bool]) -> None:
                 if confirmed:
+                    pid_int = int(self.project_id) if str(self.project_id).isdigit() else self.project_id
                     try:
-                        delete_local_project(self.project_id)
+                        delete_local_project(pid_int)
                     except Exception:
                         pass
                     try:
@@ -355,6 +431,57 @@ class ProjectDetailModal(ModalScreen[None]):
                         self.parent_view.refresh_all_data()
                     self.dismiss(None)
             self.app.push_screen(ConfirmDeleteProjectModal(self.project_id, pname), on_delete_confirmed)
+        # Task actions in modal
+        elif btn_id.startswith("modal-task-start-"):
+            tid = int(btn_id.split("-")[-1])
+            self._transition_modal_task(tid, "in_progress")
+        elif btn_id.startswith("modal-task-done-"):
+            tid = int(btn_id.split("-")[-1])
+            self._transition_modal_task(tid, "completed")
+        elif btn_id.startswith("modal-task-pend-"):
+            tid = int(btn_id.split("-")[-1])
+            self._transition_modal_task(tid, "pending")
+        elif btn_id.startswith("modal-task-reopen-"):
+            tid = int(btn_id.split("-")[-1])
+            self._transition_modal_task(tid, "pending")
+        elif btn_id.startswith("modal-task-del-"):
+            tid = int(btn_id.split("-")[-1])
+            self._delete_modal_task(tid)
+        elif btn_id.startswith("modal-note-del-"):
+            nid = int(btn_id.split("-")[-1])
+            self._delete_modal_note(nid)
+
+    def _transition_modal_task(self, task_id: int, new_status: str) -> None:
+        try:
+            update_local_task_status(task_id, status=new_status)
+        except Exception:
+            pass
+        for t in self._tasks:
+            if str(t.get("id")) == str(task_id):
+                t["status"] = new_status
+        self._render_modal_contents()
+        if self.parent_view:
+            self.parent_view._transition_task(task_id, new_status)
+
+    def _delete_modal_task(self, task_id: int) -> None:
+        try:
+            delete_local_task(task_id)
+        except Exception:
+            pass
+        self._tasks = [t for t in self._tasks if str(t.get("id")) != str(task_id)]
+        self._render_modal_contents()
+        if self.parent_view:
+            self.parent_view._delete_task(task_id)
+
+    def _delete_modal_note(self, note_id: int) -> None:
+        try:
+            delete_local_note(note_id)
+        except Exception:
+            pass
+        self._notes = [n for n in self._notes if str(n.get("id")) != str(note_id)]
+        self._render_modal_contents()
+        if self.parent_view:
+            self.parent_view._delete_note(note_id)
 
     def key_escape(self) -> None:
         self.dismiss(None)
@@ -472,6 +599,17 @@ class NotesTasksView(Static):
     def on_mount(self) -> None:
         table = self.query_one("#projects-table", DataTable)
         table.add_columns("ID", "Name", "Status", "Tasks Count", "Created At")
+        self._update_project_view_visibility()
+
+        # Immediate zero-latency local render on mount so tables/kanban are never blank
+        try:
+            t = list_local_tasks()
+            n = list_local_notes()
+            p = list_local_projects()
+            self._render_productivity(t, n, p)
+        except Exception:
+            pass
+
         self._set_tab("tasks")
         self.refresh_all_data()
 
@@ -492,6 +630,11 @@ class NotesTasksView(Static):
 
             if tab == "projects":
                 self._update_project_view_visibility()
+                if self.selected_project_id is None:
+                    try:
+                        self.query_one("#projects-table", DataTable).focus()
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -543,10 +686,25 @@ class NotesTasksView(Static):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id == "projects-table":
-            row_key = event.row_key.value if event.row_key else None
+            row_key = getattr(event.row_key, "value", event.row_key) if event.row_key else None
             if not row_key and event.cursor_row is not None:
                 try:
                     row_data = event.data_table.get_row_at(event.cursor_row)
+                    row_key = str(row_data[0])
+                except Exception:
+                    pass
+            if row_key:
+                pid = int(row_key) if str(row_key).isdigit() else row_key
+                self.open_project(pid)
+
+    def on_data_table_cell_selected(self, event: DataTable.CellSelected) -> None:
+        if event.data_table.id == "projects-table":
+            row_key = None
+            if event.cell_key and event.cell_key.row_key:
+                row_key = getattr(event.cell_key.row_key, "value", event.cell_key.row_key)
+            if not row_key and event.coordinate is not None:
+                try:
+                    row_data = event.data_table.get_row_at(event.coordinate.row)
                     row_key = str(row_data[0])
                 except Exception:
                     pass
@@ -560,44 +718,78 @@ class NotesTasksView(Static):
     def _fetch_all_productivity(self) -> None:
         client = get_client()
 
-        tasks = []
+        remote_tasks = []
         try:
             r = client.get("/api/tasks", timeout=2)
             if r.status_code == 200:
-                tasks = r.json()
+                remote_tasks = r.json()
+                if not isinstance(remote_tasks, list):
+                    remote_tasks = []
         except Exception:
             pass
-        if not tasks:
-            try:
-                tasks = list_local_tasks()
-            except Exception:
-                pass
 
-        notes = []
+        local_tasks = []
+        try:
+            local_tasks = list_local_tasks()
+        except Exception:
+            pass
+
+        tasks = list(remote_tasks) if remote_tasks else list(local_tasks)
+        if remote_tasks and local_tasks:
+            remote_ids = {str(t.get("id")) for t in remote_tasks}
+            remote_titles = {t.get("title") for t in remote_tasks}
+            for lt in local_tasks:
+                if str(lt.get("id")) not in remote_ids and lt.get("title") not in remote_titles:
+                    tasks.append(lt)
+
+        remote_notes = []
         try:
             r = client.get("/api/notes", timeout=2)
             if r.status_code == 200:
-                notes = r.json()
+                remote_notes = r.json()
+                if not isinstance(remote_notes, list):
+                    remote_notes = []
         except Exception:
             pass
-        if not notes:
-            try:
-                notes = list_local_notes()
-            except Exception:
-                pass
 
-        projects = []
+        local_notes = []
+        try:
+            local_notes = list_local_notes()
+        except Exception:
+            pass
+
+        notes = list(remote_notes) if remote_notes else list(local_notes)
+        if remote_notes and local_notes:
+            remote_ids = {str(n.get("id")) for n in remote_notes}
+            remote_titles = {n.get("title") for n in remote_notes}
+            for ln in local_notes:
+                if str(ln.get("id")) not in remote_ids and ln.get("title") not in remote_titles:
+                    notes.append(ln)
+
+        remote_projects = []
         try:
             r = client.get("/api/projects", timeout=2)
             if r.status_code == 200:
-                projects = r.json()
+                remote_projects = r.json()
+                if not isinstance(remote_projects, list):
+                    remote_projects = []
         except Exception:
             pass
-        if not projects:
-            try:
-                projects = list_local_projects()
-            except Exception:
-                pass
+
+        local_projects = []
+        try:
+            local_projects = list_local_projects()
+        except Exception:
+            pass
+
+        projects = list(remote_projects) if remote_projects else list(local_projects)
+        if remote_projects and local_projects:
+            remote_ids = {str(p.get("id")) for p in remote_projects}
+            remote_titles = {p.get("title") or p.get("name") for p in remote_projects}
+            for lp in local_projects:
+                lp_title = lp.get("title") or lp.get("name")
+                if str(lp.get("id")) not in remote_ids and lp_title not in remote_titles:
+                    projects.append(lp)
 
         self.app.call_from_thread(self._render_productivity, tasks, notes, projects)
 
@@ -744,11 +936,11 @@ class NotesTasksView(Static):
 
         tasks_in_proj = [
             t for t in tasks_source
-            if str(t.get("project_id")) == str(self.selected_project_id)
+            if t.get("project_id") is not None and str(t.get("project_id")) == str(self.selected_project_id)
         ]
         notes_in_proj = [
             n for n in notes_source
-            if str(n.get("project_id")) == str(self.selected_project_id)
+            if n.get("project_id") is not None and str(n.get("project_id")) == str(self.selected_project_id)
         ]
 
         # 3. Documents / Files
@@ -1058,17 +1250,31 @@ class NotesTasksView(Static):
             nid = int(btn_id.split("-")[-1])
             self._delete_note(nid)
 
+    def on_key(self, event: Any) -> None:
+        if self.selected_project_id is not None:
+            k = event.key
+            if k in ("escape", "b"):
+                self.close_project()
+                event.stop()
+            elif k == "t":
+                self.action_add_task_to_project()
+                event.stop()
+            elif k == "n":
+                self.action_add_note_to_project()
+                event.stop()
+
     def key_escape(self) -> None:
         if self.selected_project_id is not None:
             self.close_project()
 
-    def _transition_task(self, task_id: int, new_status: str) -> None:
+    def _transition_task(self, task_id: Any, new_status: str) -> None:
         try:
-            update_local_task_status(task_id, status=new_status)
+            tid_int = int(task_id) if str(task_id).isdigit() else task_id
+            update_local_task_status(tid_int, status=new_status)
         except Exception:
             pass
         for t in self._tasks_cache:
-            if t.get("id") == task_id:
+            if str(t.get("id")) == str(task_id):
                 t["status"] = new_status
         if self.selected_project_id is not None:
             self._render_project_drilldown()
@@ -1076,19 +1282,22 @@ class NotesTasksView(Static):
         def worker():
             try:
                 client = get_client()
-                client.put(f"/api/tasks/{task_id}", json={"status": new_status}, timeout=4)
+                resp = client.patch(f"/api/tasks/{task_id}/status", json={"status": new_status}, timeout=4)
+                if resp.status_code in (404, 405):
+                    client.put(f"/api/tasks/{task_id}", json={"status": new_status}, timeout=4)
             except Exception:
                 pass
             self.app.call_from_thread(self.refresh_all_data)
 
         self.run_worker(worker, thread=True)
 
-    def _delete_task(self, task_id: int) -> None:
+    def _delete_task(self, task_id: Any) -> None:
         try:
-            delete_local_task(task_id)
+            tid_int = int(task_id) if str(task_id).isdigit() else task_id
+            delete_local_task(tid_int)
         except Exception:
             pass
-        self._tasks_cache = [t for t in self._tasks_cache if t.get("id") != task_id]
+        self._tasks_cache = [t for t in self._tasks_cache if str(t.get("id")) != str(task_id)]
         if self.selected_project_id is not None:
             self._render_project_drilldown()
 
@@ -1102,12 +1311,13 @@ class NotesTasksView(Static):
 
         self.run_worker(worker, thread=True)
 
-    def _delete_note(self, note_id: int) -> None:
+    def _delete_note(self, note_id: Any) -> None:
         try:
-            delete_local_note(note_id)
+            nid_int = int(note_id) if str(note_id).isdigit() else note_id
+            delete_local_note(nid_int)
         except Exception:
             pass
-        self._notes_cache = [n for n in self._notes_cache if n.get("id") != note_id]
+        self._notes_cache = [n for n in self._notes_cache if str(n.get("id")) != str(note_id)]
         if self.selected_project_id is not None:
             self._render_project_drilldown()
 
@@ -1121,12 +1331,13 @@ class NotesTasksView(Static):
 
         self.run_worker(worker, thread=True)
 
-    def _delete_project(self, project_id: int) -> None:
+    def _delete_project(self, project_id: Any) -> None:
         try:
-            delete_local_project(project_id)
+            pid_int = int(project_id) if str(project_id).isdigit() else project_id
+            delete_local_project(pid_int)
         except Exception:
             pass
-        self._projects_cache = [p for p in self._projects_cache if p.get("id") != project_id]
+        self._projects_cache = [p for p in self._projects_cache if str(p.get("id")) != str(project_id)]
         self.close_project()
 
         def worker():
@@ -1139,7 +1350,7 @@ class NotesTasksView(Static):
 
         self.run_worker(worker, thread=True)
 
-    def _after_project_deleted(self, project_id: int) -> None:
+    def _after_project_deleted(self, project_id: Any) -> None:
         self.close_project()
         self.refresh_all_data()
         try:

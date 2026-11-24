@@ -58,37 +58,43 @@ class ParameterFormModal(ModalScreen[Optional[Tuple[Dict[str, Any], Dict[str, An
             return
 
         if event.button.id == "btn-submit":
-            args_dict: Dict[str, Any] = {}
-            opts_dict: Dict[str, Any] = {}
+            self._submit_form()
 
-            # Gather args
-            for arg in self.command.args:
-                inp = self.query_one(f"#arg_{arg.name}", Input)
-                val = inp.value.strip()
-                if not val and arg.default is not None:
-                    val = str(arg.default)
-                if val:
-                    if arg.type == "int":
-                        try:
-                            args_dict[arg.name] = int(val)
-                        except ValueError:
-                            args_dict[arg.name] = val
-                    else:
-                        args_dict[arg.name] = val
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self._submit_form()
 
-            # Gather options
-            for opt in self.command.options:
-                if not opt.is_flag:
-                    opt_id = opt.name.lstrip("-")
+    def _submit_form(self) -> None:
+        args_dict: Dict[str, Any] = {}
+        opts_dict: Dict[str, Any] = {}
+
+        # Gather args
+        for arg in self.command.args:
+            inp = self.query_one(f"#arg_{arg.name}", Input)
+            val = inp.value.strip()
+            if not val and arg.default is not None:
+                val = str(arg.default)
+            if val:
+                if arg.type == "int":
                     try:
-                        inp = self.query_one(f"#opt_{opt_id}", Input)
-                        val = inp.value.strip()
-                        if val:
-                            opts_dict[opt_id] = val
-                    except Exception:
-                        pass
+                        args_dict[arg.name] = int(val)
+                    except ValueError:
+                        args_dict[arg.name] = val
+                else:
+                    args_dict[arg.name] = val
 
-            self.dismiss((args_dict, opts_dict))
+        # Gather options
+        for opt in self.command.options:
+            if not opt.is_flag:
+                opt_id = opt.name.lstrip("-")
+                try:
+                    inp = self.query_one(f"#opt_{opt_id}", Input)
+                    val = inp.value.strip()
+                    if val:
+                        opts_dict[opt_id] = val
+                except Exception:
+                    pass
+
+        self.dismiss((args_dict, opts_dict))
 
     def key_escape(self) -> None:
         self.dismiss(None)

@@ -282,3 +282,141 @@ async def test_project_detail_modal_dialog():
         btn_back.press()
         await pilot.pause()
         assert app.screen != modal
+
+
+@pytest.mark.anyio
+async def test_project_table_row_and_cell_selection():
+    """Test selecting rows or cells via DataTable events directly opens the project drilldown."""
+    proj = create_local_project(title="Target Project 5", description="Selectable row target")
+    pid = proj["id"]
+
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        prod_view = app.query_one(NotesTasksView)
+        prod_view._set_tab("projects")
+        await pilot.pause()
+
+        table = prod_view.query_one("#projects-table", DataTable)
+        assert table.row_count > 0
+
+        # Simulate RowSelected event with string row key
+        from textual.widgets.data_table import RowKey, CellKey, ColumnKey
+        from textual.coordinate import Coordinate
+
+        prod_view.on_data_table_row_selected(DataTable.RowSelected(table, 0, RowKey(str(pid))))
+        await pilot.pause()
+
+        assert prod_view.selected_project_id == pid
+        assert prod_view.query_one("#project-detail-container").display is True
+
+        # Go back
+        prod_view.close_project()
+        await pilot.pause()
+        assert prod_view.selected_project_id is None
+
+        # Simulate CellSelected event
+        prod_view.on_data_table_cell_selected(
+            DataTable.CellSelected(table, "Target Project 5", Coordinate(0, 1), CellKey(RowKey(str(pid)), ColumnKey("Name")))
+        )
+        await pilot.pause()
+
+        assert prod_view.selected_project_id == pid
+        assert prod_view.query_one("#project-detail-container").display is True
+
+
+@pytest.mark.anyio
+async def test_add_task_to_project_input_submitted():
+    """Test pressing Enter inside AddTaskToProjectModal title field submits the form."""
+    proj = create_local_project(title="Input Submit Project", description="Form enter test")
+    pid = proj["id"]
+
+    modal = AddTaskToProjectModal(project_id=pid, project_title=proj["title"])
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        app.push_screen(modal)
+        await pilot.pause()
+
+        inp_title = modal.query_one("#input-modal-task-title", Input)
+        inp_desc = modal.query_one("#input-modal-task-desc", Input)
+        inp_title.value = "Submitted via Enter Key"
+        inp_desc.value = "Task details"
+
+        modal.on_input_submitted(Input.Submitted(inp_desc, "Task details"))
+        await pilot.pause()
+
+        assert app.screen != modal
+        tasks = list_local_tasks()
+        created = next((t for t in tasks if t["title"] == "Submitted via Enter Key"), None)
+        assert created is not None
+        assert created["project_id"] == pid
+
+
+@pytest.mark.anyio
+async def test_add_note_to_project_input_submitted():
+    """Test pressing Enter inside AddNoteToProjectModal submits the note."""
+    proj = create_local_project(title="Note Enter Project", description="Note form enter test")
+    pid = proj["id"]
+
+    modal = AddNoteToProjectModal(project_id=pid, project_title=proj["title"])
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        app.push_screen(modal)
+        await pilot.pause()
+
+        inp_title = modal.query_one("#input-modal-note-title", Input)
+        inp_content = modal.query_one("#input-modal-note-content", Input)
+        inp_title.value = "Fast Captured Note"
+        inp_content.value = "Content submitted via Enter key"
+
+        modal.on_input_submitted(Input.Submitted(inp_content, "Content submitted via Enter key"))
+        await pilot.pause()
+
+        assert app.screen != modal
+        notes = list_local_notes()
+        created = next((n for n in notes if n["title"] == "Fast Captured Note"), None)
+        assert created is not None
+        assert created["project_id"] == pid
+
+
+@pytest.mark.anyio
+async def test_project_id_type_resilience():
+    """Test project deletion and status transition resiliently match string vs int IDs."""
+    proj = create_local_project(title="Type Resilience Project", description="Testing int vs str IDs")
+    pid = proj["id"]
+    task = create_local_task(title="Type task", project_id=pid)
+    tid = task["id"]
+    note = create_local_note(title="Type note", content="Note body", project_id=pid)
+    nid = note["id"]
+
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        prod_view = app.query_one(NotesTasksView)
+        prod_view.open_project(str(pid))  # Opened with string ID
+        await pilot.pause()
+
+        # Cache should have string project ID selected
+        assert str(prod_view.selected_project_id) == str(pid)
+
+        # Transition task with string ID
+        prod_view._transition_task(str(tid), "completed")
+        await pilot.pause()
+        updated = next((t for t in prod_view._tasks_cache if str(t.get("id")) == str(tid)), None)
+        assert updated is not None
+        assert updated["status"] == "completed"
+
+        # Delete note with string ID
+        prod_view._delete_note(str(nid))
+        await pilot.pause()
+        assert not any(str(n.get("id")) == str(nid) for n in prod_view._notes_cache)
+
+        # Delete task with string ID
+        prod_view._delete_task(str(tid))
+        await pilot.pause()
+        assert not any(str(t.get("id")) == str(tid) for t in prod_view._tasks_cache)
+
+        # Delete project with string ID
+        prod_view._delete_project(str(pid))
+        await pilot.pause()
+        assert not any(str(p.get("id")) == str(pid) for p in prod_view._projects_cache)
+        assert prod_view.selected_project_id is None
+

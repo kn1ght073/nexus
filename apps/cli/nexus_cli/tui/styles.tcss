@@ -547,6 +547,7 @@ Button.-success {
 }
 
 #project-detail-container {
+    display: none;
     height: 1fr;
     min-height: 24;
 }
