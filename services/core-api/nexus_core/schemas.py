@@ -144,7 +144,7 @@ class GoogleCallbackRequest(BaseModel):
 # --- Devices ---
 class DeviceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
-    platform: Literal["windows", "macos", "android", "linux", "cli"]
+    platform: Literal["windows", "macos", "android", "ios", "mobile", "linux", "cli"]
     capabilities: list[str] = Field(default_factory=list)  # filesystem, notifications, ...
 
 
