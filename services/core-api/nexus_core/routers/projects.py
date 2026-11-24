@@ -17,6 +17,21 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    import datetime
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=5)
+    existing = (
+        db.query(Project)
+        .filter(
+            Project.owner_id == current_user.id,
+            Project.title == project_in.title,
+            Project.created_at >= cutoff,
+            Project.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if existing:
+        return existing
+
     project = Project(**project_in.model_dump(), owner_id=current_user.id)
     db.add(project)
     bump_revision(project)  # sync: revision +1

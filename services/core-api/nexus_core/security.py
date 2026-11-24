@@ -130,9 +130,18 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    
+    # Device validation & revocation enforcement
+    dev_id = payload.get("dev")
+    if dev_id is not None:
+        from .models import Device
+        device = db.get(Device, dev_id)
+        if device is None:
+            raise HTTPException(status_code=401, detail="Device has been revoked")
+
     # attach token claims so scoped dependencies can reason about them
     setattr(user, "_token_scope", payload.get("scope", "user"))
-    setattr(user, "_token_device_id", payload.get("dev"))
+    setattr(user, "_token_device_id", dev_id)
     return user
 
 
