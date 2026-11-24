@@ -52,46 +52,43 @@ api.setBaseUrl("https://nexus-control-plane-uvi8.onrender.com///");
 assert.strictEqual(api.getBaseUrl(), "https://nexus-control-plane-uvi8.onrender.com");
 console.log("✓ setBaseUrl / getBaseUrl normalization tests passed");
 
-// Test 5: loginWithToken - primary success
 (async () => {
-  api.setBaseUrl("http://127.0.0.1:8000");
   const origFetch = globalThis.fetch;
 
-  // Mock fetch returning success for primary
-  globalThis.fetch = async (url: any) => {
-    const sUrl = String(url);
-    if (sUrl.startsWith("http://127.0.0.1:8000/api/auth/me")) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ id: 1, email: "local@nexus.local", created_at: "2026-01-01" }),
-      } as any;
-    }
-    throw new Error("Unexpected URL: " + sUrl);
-  };
-
-  const user = await api.loginWithToken("  Bearer test-token-1  ");
-  assert.strictEqual(user.email, "local@nexus.local");
-  assert.strictEqual(api.getToken(), "test-token-1");
-  assert.strictEqual(api.getBaseUrl(), "http://127.0.0.1:8000");
-  console.log("✓ loginWithToken primary success test passed");
-
-  // Test 6: loginWithToken - local fails, cloud fallback succeeds
+  // Test 5: loginWithToken - cloud token automatically discovers local node via cp-exchange
+  api.clearToken();
   api.setBaseUrl("http://127.0.0.1:8000");
   globalThis.fetch = async (url: any) => {
     const sUrl = String(url);
-    if (sUrl.startsWith("http://127.0.0.1:8000/api/auth/me")) {
-      return {
-        ok: false,
-        status: 401,
-        text: async () => '{"detail":"Signature verification failed"}',
-      } as any;
+    if (sUrl === "http://127.0.0.1:8000/api/auth/me") {
+      return { ok: false, status: 401, text: async () => '{"detail":"Invalid or expired token"}' } as any;
     }
-    if (sUrl.startsWith("https://nexus-control-plane-uvi8.onrender.com/api/auth/me")) {
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/auth/me") {
       return {
         ok: true,
         status: 200,
         json: async () => ({ id: 2, email: "operator@cloud.com", created_at: "2026-01-01" }),
+      } as any;
+    }
+    if (sUrl === "http://127.0.0.1:8000/health") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: "ok", service: "nexus-core", mode: "node" }),
+      } as any;
+    }
+    if (sUrl === "http://127.0.0.1:8000/api/auth/cp-exchange") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: "local-exchanged-jwt", refresh_token: "r" }),
+      } as any;
+    }
+    if (sUrl === "http://127.0.0.1:8000/api/projects") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [{ id: 1, title: "Local SQLite Project", description: null, status: "pending", revision: 1, created_at: "2026-01-01", updated_at: "2026-01-01" }],
       } as any;
     }
     throw new Error("Unexpected URL: " + sUrl);
@@ -99,36 +96,84 @@ console.log("✓ setBaseUrl / getBaseUrl normalization tests passed");
 
   const userCloud = await api.loginWithToken("cloud-jwt-token");
   assert.strictEqual(userCloud.email, "operator@cloud.com");
-  assert.strictEqual(api.getBaseUrl(), "https://nexus-control-plane-uvi8.onrender.com");
-  console.log("✓ loginWithToken fallback to cloud test passed (auto-switched base URL)");
+  assert.strictEqual(api.getHostMode(), "local");
+  assert.strictEqual(api.getHostUrl(), "http://127.0.0.1:8000");
+  assert.strictEqual(api.getHostToken(), "local-exchanged-jwt");
+  const projs = await api.listProjects();
+  assert.strictEqual(projs[0].title, "Local SQLite Project");
+  console.log("✓ cloud login + cp-exchange to local Mac host test passed");
 
-  // Test 7: loginWithToken - cloud fails, local fallback succeeds
+  // Test 6: relay mode routes data endpoints through /api/relay/{id}/proxy with dual headers
+  api.clearToken();
   api.setBaseUrl("https://nexus-control-plane-uvi8.onrender.com");
-  globalThis.fetch = async (url: any) => {
+  let capturedRelayHeaders: Record<string, string> = {};
+  globalThis.fetch = async (url: any, init?: any) => {
     const sUrl = String(url);
-    if (sUrl.startsWith("https://nexus-control-plane-uvi8.onrender.com/api/auth/me")) {
-      return {
-        ok: false,
-        status: 401,
-        text: async () => '{"detail":"Invalid token"}',
-      } as any;
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/auth/me") {
+      return { ok: true, status: 200, json: async () => ({ id: 2, email: "operator@cloud.com", created_at: "2026-01-01" }) } as any;
     }
-    if (sUrl.startsWith("http://127.0.0.1:8000/api/auth/me")) {
+    if (sUrl === "http://127.0.0.1:8000/health") {
+      throw new Error("ECONNREFUSED");
+    }
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/nodes/active") {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ id: 3, email: "dev@nexus.local", created_at: "2026-01-01" }),
+        json: async () => ({ id: 7, name: "MacBook", is_active: true, lan_url: "http://10.0.0.5:8000", relay_proxy_url: "/api/relay/7/proxy" }),
       } as any;
+    }
+    if (sUrl === "http://10.0.0.5:8000/health") {
+      throw new Error("LAN unreachable");
+    }
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/relay/7/proxy/api/auth/cp-exchange") {
+      return { ok: true, status: 200, json: async () => ({ access_token: "relayed-node-jwt", refresh_token: "r2" }) } as any;
+    }
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/relay/7/proxy/api/projects") {
+      capturedRelayHeaders = init?.headers ?? {};
+      return { ok: true, status: 200, json: async () => [] } as any;
     }
     throw new Error("Unexpected URL: " + sUrl);
   };
 
-  const userLocal = await api.loginWithToken("local-jwt-token");
-  assert.strictEqual(userLocal.email, "dev@nexus.local");
-  assert.strictEqual(api.getBaseUrl(), "http://127.0.0.1:8000");
-  console.log("✓ loginWithToken fallback to local test passed (auto-switched base URL)");
+  await api.loginWithToken("cloud-jwt-token");
+  assert.strictEqual(api.getHostMode(), "relay");
+  assert.strictEqual(api.getHostUrl(), "https://nexus-control-plane-uvi8.onrender.com/api/relay/7/proxy");
+  await api.listProjects();
+  assert.strictEqual(capturedRelayHeaders["Authorization"], "Bearer cloud-jwt-token");
+  assert.strictEqual(capturedRelayHeaders["X-Nexus-Node-Authorization"], "Bearer relayed-node-jwt");
+  console.log("✓ relay fallback proxy + dual auth header test passed");
 
-  // Test 8: loginWithToken - both fail (token cleared, error thrown)
+  // Test 7: offline host never hits control-plane /api/projects (no 404 Not Found)
+  api.clearToken();
+  api.setBaseUrl("https://nexus-control-plane-uvi8.onrender.com");
+  globalThis.fetch = async (url: any) => {
+    const sUrl = String(url);
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/auth/me") {
+      return { ok: true, status: 200, json: async () => ({ id: 2, email: "operator@cloud.com", created_at: "2026-01-01" }) } as any;
+    }
+    if (sUrl === "http://127.0.0.1:8000/health") {
+      throw new Error("ECONNREFUSED");
+    }
+    if (sUrl === "https://nexus-control-plane-uvi8.onrender.com/api/nodes/active") {
+      return { ok: true, status: 200, json: async () => null } as any;
+    }
+    throw new Error("Should NOT hit URL: " + sUrl);
+  };
+
+  await api.loginWithToken("cloud-jwt-token");
+  assert.strictEqual(api.getHostMode(), "none");
+  let offlineCaught = false;
+  try {
+    await api.listProjects();
+  } catch (e: any) {
+    offlineCaught = true;
+    assert.match(e.message, /Mac Host Node is offline/);
+  }
+  assert.strictEqual(offlineCaught, true);
+  console.log("✓ offline host blocks 404 control-plane calls cleanly");
+
+  // Test 8: bad token on all endpoints clears token and throws
+  api.clearToken();
   globalThis.fetch = async () => ({
     ok: false,
     status: 401,
@@ -146,7 +191,6 @@ console.log("✓ setBaseUrl / getBaseUrl normalization tests passed");
   assert.strictEqual(api.hasToken(), false);
   console.log("✓ loginWithToken failure clears token and throws test passed");
 
-  // Restore fetch
   globalThis.fetch = origFetch;
   console.log("ALL 8 DESKTOP API TESTS PASSED SUCCESSFULLY!");
 })();

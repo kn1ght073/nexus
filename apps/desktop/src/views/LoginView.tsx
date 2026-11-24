@@ -1,48 +1,36 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { api } from "../api";
+import { api, HostMode } from "../api";
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (err) {
+    if (typeof (window as any).__TAURI_INTERNALS__?.invoke === "function") {
+      return await (window as any).__TAURI_INTERNALS__.invoke(cmd, args);
+    }
+    if (typeof (window as any).__TAURI__?.core?.invoke === "function") {
+      return await (window as any).__TAURI__.core.invoke(cmd, args);
+    }
+    throw err;
+  }
+}
 
 async function openExternalBrowser(url: string): Promise<void> {
-  // 1. Try official Tauri 2 invoke via @tauri-apps/api/core
   try {
-    await invoke("open_browser_url", { url });
+    await tauriInvoke("open_browser_url", { url });
     return;
-  } catch (err) {
-    console.warn("invoke('open_browser_url') via @tauri-apps/api/core failed:", err);
+  } catch {
+    // Web browser fallback
   }
-
-  // 2. Try window.__TAURI_INTERNALS__.invoke
-  if (typeof (window as any).__TAURI_INTERNALS__?.invoke === "function") {
-    try {
-      await (window as any).__TAURI_INTERNALS__.invoke("open_browser_url", { url });
-      return;
-    } catch (err) {
-      console.warn("invoke('open_browser_url') via __TAURI_INTERNALS__ failed:", err);
-    }
-  }
-
-  // 3. Try window.__TAURI__.core.invoke
-  if (typeof (window as any).__TAURI__?.core?.invoke === "function") {
-    try {
-      await (window as any).__TAURI__.core.invoke("open_browser_url", { url });
-      return;
-    } catch (err) {
-      console.warn("invoke('open_browser_url') via __TAURI__.core failed:", err);
-    }
-  }
-
-  // 4. Web browser fallback
-  try {
-    window.open(url, "_blank");
-  } catch (err) {
-    console.error("window.open fallback failed:", err);
-  }
+  window.open(url, "_blank");
 }
 
 export function LoginView({ onLogin }: { onLogin: () => void }) {
   const [tokenInput, setTokenInput] = useState("");
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [activeBase, setActiveBase] = useState<string>(api.getBaseUrl());
@@ -53,11 +41,11 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
     setLocalHealth("checking");
     setCloudHealth("checking");
 
-    api.health(api.getLocalBaseUrl())
+    api.health(api.getLocalBaseUrl(), 2500)
       .then(() => setLocalHealth("online"))
       .catch(() => setLocalHealth("offline"));
 
-    api.health(api.getCloudBaseUrl())
+    api.health(api.getCloudBaseUrl(), 4000)
       .then(() => setCloudHealth("online"))
       .catch(() => setCloudHealth("offline"));
   };
@@ -74,11 +62,51 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
 
   async function handleGoogleLogin() {
     setError(null);
-    // Google OAuth always starts at Cloud Control Plane
-    const googleStartUrl = `${api.getCloudBaseUrl()}/api/auth/google/start`;
+    setStatusMsg(null);
+    let port: number | null = null;
+
+    try {
+      port = await tauriInvoke<number>("start_google_oauth_listener");
+    } catch {
+      port = null;
+    }
+
+    const baseStart = `${api.getCloudBaseUrl()}/api/auth/google/start`;
+    const googleStartUrl = port ? `${baseStart}?cli_port=${port}` : baseStart;
+
     try {
       await openExternalBrowser(googleStartUrl);
       setShowTokenInput(true);
+      if (port) {
+        setStatusMsg("Browser opened for Google Sign-In. Waiting for automatic completion (or paste token below)...");
+        const deadline = Date.now() + 180_000;
+        const pollTimer = setInterval(async () => {
+          if (Date.now() > deadline) {
+            clearInterval(pollTimer);
+            setStatusMsg(null);
+            return;
+          }
+          try {
+            const res = await tauriInvoke<{ completed: boolean; token?: string; refresh?: string }>("poll_oauth_result");
+            if (res.completed && res.token) {
+              clearInterval(pollTimer);
+              setBusy(true);
+              setStatusMsg("Google OAuth captured! Connecting to Mac Host...");
+              try {
+                await api.loginWithToken(res.token);
+                onLogin();
+              } catch (loginErr) {
+                setError(loginErr instanceof Error ? loginErr.message : String(loginErr));
+              } finally {
+                setBusy(false);
+                setStatusMsg(null);
+              }
+            }
+          } catch {
+            clearInterval(pollTimer);
+          }
+        }, 1000);
+      }
     } catch (err) {
       setError(String(err));
     }
@@ -113,7 +141,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
         </div>
 
         <div className="endpoint-toggle-container">
-          <div className="endpoint-toggle-label">Select Host Endpoint</div>
+          <div className="endpoint-toggle-label">Select Auth / Host Endpoint</div>
           <div className="endpoint-toggle-buttons">
             <button
               type="button"
@@ -144,7 +172,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
         <div className="host-badge-pill">
           <span className={`status-dot ${isLocalActive ? localHealth : cloudHealth}`} />
           <span className="mono text-xs">
-            Active: {isLocalActive ? "Local Host (127.0.0.1:8000)" : "Cloud Relay (onrender.com)"}
+            Auth: {isLocalActive ? "Local Host (127.0.0.1:8000)" : "Cloud Control Plane (onrender.com)"}
           </span>
         </div>
 
@@ -156,6 +184,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
           <button
             type="button"
             className="btn-google"
+            disabled={busy}
             onClick={handleGoogleLogin}
           >
             <span className="google-icon">G</span>
@@ -163,6 +192,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
           </button>
         </div>
 
+        {statusMsg && <div className="info-banner">{statusMsg}</div>}
         {error && <div className="error-banner">{error}</div>}
 
         <div className="token-divider">
@@ -180,7 +210,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
             </button>
           ) : (
             <form onSubmit={submitToken} className="token-form">
-              <label className="dim text-xs">JWT SESSION TOKEN (Auto-resolves Local & Cloud)</label>
+              <label className="dim text-xs">JWT SESSION TOKEN (Auto-resolves Mac Host)</label>
               <input
                 type="password"
                 value={tokenInput}
@@ -203,27 +233,27 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-export function CoreStatus() {
-  const [health, setHealth] = useState<string>("Checking...");
-  const [online, setOnline] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    api
-      .health()
-      .then((h) => {
-        setHealth(`${h.service}`);
-        setOnline(true);
-      })
-      .catch(() => {
-        setHealth(`Offline`);
-        setOnline(false);
-      });
-  }, []);
+export function CoreStatus({ hostMode, onRefresh }: { hostMode?: HostMode; onRefresh?: () => void }) {
+  const mode = hostMode ?? api.getHostMode();
+  const online = mode === "local" || mode === "lan" || mode === "relay";
+  const label =
+    mode === "local"
+      ? "Mac Host: Local"
+      : mode === "lan"
+      ? "Mac Host: LAN"
+      : mode === "relay"
+      ? "Mac Host: Relay"
+      : "Mac Host: Offline";
 
   return (
-    <div className="core-status">
+    <div
+      className="core-status"
+      style={{ cursor: onRefresh ? "pointer" : "default" }}
+      onClick={onRefresh}
+      title={api.getHostUrl() || "Click to re-discover Mac Host"}
+    >
       <span className={`status-dot ${online ? "online" : "offline"}`} />
-      <span className="text-xs dim">Host: {health}</span>
+      <span className="text-xs dim">{label}</span>
     </div>
   );
 }

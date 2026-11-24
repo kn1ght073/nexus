@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..deps import bump_revision, log_activity, owned_project_or_404, publish_event
 from ..database import get_db
 from ..models import Project, User
-from ..schemas import ProjectCreate, ProjectOut, StatusUpdate
+from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate, StatusUpdate
 from ..security import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -62,6 +62,29 @@ def get_project(
     current_user: User = Depends(get_current_user),
 ):
     return owned_project_or_404(db, current_user, project_id)
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+def update_project(
+    project_id: int,
+    project_in: ProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = owned_project_or_404(db, current_user, project_id)
+    if project_in.title is not None:
+        project.title = project_in.title
+    if project_in.description is not None:
+        project.description = project_in.description
+    if project_in.status is not None:
+        project.status = project_in.status
+    bump_revision(project)
+    db.commit()
+    db.refresh(project)
+    log_activity(db, user_id=current_user.id, action="project.updated", detail=project.title)
+    publish_event("PROJECT_UPDATED", current_user.id, {"project_id": project.id, "title": project.title})
+    db.commit()
+    return project
 
 
 @router.patch("/{project_id}/status", response_model=ProjectOut)

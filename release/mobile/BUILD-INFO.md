@@ -3,11 +3,10 @@
 - **Product Name**: NEXUS Mobile
 - **Application ID / Package**: `local.nexus.mobile`
 - **Version**: `0.1.0` (Temporary Release Candidate)
-- **Target Platform**: Android 10.0+ (API level 29+)
-- **Runtime Engine**: Expo SDK 58 / React Native 0.88 with Hermes Bytecode Engine
-- **Package Format**: Signed Android Package (`.apk`)
-- **Signature Algorithm**: SHA256withRSA (RSA-2048) v2/v3 signature
-- **Build Timestamp**: November 2026
-- **Commit SHA**: `f3c4dea`
-- **Discovery Architecture**: Dual-tier automatic discovery (LAN probe -> Relay proxy fallback)
-- **SHA-256 Checksum**: `2e1ceb6fd4dd42a1674ab2be82b6f4befa60ffc75d8759671ac6ea68a0991aee` (`NEXUS-android.apk`)
+- **Target Platform**: Android 10.0+ (API level 24–36, compiled SDK 37, target SDK 36)
+- **ABIs Included**: `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`
+- **Runtime Engine**: Expo SDK 58 / React Native 0.88.1 with Hermes Bytecode Engine (`expo.useLegacyPackaging=true`)
+- **Package Format**: Compiled Android Release Package (`.apk`) built via Gradle `assembleRelease`
+- **Signature**: Signed with APK Signature Scheme v2 (`apksigner verify` passed)
+- **Runtime Verification**: Installed and launched on Android API 36 emulator (`AlloyPlayer`), confirmed rendering `NEXUS` welcome screen cleanly with zero crashes
+- **SHA-256 Checksum**: `ccf464b21d91f41318a66764ef56359fd09f72828ad4bb93c8ca00f754059cda` (`NEXUS-android.apk`)

@@ -26,7 +26,7 @@ export function FilesView() {
         setFiles(list);
       }
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -41,7 +41,7 @@ export function FilesView() {
       setCurrentPath(path);
       setFiles(list);
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -69,11 +69,20 @@ export function FilesView() {
     try {
       await api.uploadFile(file, currentPath);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      navigateTo(currentPath);
+      await navigateTo(currentPath);
     } catch (err) {
-      setError(`Upload failed: ${String(err)}`);
+      setError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleDownloadFile(file: FileItem) {
+    setError(null);
+    try {
+      await api.downloadFile(file.path, file.name);
+    } catch (err) {
+      setError(`Download failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -83,7 +92,7 @@ export function FilesView() {
       await api.deleteFile(file.path);
       navigateTo(currentPath);
     } catch (err) {
-      alert(`Delete failed: ${err}`);
+      setError(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -94,11 +103,12 @@ export function FilesView() {
       return;
     }
     setLoading(true);
+    setError(null);
     try {
       const res = await api.searchFiles(searchQuery.trim(), currentPath);
       setSearchResults(res);
     } catch (err) {
-      setError(`Search failed: ${err}`);
+      setError(`Search failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -174,7 +184,7 @@ export function FilesView() {
         </div>
       </div>
 
-      {error && <div className="error-banner">Error: {error}</div>}
+      {error && <div className="error-banner">{error}</div>}
 
       {/* Path Breadcrumbs */}
       <div className="breadcrumb-bar card">
@@ -217,7 +227,8 @@ export function FilesView() {
                 <tr>
                   <th style={{ width: "40px" }}></th>
                   <th>Name</th>
-                  <th style={{ width: "120px" }}>Size</th>
+                  <th style={{ width: "110px" }}>Size</th>
+                  <th style={{ width: "160px" }}>Modified</th>
                   <th style={{ width: "200px", textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
@@ -238,18 +249,17 @@ export function FilesView() {
                       )}
                     </td>
                     <td className="mono dim">{f.is_dir ? "—" : formatBytes(f.size)}</td>
+                    <td className="dim text-sm">
+                      {f.modified_at ? new Date(f.modified_at).toLocaleDateString() : "—"}
+                    </td>
                     <td style={{ textAlign: "right" }}>
                       {!f.is_dir && (
-                        <a
-                          href={api.getDownloadUrl(f.path)}
-                          target="_blank"
-                          rel="noreferrer"
-                          download={f.name}
+                        <button
                           className="btn-action"
-                          style={{ textDecoration: "none", display: "inline-block" }}
+                          onClick={() => handleDownloadFile(f)}
                         >
                           ↓ Download
-                        </a>
+                        </button>
                       )}
                       {!f.is_dir && (
                         <button className="btn-delete" onClick={() => handleDeleteFile(f)}>

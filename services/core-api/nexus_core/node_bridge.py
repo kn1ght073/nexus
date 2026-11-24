@@ -204,11 +204,24 @@ class NodeBridge:
         if self.app is None:
             return {"status": 503, "headers": {}, "body_b64": ""}
         body = base64.b64decode(request.get("body_b64", "") or "")
-        headers = [
-            (k.lower().encode(), v.encode())
-            for k, v in (request.get("headers") or {}).items()
-            if k.lower() not in ("content-length", "transfer-encoding", "host")
-        ]
+        raw_headers = dict(request.get("headers") or {})
+        # If relayed with a node-scoped token in X-Nexus-Node-Authorization, promote it for local ASGI auth.
+        node_auth_override = None
+        for k, v in list(raw_headers.items()):
+            if k.lower() == "x-nexus-node-authorization":
+                node_auth_override = v
+                break
+
+        headers = []
+        for k, v in raw_headers.items():
+            kl = k.lower()
+            if kl in ("content-length", "transfer-encoding", "host", "x-nexus-node-authorization"):
+                continue
+            if kl == "authorization" and node_auth_override:
+                continue
+            headers.append((kl.encode(), v.encode()))
+        if node_auth_override:
+            headers.append((b"authorization", node_auth_override.encode()))
         full_path = request.get("path", "/")
         if "?" in full_path:
             req_path, req_query = full_path.split("?", 1)
@@ -282,9 +295,12 @@ def bridge_from_settings(app=None):
     from pathlib import Path
 
     cfg_path = Path("nexus_node.json")
+    home_cfg_path = Path.home() / ".nexus" / "nexus_node.json"
     cfg = {}
     if cfg_path.exists():
         cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
+    elif home_cfg_path.exists():
+        cfg = _json.loads(home_cfg_path.read_text(encoding="utf-8"))
     cp_url = cfg.get("control_plane_url") or settings.node_bridge_cp_url
     node_id = cfg.get("node_id") or settings.node_bridge_id
     api_key = cfg.get("api_key") or settings.node_bridge_key

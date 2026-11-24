@@ -6,6 +6,7 @@ file — exposing the whole home directory to any LAN device. Here every
 requested path is resolved and must stay inside settings.storage_roots;
 traversal attempts and symlink escapes are rejected with 403.
 """
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
@@ -67,12 +68,14 @@ def browse_files(
                 resolved = entry.resolve()
                 if not any(resolved == r or resolved.is_relative_to(r) for r in [Path(x).resolve() for x in settings.storage_roots]):
                     continue
+                stat = entry.stat()
                 files.append(
                     {
                         "name": entry.name,
                         "path": str(resolved),
                         "is_dir": is_dir,
-                        "size": 0 if is_dir else entry.stat().st_size,
+                        "size": 0 if is_dir else stat.st_size,
+                        "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
                     }
                 )
             except (PermissionError, FileNotFoundError):
@@ -172,6 +175,7 @@ async def upload_file(
         "path": str(dest_path),
         "is_dir": False,
         "size": len(content),
+        "modified_at": datetime.fromtimestamp(dest_path.stat().st_mtime, tz=timezone.utc).isoformat(),
     }
 
 

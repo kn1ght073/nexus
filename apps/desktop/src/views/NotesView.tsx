@@ -16,6 +16,8 @@ export function NotesView() {
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [noteProjectId, setNoteProjectId] = useState<number | "">("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [modalError, setModalError] = useState<string | null>(null);
 
   async function loadData() {
     setError(null);
@@ -24,7 +26,7 @@ export function NotesView() {
       setNotes(nList);
       setProjects(pList);
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -39,6 +41,8 @@ export function NotesView() {
     setNoteTitle("");
     setNoteContent("");
     setNoteProjectId("");
+    setSaveStatus("idle");
+    setModalError(null);
     setShowModal(true);
   }
 
@@ -47,27 +51,33 @@ export function NotesView() {
     setNoteTitle(n.title);
     setNoteContent(n.content);
     setNoteProjectId(n.project_id ?? "");
+    setSaveStatus("idle");
+    setModalError(null);
     setShowModal(true);
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!noteTitle.trim()) return;
+    setSaveStatus("saving");
+    setModalError(null);
     try {
       const pid = noteProjectId === "" ? undefined : Number(noteProjectId);
       if (editingNote) {
         await api.updateNote(editingNote.id, {
           title: noteTitle.trim(),
-          content: noteContent.trim(),
+          content: noteContent.trim() || "No content",
           project_id: pid ?? null,
         });
       } else {
         await api.createNote(noteTitle.trim(), noteContent.trim() || "No content", pid);
       }
+      setSaveStatus("saved");
       setShowModal(false);
-      loadData();
+      await loadData();
     } catch (err) {
-      alert(`Error saving note: ${err}`);
+      setSaveStatus("failed");
+      setModalError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -77,7 +87,7 @@ export function NotesView() {
       await api.deleteNote(n.id);
       loadData();
     } catch (err) {
-      alert(`Error deleting note: ${err}`);
+      setError(`Error deleting note: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -122,7 +132,7 @@ export function NotesView() {
         </div>
       </div>
 
-      {error && <div className="error-banner">Error: {error}</div>}
+      {error && <div className="error-banner">{error}</div>}
 
       {loading ? (
         <div className="loading-state">Loading notes...</div>
@@ -166,7 +176,18 @@ export function NotesView() {
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-card modal-large">
-            <h3>{editingNote ? "Edit Note" : "Write Sovereign Note"}</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3>{editingNote ? "Edit Note" : "Write Sovereign Note"}</h3>
+              <span className="text-xs dim">
+                {saveStatus === "saving"
+                  ? "Saving..."
+                  : saveStatus === "saved"
+                  ? "✓ Saved"
+                  : saveStatus === "failed"
+                  ? "✕ Save Failed"
+                  : ""}
+              </span>
+            </div>
             <form onSubmit={handleSave}>
               <label>Title</label>
               <input
@@ -199,12 +220,14 @@ export function NotesView() {
                 onChange={(e) => setNoteContent(e.target.value)}
               />
 
+              {modalError && <div className="error-banner">{modalError}</div>}
+
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  {editingNote ? "Save Changes" : "Create Note"}
+                <button type="submit" className="btn-primary" disabled={saveStatus === "saving"}>
+                  {saveStatus === "saving" ? "Saving..." : editingNote ? "Save Changes" : "Create Note"}
                 </button>
               </div>
             </form>

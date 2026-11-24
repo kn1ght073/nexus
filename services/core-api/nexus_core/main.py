@@ -164,7 +164,7 @@ def create_app() -> FastAPI:
         allow_origins=settings.effective_cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Nexus-Node-Authorization"],
     )
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)

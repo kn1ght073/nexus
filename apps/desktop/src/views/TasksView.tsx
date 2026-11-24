@@ -19,7 +19,7 @@ export function TasksView() {
       setTasks(tList);
       setProjects(pList);
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -32,32 +32,35 @@ export function TasksView() {
   async function handleAddTask(e: React.FormEvent) {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
+    setError(null);
     try {
       const pid = selectedProjectId === "" ? undefined : Number(selectedProjectId);
       await api.createTask(newTaskTitle.trim(), pid);
       setNewTaskTitle("");
       loadData();
     } catch (err) {
-      alert(`Error adding task: ${err}`);
+      setError(`Error adding task: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   async function handleStatusChange(task: Task, newStatus: "pending" | "in_progress" | "completed") {
+    setError(null);
     try {
       await api.updateTaskStatus(task.id, newStatus);
       loadData();
     } catch (err) {
-      alert(`Error updating task status: ${err}`);
+      setError(`Error updating task status: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   async function handleDelete(task: Task) {
     if (!confirm(`Delete task "${task.title}"?`)) return;
+    setError(null);
     try {
       await api.deleteTask(task.id);
       loadData();
     } catch (err) {
-      alert(`Error deleting task: ${err}`);
+      setError(`Error deleting task: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -125,7 +128,7 @@ export function TasksView() {
         </div>
       </div>
 
-      {error && <div className="error-banner">Error: {error}</div>}
+      {error && <div className="error-banner">{error}</div>}
 
       <div className="card">
         {loading ? (

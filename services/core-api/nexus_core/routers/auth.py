@@ -28,6 +28,7 @@ from ..database import get_db
 from ..models import ExternalIdentity, SessionRecord, User, utcnow
 from ..ratelimit import Lockout, RateLimiter
 from ..schemas import (
+    ControlPlaneExchangeRequest,
     GoogleCallbackRequest,
     GoogleStartRequest,
     GoogleStartResponse,
@@ -785,3 +786,71 @@ def google_auth_callback_get(
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.post("/cp-exchange", response_model=Token)
+def exchange_control_plane_token(
+    payload: ControlPlaneExchangeRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Exchange a valid control-plane access token for a local node session.
+
+    Verifies the token server-to-server against the configured control plane's
+    /api/auth/me endpoint (never trusting client-supplied identity or URLs).
+    """
+    s = get_settings()
+    if s.control_plane_mode:
+        raise HTTPException(status_code=404, detail="Control plane exchange is only supported on node hosts")
+
+    cp_url = s.canonical_public_url
+    raw_token = payload.token.strip()
+    try:
+        resp = _requests.get(
+            f"{cp_url}/api/auth/me",
+            headers={"Authorization": f"Bearer {raw_token}", "Accept": "application/json"},
+            timeout=10,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Control plane verification unreachable: {exc}")
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Control plane rejected session token")
+
+    cp_user = resp.json()
+    email = str(cp_user.get("email", "")).strip().lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="Control plane response missing verified email")
+
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        user = User(
+            email=email,
+            hashed_password=None,
+            display_name=cp_user.get("display_name") or email.split("@")[0],
+            role="user",
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif not user.is_active:
+        raise HTTPException(status_code=403, detail="User account inactive")
+
+    access_tok = create_token(user.id, "access")
+    refresh_tok = create_token(user.id, "refresh")
+
+    sess = SessionRecord(
+        user_id=user.id,
+        refresh_hash=hash_token(refresh_tok),
+        family_id=secrets.token_hex(16),
+        created_via="cp-exchange",
+        last_used_ip=get_client_ip(req),
+        user_agent=req.headers.get("user-agent")[:500] if req.headers.get("user-agent") else None,
+        expires_at=utcnow() + timedelta(days=_settings.refresh_token_days),
+    )
+    db.add(sess)
+    log_activity(db, user_id=user.id, action="auth.cp_exchange", detail=email)
+    db.commit()
+
+    return Token(access_token=access_tok, refresh_token=refresh_tok)

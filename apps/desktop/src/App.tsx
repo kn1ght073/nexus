@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { api, User } from "./api";
+import { invoke } from "@tauri-apps/api/core";
+import { api, User, HostMode } from "./api";
 import { LoginView, CoreStatus } from "./views/LoginView";
 import { DashboardView } from "./views/DashboardView";
 import { ProjectsView } from "./views/ProjectsView";
@@ -15,21 +16,64 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(api.hasToken());
   const [view, setView] = useState<View>("dashboard");
   const [user, setUser] = useState<User | null>(null);
+  const [hostMode, setHostMode] = useState<HostMode>(api.getHostMode());
+  const [startingHost, setStartingHost] = useState(false);
+  const [hostBannerMsg, setHostBannerMsg] = useState<string | null>(null);
+
+  async function refreshConnection() {
+    if (!api.hasToken()) return;
+    api.me().then(setUser).catch(() => {});
+    const resolved = await api.resolveHost();
+    setHostMode(resolved.mode);
+  }
 
   useEffect(() => {
     if (loggedIn) {
-      api.me().then(setUser).catch(() => {
-        // If token invalid, force login
-        // api.clearToken();
-        // setLoggedIn(false);
-      });
+      refreshConnection();
     }
   }, [loggedIn]);
+
+  async function handleStartLocalHost() {
+    setStartingHost(true);
+    setHostBannerMsg(null);
+    try {
+      let startedMsg = "";
+      try {
+        startedMsg = await invoke<string>("start_host_daemon");
+      } catch (e) {
+        if (typeof (window as any).__TAURI_INTERNALS__?.invoke === "function") {
+          startedMsg = await (window as any).__TAURI_INTERNALS__.invoke("start_host_daemon");
+        } else {
+          throw e;
+        }
+      }
+      setHostBannerMsg(`${startedMsg}. Waiting for port 8000...`);
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 700));
+        const res = await api.resolveHost();
+        if (res.mode !== "none") {
+          setHostMode(res.mode);
+          setHostBannerMsg(null);
+          return;
+        }
+      }
+      setHostBannerMsg("Host daemon did not respond on :8000 yet. Try 'Retry Discovery' or run `nexus host start`.");
+    } catch (err) {
+      setHostBannerMsg(String(err));
+    } finally {
+      setStartingHost(false);
+    }
+  }
 
   if (!loggedIn) {
     return (
       <div className="app-shell">
-        <LoginView onLogin={() => setLoggedIn(true)} />
+        <LoginView
+          onLogin={() => {
+            setHostMode(api.getHostMode());
+            setLoggedIn(true);
+          }}
+        />
       </div>
     );
   }
@@ -42,7 +86,7 @@ export default function App() {
           <div className="brand-logo">⬡</div>
           <div className="brand-title">NEXUS</div>
           <span className="brand-badge">SOVEREIGN</span>
-          <CoreStatus />
+          <CoreStatus hostMode={hostMode} onRefresh={refreshConnection} />
         </div>
 
         <nav className="header-nav">
@@ -79,6 +123,7 @@ export default function App() {
             className="btn-logout"
             onClick={() => {
               api.clearToken();
+              setHostMode("none");
               setLoggedIn(false);
             }}
           >
@@ -86,6 +131,24 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* Host Offline Recovery Banner */}
+      {hostMode === "none" && (
+        <div className="host-offline-banner">
+          <div>
+            <strong>Mac Host Node Offline:</strong> Connected to Control Plane for identity only. Start your Mac Host to access Projects, Tasks, Notes, and Shared Files.
+            {hostBannerMsg && <div className="text-xs dim" style={{ marginTop: "4px" }}>{hostBannerMsg}</div>}
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+            <button className="btn-primary" disabled={startingHost} onClick={handleStartLocalHost}>
+              {startingHost ? "Starting Host..." : "Start Local Mac Host"}
+            </button>
+            <button className="btn-secondary" onClick={refreshConnection}>
+              Retry Discovery
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main View Area */}
       <main className="app-content">
@@ -95,7 +158,15 @@ export default function App() {
         {view === "notes" && <NotesView />}
         {view === "files" && <FilesView />}
         {view === "devices" && <DevicesView />}
-        {view === "settings" && <SettingsView onLogout={() => setLoggedIn(false)} />}
+        {view === "settings" && (
+          <SettingsView
+            onLogout={() => {
+              setHostMode("none");
+              setLoggedIn(false);
+            }}
+            onHostChanged={refreshConnection}
+          />
+        )}
       </main>
     </div>
   );

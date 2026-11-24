@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { api, Project, Task, Note, Device, ActiveNode, ActivityItem } from "../api";
+import { api, Project, Task, Note, Device, ActivityItem, HostMode } from "../api";
 
 interface Props {
   onNavigate: (view: "projects" | "notes" | "tasks" | "files" | "devices" | "settings") => void;
 }
 
 export function DashboardView({ onNavigate }: Props) {
-  const [, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hostHealthy, setHostHealthy] = useState<boolean | null>(null);
   const [hostLatency, setHostLatency] = useState<number | null>(null);
-  const [, setActiveNode] = useState<ActiveNode | null>(null);
+  const [hostMode, setHostMode] = useState<HostMode>(api.getHostMode());
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -22,32 +22,46 @@ export function DashboardView({ onNavigate }: Props) {
   // Quick action modal state
   const [quickTaskModal, setQuickTaskModal] = useState(false);
   const [quickTaskTitle, setQuickTaskTitle] = useState("");
+  const [quickTaskError, setQuickTaskError] = useState<string | null>(null);
   const [quickProjectModal, setQuickProjectModal] = useState(false);
   const [quickProjectTitle, setQuickProjectTitle] = useState("");
   const [quickProjectDesc, setQuickProjectDesc] = useState("");
+  const [quickProjectError, setQuickProjectError] = useState<string | null>(null);
 
   async function refreshData() {
     setError(null);
     const start = performance.now();
     try {
-      // 1. Probe current host endpoint
-      try {
-        await api.health();
-        setHostHealthy(true);
-        setHostLatency(Math.round(performance.now() - start));
-      } catch {
+      const resolved = await api.resolveHost();
+      setHostMode(resolved.mode);
+
+      if (resolved.mode === "none" || !resolved.url) {
         setHostHealthy(false);
         setHostLatency(null);
+        setError("Mac Host Node is offline. Start your local Mac host or bring a claimed node online.");
+        return;
       }
 
-      // 2. Load metrics in parallel
-      const [projList, taskList, noteList, devList, actList, nodeInfo] = await Promise.all([
-        api.listProjects().catch(() => []),
-        api.listTasks().catch(() => []),
-        api.listNotes().catch(() => []),
+      if (resolved.mode === "relay") {
+        setHostHealthy(true);
+        setHostLatency(Math.round(performance.now() - start));
+      } else {
+        try {
+          await api.health(resolved.url, 2500);
+          setHostHealthy(true);
+          setHostLatency(Math.round(performance.now() - start));
+        } catch {
+          setHostHealthy(false);
+          setHostLatency(null);
+        }
+      }
+
+      const [projList, taskList, noteList, devList, actList] = await Promise.all([
+        api.listProjects(),
+        api.listTasks(),
+        api.listNotes(),
         api.listDevices().catch(() => []),
         api.activity(12).catch(() => []),
-        api.getActiveNode().catch(() => null),
       ]);
 
       setProjects(projList);
@@ -55,9 +69,8 @@ export function DashboardView({ onNavigate }: Props) {
       setNotes(noteList);
       setDevices(devList);
       setActivity(actList);
-      setActiveNode(nodeInfo);
+      setLastSync(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
 
-      // Try counting files in default storage root
       try {
         const files = await api.browseFiles();
         setFilesCount(files.length);
@@ -65,9 +78,7 @@ export function DashboardView({ onNavigate }: Props) {
         setFilesCount(0);
       }
     } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -80,19 +91,21 @@ export function DashboardView({ onNavigate }: Props) {
   async function handleCreateQuickTask(e: React.FormEvent) {
     e.preventDefault();
     if (!quickTaskTitle.trim()) return;
+    setQuickTaskError(null);
     try {
       await api.createTask(quickTaskTitle.trim());
       setQuickTaskTitle("");
       setQuickTaskModal(false);
       refreshData();
     } catch (err) {
-      alert(`Error adding task: ${err}`);
+      setQuickTaskError(err instanceof Error ? err.message : String(err));
     }
   }
 
   async function handleCreateQuickProject(e: React.FormEvent) {
     e.preventDefault();
     if (!quickProjectTitle.trim()) return;
+    setQuickProjectError(null);
     try {
       await api.createProject(quickProjectTitle.trim(), quickProjectDesc.trim());
       setQuickProjectTitle("");
@@ -100,29 +113,37 @@ export function DashboardView({ onNavigate }: Props) {
       setQuickProjectModal(false);
       refreshData();
     } catch (err) {
-      alert(`Error creating project: ${err}`);
+      setQuickProjectError(err instanceof Error ? err.message : String(err));
     }
   }
 
   const openTasks = tasks.filter((t) => t.status !== "completed");
   const completedTasks = tasks.filter((t) => t.status === "completed");
-  const isLocalHost = api.getBaseUrl().includes("127.0.0.1") || api.getBaseUrl().includes("localhost");
+  const activeProjectsCount = projects.filter((p) => p.status !== "completed").length;
+
+  const hostLabel =
+    hostMode === "local"
+      ? "Local Mac Host (Primary Core)"
+      : hostMode === "lan"
+      ? "LAN Mac Host"
+      : hostMode === "relay"
+      ? "Encrypted Control-Plane Relay"
+      : "Mac Host Offline";
 
   return (
     <div className="dashboard-view">
-      {error && <div className="error-banner">Error: {error}</div>}
+      {error && <div className="error-banner">{error}</div>}
       {/* Host Status Banner */}
       <div className="host-banner card">
         <div className="host-banner-left">
           <div className="host-indicator">
             <span className={`status-dot ${hostHealthy ? "online" : "offline"}`} />
             <div>
-              <div className="host-title">
-                {isLocalHost ? "Local Mac Host (Primary Core)" : "Remote / Relay Host"}
-              </div>
+              <div className="host-title">{hostLabel}</div>
               <div className="host-subtitle">
-                Endpoint: <code>{api.getBaseUrl()}</code>
+                Host URL: <code>{api.getHostUrl() || "Not connected"}</code>
                 {hostLatency !== null && <span className="host-ping"> · {hostLatency}ms</span>}
+                {lastSync && <span className="dim"> · Synced {lastSync}</span>}
               </div>
             </div>
           </div>
@@ -150,9 +171,7 @@ export function DashboardView({ onNavigate }: Props) {
             <span className="stat-icon">📁</span>
           </div>
           <div className="stat-number">{projects.length}</div>
-          <div className="stat-foot">
-            {projects.filter((p) => p.status === "active").length} active projects
-          </div>
+          <div className="stat-foot">{activeProjectsCount} open projects</div>
         </div>
 
         <div className="stat-card" onClick={() => onNavigate("tasks")}>
@@ -196,10 +215,10 @@ export function DashboardView({ onNavigate }: Props) {
 
       {/* Action Bar */}
       <div className="actions-bar">
-        <button className="btn-primary" onClick={() => setQuickProjectModal(true)}>
+        <button className="btn-primary" onClick={() => { setQuickProjectError(null); setQuickProjectModal(true); }}>
           + New Project
         </button>
-        <button className="btn-primary" onClick={() => setQuickTaskModal(true)}>
+        <button className="btn-primary" onClick={() => { setQuickTaskError(null); setQuickTaskModal(true); }}>
           + Add Task
         </button>
         <button className="btn-secondary" onClick={() => onNavigate("notes")}>
@@ -290,6 +309,7 @@ export function DashboardView({ onNavigate }: Props) {
                 value={quickTaskTitle}
                 onChange={(e) => setQuickTaskTitle(e.target.value)}
               />
+              {quickTaskError && <div className="error-banner">{quickTaskError}</div>}
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setQuickTaskModal(false)}>
                   Cancel
@@ -325,6 +345,7 @@ export function DashboardView({ onNavigate }: Props) {
                 onChange={(e) => setQuickProjectDesc(e.target.value)}
                 rows={3}
               />
+              {quickProjectError && <div className="error-banner">{quickProjectError}</div>}
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setQuickProjectModal(false)}>
                   Cancel

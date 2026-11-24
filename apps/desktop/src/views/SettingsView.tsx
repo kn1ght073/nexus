@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { api, User } from "../api";
 
 interface Props {
   onLogout: () => void;
+  onHostChanged?: () => void;
 }
 
-export function SettingsView({ onLogout }: Props) {
+export function SettingsView({ onLogout, onHostChanged }: Props) {
   const [user, setUser] = useState<User | null>(null);
-  const [, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [customHostUrl, setCustomHostUrl] = useState(api.getBaseUrl());
+  const [customHostUrl, setCustomHostUrl] = useState(api.getHostUrl() || api.getLocalBaseUrl());
   const [hostTestResult, setHostTestResult] = useState<string | null>(null);
   const [hostTesting, setHostTesting] = useState(false);
 
   const [storageRoots, setStorageRoots] = useState<string[]>([]);
   const [showToken, setShowToken] = useState(false);
+  const [daemonMsg, setDaemonMsg] = useState<string | null>(null);
 
   async function loadData() {
     setError(null);
@@ -26,10 +28,11 @@ export function SettingsView({ onLogout }: Props) {
       ]);
       setUser(u);
       setStorageRoots(r);
+      if (api.getHostUrl()) {
+        setCustomHostUrl(api.getHostUrl());
+      }
     } catch (err) {
       setError(String(err));
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -44,7 +47,7 @@ export function SettingsView({ onLogout }: Props) {
     try {
       const res = await api.health(url);
       const ms = Math.round(performance.now() - start);
-      setHostTestResult(`OK (${res.status}, ${ms}ms)`);
+      setHostTestResult(`OK (${res.service}, mode=${res.mode ?? "node"}, ${ms}ms)`);
     } catch (err) {
       setHostTestResult(`Failed: ${String(err)}`);
     } finally {
@@ -52,10 +55,38 @@ export function SettingsView({ onLogout }: Props) {
     }
   }
 
-  function applyHostUrl(url: string) {
+  async function applyHostUrl(url: string) {
     api.setBaseUrl(url);
     setCustomHostUrl(url);
-    testHost(url);
+    await api.resolveHost();
+    await testHost(url);
+    onHostChanged?.();
+  }
+
+  async function handleStartDaemon() {
+    setDaemonMsg("Starting local Mac host...");
+    try {
+      const msg = await invoke<string>("start_host_daemon");
+      setDaemonMsg(msg);
+      setTimeout(async () => {
+        await api.resolveHost();
+        onHostChanged?.();
+        loadData();
+      }, 1800);
+    } catch (err) {
+      setDaemonMsg(`Start failed: ${String(err)}`);
+    }
+  }
+
+  async function handleStopDaemon() {
+    try {
+      const msg = await invoke<string>("stop_host_daemon");
+      setDaemonMsg(msg);
+      await api.resolveHost();
+      onHostChanged?.();
+    } catch (err) {
+      setDaemonMsg(`Stop failed: ${String(err)}`);
+    }
   }
 
   return (
@@ -86,10 +117,15 @@ export function SettingsView({ onLogout }: Props) {
             </div>
 
             <div className="setting-row">
+              <span className="setting-label">ACTIVE HOST MODE</span>
+              <span className="setting-value mono">{api.getHostMode().toUpperCase()}</span>
+            </div>
+
+            <div className="setting-row">
               <span className="setting-label">SESSION TOKEN</span>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <span className="setting-value mono text-xs">
-                  {showToken ? api.getToken() : "••••••••••••••••••••••••••••••••••••••••"}
+                  {showToken ? (api.getHostToken() || api.getToken()) : "••••••••••••••••••••••••••••••••••••••••"}
                 </span>
                 <button
                   className="btn-action"
@@ -104,28 +140,38 @@ export function SettingsView({ onLogout }: Props) {
 
         {/* Host Connection Endpoint Configuration */}
         <div className="card">
-          <h3>Host Endpoint Routing</h3>
+          <h3>Mac Host Lifecycle & Routing</h3>
           <p className="dim text-sm">
-            Select the authoritative Core API instance for projects, notes, and tasks.
+            Authoritative personal records live on your Mac Host. Control Plane handles identity & relay discovery.
           </p>
 
           <div className="preset-buttons">
             <button
-              className={`preset-btn ${customHostUrl === api.getLocalBaseUrl() ? "active" : ""}`}
+              className={`preset-btn ${api.getHostMode() === "local" ? "active" : ""}`}
               onClick={() => applyHostUrl(api.getLocalBaseUrl())}
             >
               🖥️ Local Mac Host (127.0.0.1:8000)
             </button>
             <button
-              className={`preset-btn ${customHostUrl === api.getCloudBaseUrl() ? "active" : ""}`}
+              className={`preset-btn ${api.getHostMode() === "relay" ? "active" : ""}`}
               onClick={() => applyHostUrl(api.getCloudBaseUrl())}
             >
-              ☁️ Cloud Control Plane / Relay
+              ☁️ Auto-Discover via Control Plane
             </button>
           </div>
 
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+            <button className="btn-primary" onClick={handleStartDaemon}>
+              Start Local Host
+            </button>
+            <button className="btn-secondary" onClick={handleStopDaemon}>
+              Stop Local Host
+            </button>
+          </div>
+          {daemonMsg && <div className="dim text-xs" style={{ marginTop: "8px" }}>{daemonMsg}</div>}
+
           <div style={{ marginTop: "16px" }}>
-            <label className="dim text-xs">ACTIVE ENDPOINT URL</label>
+            <label className="dim text-xs">CUSTOM HOST ENDPOINT URL</label>
             <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
               <input
                 type="text"
@@ -171,7 +217,7 @@ export function SettingsView({ onLogout }: Props) {
           </p>
           <ul className="roots-list">
             {storageRoots.length === 0 ? (
-              <li className="dim mono text-sm">~/Documents (Default)</li>
+              <li className="dim mono text-sm">~/Documents (Connect to Mac Host to list active roots)</li>
             ) : (
               storageRoots.map((r, i) => (
                 <li key={i} className="mono text-sm">
@@ -192,22 +238,22 @@ export function SettingsView({ onLogout }: Props) {
             </div>
             <div className="setting-row">
               <span className="setting-label">RELEASE VERSION</span>
-              <span className="setting-value mono">0.1.0-alpha (Universal DMG)</span>
+              <span className="setting-value mono">0.1.0 (macOS Release)</span>
             </div>
             <div className="setting-row">
               <span className="setting-label">CORE SHELL</span>
               <span className="setting-value mono">Tauri 2 + React 18</span>
             </div>
             <div className="setting-row">
-              <span className="setting-label">SECURITY POSTURE</span>
-              <span className="setting-value">Ed25519 node identities · Local-first</span>
+              <span className="setting-label">AUTHORITATIVE HOST</span>
+              <span className="setting-value mono">{api.getHostUrl() || "Offline"}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Disconnect / Logout */}
-      <div className="logout-bar card" style={{ marginTop: "24px" }}>
+      <div className="logout-bar card" style={{ marginTop: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <strong>Sign Out of NEXUS Command Center</strong>
           <p className="dim text-sm">

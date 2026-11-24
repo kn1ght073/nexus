@@ -152,6 +152,11 @@ class GoogleTokenRequest(BaseModel):
     id_token: str = Field(min_length=10)
 
 
+class ControlPlaneExchangeRequest(BaseModel):
+    """Control-plane access token to exchange for a local node session."""
+    token: str = Field(min_length=10)
+
+
 # --- Devices ---
 class DeviceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
@@ -221,6 +226,12 @@ class ProjectOut(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: TaskStatus
+
+
+class ProjectUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    status: TaskStatus | None = None
 
 
 # --- Tasks ---
@@ -327,6 +338,7 @@ class FileInfo(BaseModel):
     path: str
     is_dir: bool
     size: int
+    modified_at: datetime | None = None
 
 
 class SearchResult(BaseModel):

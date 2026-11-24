@@ -8,7 +8,7 @@ This guide details the installation and execution procedure for the NEXUS person
 
 ### Artifact Information
 - **Package**: `release/macos/NEXUS.dmg`
-- **Architecture**: Universal macOS (Apple Silicon `aarch64` & Intel `x86_64`)
+- **Architecture**: Apple Silicon (`aarch64-apple-darwin`)
 - **Checksum**: Verified in `release/macos/SHA256SUMS.txt`
 - **Engine**: Tauri 2 Native Shell + React 18 Sovereign Command Center
 
@@ -16,7 +16,7 @@ This guide details the installation and execution procedure for the NEXUS person
 1. Double-click `release/macos/NEXUS.dmg` to mount the disk image.
 2. Drag `NEXUS Desktop.app` into the `Applications` folder shortcut.
 3. Open `NEXUS Desktop` from `/Applications` or Spotlight (`Cmd + Space` -> "NEXUS Desktop").
-   - *Note on macOS Gatekeeper*: Because this is a temporary internal research release, if prompted by Gatekeeper, right-click `NEXUS Desktop.app` -> select **Open** -> click **Open**.
+   - *Note on macOS Gatekeeper*: Because this temporary release uses an ad-hoc signature rather than an Apple Developer ID notarized certificate, macOS may quarantine browser-downloaded copies. Right-click `/Applications/NEXUS Desktop.app` -> **Open** (or clear the download attribute once with `xattr -cr "/Applications/NEXUS Desktop.app"`).
 
 ### Host Lifecycle & Authoritative Database
 - The macOS Desktop application communicates directly with the authoritative Core API instance on loopback (`http://127.0.0.1:8000`) or the cloud control plane relay (`https://nexus-control-plane-uvi8.onrender.com`).
@@ -37,9 +37,9 @@ This guide details the installation and execution procedure for the NEXUS person
 
 ### Artifact Information
 - **Package**: `release/mobile/NEXUS-android.apk`
-- **Architecture**: Android 10.0+ (API level 29+)
+- **Architecture**: Android (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`, API level 24–36)
 - **Checksum**: Verified in `release/mobile/SHA256SUMS.txt`
-- **Engine**: Expo / React Native with Hermes bytecode compilation and v1 JAR signature
+- **Engine**: Expo SDK 58 / React Native 0.88.1 with Hermes bytecode compilation and APK Signature Scheme v2
 
 ### Installation Steps
 1. Connect your Android device via USB with USB Debugging enabled, or transfer `NEXUS-android.apk` to device storage.

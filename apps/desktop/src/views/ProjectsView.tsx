@@ -8,10 +8,13 @@ export function ProjectsView() {
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
-  // Modal create
+  // Modal create / edit
   const [showCreate, setShowCreate] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Drilldown project drawer
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -27,7 +30,7 @@ export function ProjectsView() {
       const data = await api.listProjects();
       setProjects(data);
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -43,7 +46,7 @@ export function ProjectsView() {
       setProjectTasks(tList);
       setProjectNotes(nList);
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -51,21 +54,52 @@ export function ProjectsView() {
     loadProjects();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
+  function openCreateModal() {
+    setEditingProject(null);
+    setTitle("");
+    setDescription("");
+    setModalError(null);
+    setShowCreate(true);
+  }
+
+  function openEditModal(proj: Project) {
+    setEditingProject(proj);
+    setTitle(proj.title);
+    setDescription(proj.description ?? "");
+    setModalError(null);
+    setShowCreate(true);
+  }
+
+  async function handleSaveProject(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    setSaving(true);
+    setModalError(null);
     try {
-      await api.createProject(title.trim(), description.trim());
+      if (editingProject) {
+        const updated = await api.updateProject(editingProject.id, {
+          title: title.trim(),
+          description: description.trim() || null,
+        });
+        if (selectedProject?.id === updated.id) {
+          setSelectedProject(updated);
+        }
+      } else {
+        await api.createProject(title.trim(), description.trim());
+      }
       setTitle("");
       setDescription("");
       setShowCreate(false);
-      loadProjects();
+      setEditingProject(null);
+      await loadProjects();
     } catch (err) {
-      alert(`Error creating project: ${err}`);
+      setModalError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleStatusChange(proj: Project, nextStatus: string) {
+  async function handleStatusChange(proj: Project, nextStatus: "pending" | "in_progress" | "completed") {
     try {
       const updated = await api.updateProjectStatus(proj.id, nextStatus);
       if (selectedProject?.id === proj.id) {
@@ -73,7 +107,7 @@ export function ProjectsView() {
       }
       loadProjects();
     } catch (err) {
-      alert(`Error updating project status: ${err}`);
+      setError(`Error updating project status: ${err}`);
     }
   }
 
@@ -86,7 +120,7 @@ export function ProjectsView() {
       }
       loadProjects();
     } catch (err) {
-      alert(`Error deleting project: ${err}`);
+      setError(`Error deleting project: ${err}`);
     }
   }
 
@@ -99,7 +133,7 @@ export function ProjectsView() {
       const tList = await api.listTasks(selectedProject.id);
       setProjectTasks(tList);
     } catch (err) {
-      alert(`Error adding task: ${err}`);
+      setError(`Error adding task: ${err}`);
     }
   }
 
@@ -113,13 +147,14 @@ export function ProjectsView() {
       const nList = await api.listNotes(selectedProject.id);
       setProjectNotes(nList);
     } catch (err) {
-      alert(`Error adding note: ${err}`);
+      setError(`Error adding note: ${err}`);
     }
   }
 
   const filtered = projects.filter((p) => {
     const matchesFilter = filter === "all" || p.status.toLowerCase() === filter.toLowerCase();
-    const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase()) ||
+    const matchesSearch =
+      p.title.toLowerCase().includes(search.toLowerCase()) ||
       (p.description && p.description.toLowerCase().includes(search.toLowerCase()));
     return matchesFilter && matchesSearch;
   });
@@ -130,13 +165,18 @@ export function ProjectsView() {
         <div className="toolbar-left">
           <h2>Projects</h2>
           <div className="filter-group">
-            {["all", "active", "completed", "archived"].map((f) => (
+            {[
+              { id: "all", label: "ALL" },
+              { id: "pending", label: "PENDING" },
+              { id: "in_progress", label: "IN PROGRESS" },
+              { id: "completed", label: "COMPLETED" },
+            ].map((f) => (
               <button
-                key={f}
-                className={`filter-btn ${filter === f ? "active" : ""}`}
-                onClick={() => setFilter(f)}
+                key={f.id}
+                className={`filter-btn ${filter === f.id ? "active" : ""}`}
+                onClick={() => setFilter(f.id)}
               >
-                {f.toUpperCase()}
+                {f.label}
               </button>
             ))}
           </div>
@@ -150,13 +190,13 @@ export function ProjectsView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+          <button className="btn-primary" onClick={openCreateModal}>
             + New Project
           </button>
         </div>
       </div>
 
-      {error && <div className="error-banner">Error: {error}</div>}
+      {error && <div className="error-banner">{error}</div>}
 
       <div className="projects-table-container card">
         {loading ? (
@@ -169,10 +209,10 @@ export function ProjectsView() {
               <tr>
                 <th style={{ width: "60px" }}>ID</th>
                 <th>Title & Description</th>
-                <th style={{ width: "120px" }}>Status</th>
-                <th style={{ width: "80px" }}>Rev</th>
-                <th style={{ width: "140px" }}>Updated</th>
-                <th style={{ width: "220px", textAlign: "right" }}>Actions</th>
+                <th style={{ width: "130px" }}>Status</th>
+                <th style={{ width: "70px" }}>Rev</th>
+                <th style={{ width: "130px" }}>Updated</th>
+                <th style={{ width: "260px", textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -186,7 +226,9 @@ export function ProjectsView() {
                     {p.description && <div className="table-item-sub">{p.description}</div>}
                   </td>
                   <td>
-                    <span className={`badge badge-${p.status.toLowerCase()}`}>{p.status}</span>
+                    <span className={`badge badge-${p.status.toLowerCase()}`}>
+                      {p.status.replace("_", " ")}
+                    </span>
                   </td>
                   <td className="mono">{p.revision}</td>
                   <td className="dim text-sm">{new Date(p.updated_at).toLocaleDateString()}</td>
@@ -194,14 +236,18 @@ export function ProjectsView() {
                     <button className="btn-action" onClick={() => loadProjectDetails(p)}>
                       Inspect
                     </button>
+                    <button className="btn-action" style={{ marginLeft: "6px" }} onClick={() => openEditModal(p)}>
+                      Edit
+                    </button>
                     <select
                       className="select-status"
+                      style={{ marginLeft: "6px" }}
                       value={p.status}
-                      onChange={(e) => handleStatusChange(p, e.target.value)}
+                      onChange={(e) => handleStatusChange(p, e.target.value as any)}
                     >
-                      <option value="active">Active</option>
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
                       <option value="completed">Completed</option>
-                      <option value="archived">Archived</option>
                     </select>
                     <button className="btn-delete" onClick={() => handleDelete(p)}>
                       ✕
@@ -216,16 +262,17 @@ export function ProjectsView() {
 
       {/* Project Drilldown Drawer */}
       {selectedProject && (
-        <div className="drilldown-drawer card">
+        <div className="drilldown-drawer card" style={{ marginTop: "20px" }}>
           <div className="drawer-header">
             <div>
               <h3>{selectedProject.title}</h3>
               <div className="dim text-sm">
                 Project #{selectedProject.id} · Rev: {selectedProject.revision} · Created:{" "}
-                {new Date(selectedProject.created_at).toLocaleDateString()}
+                {new Date(selectedProject.created_at).toLocaleDateString()} · Updated:{" "}
+                {new Date(selectedProject.updated_at).toLocaleString()}
               </div>
             </div>
-            <button className="btn-close" onClick={() => setSelectedProject(null)}>
+            <button className="btn-secondary" onClick={() => setSelectedProject(null)}>
               ✕ Close
             </button>
           </div>
@@ -261,7 +308,7 @@ export function ProjectsView() {
                       </span>
                       {t.status !== "completed" ? (
                         <button
-                          className="btn-done-sm"
+                          className="btn-done"
                           onClick={async () => {
                             await api.completeTask(t.id);
                             const tList = await api.listTasks(selectedProject.id);
@@ -317,12 +364,12 @@ export function ProjectsView() {
         </div>
       )}
 
-      {/* Create Modal */}
+      {/* Create / Edit Modal */}
       {showCreate && (
         <div className="modal-overlay">
           <div className="modal-card">
-            <h3>New Sovereign Project</h3>
-            <form onSubmit={handleCreate}>
+            <h3>{editingProject ? "Edit Sovereign Project" : "New Sovereign Project"}</h3>
+            <form onSubmit={handleSaveProject}>
               <label>Title</label>
               <input
                 type="text"
@@ -339,12 +386,13 @@ export function ProjectsView() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+              {modalError && <div className="error-banner">{modalError}</div>}
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  Create Project
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? "Saving..." : editingProject ? "Save Project" : "Create Project"}
                 </button>
               </div>
             </form>
