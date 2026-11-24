@@ -10,11 +10,11 @@ from textual.message import Message
 from textual.widgets import Button, DataTable, Label, Static, Switch
 
 from ...client import get_client
-from ...config import load_config, mask_email_address, save_config
+from ...config import load_config, mask_email_address, save_config, validate_session
 
 
 class AccountView(Static):
-    """Dedicated Account & Identity view showing sovereign identity, sessions, and privacy controls."""
+    """Dedicated Account & Identity view showing sovereign identity, sessions, and dynamic auth state."""
 
     class ActionTriggered(Message):
         def __init__(self, action_id: str, data: Optional[Dict[str, Any]] = None) -> None:
@@ -28,39 +28,55 @@ class AccountView(Static):
                 yield Label("👤 ACCOUNT & SOVEREIGN IDENTITY", classes="view-title")
                 with Horizontal(classes="header-actions"):
                     yield Button("🔄 Refresh", id="btn-account-refresh", classes="btn-sm")
+                    yield Button("🔑 Login", id="btn-account-login", variant="primary", classes="btn-sm")
                     yield Button("🚪 Logout", id="btn-account-logout", variant="error", classes="btn-sm")
 
-            # Privacy & Preferences Bar
-            with Horizontal(id="account-privacy-bar", classes="config-bar"):
-                yield Label("Privacy Mode — Mask Email Address in UI:", classes="config-label")
-                yield Switch(id="switch-mask-email")
+            # Unauthenticated state (displayed when not logged in or account deleted)
+            with Vertical(id="unauth-account-container"):
+                yield Label("OPERATING IN GUEST MODE", classes="card-header")
+                yield Static(
+                    "You are currently unauthenticated. No active sovereign operator session is loaded.\n\n"
+                    "NEXUS requires authentication via Google OAuth to establish your cryptographic operator identity,\n"
+                    "provision encrypted cloud synchronization, claim hardware nodes, and access sovereign vaults.",
+                    id="unauth-desc-static",
+                )
+                with Horizontal(id="unauth-actions-row"):
+                    yield Button("🔑 Sign In with Google OAuth", id="btn-unauth-login-google", variant="primary")
+                    yield Button("📋 Enter Session Token", id="btn-unauth-login-token", variant="default")
 
-            # Split details
-            with Horizontal(classes="details-row"):
-                with Vertical(classes="details-box", id="box-identity-info"):
-                    yield Label("SOVEREIGN CREDENTIALS", classes="box-title")
-                    yield Static("Loading identity details...", id="identity-details-static")
+            # Authenticated state (displayed when session is verified)
+            with Vertical(id="auth-account-container"):
+                # Privacy & Preferences Bar
+                with Horizontal(id="account-privacy-bar", classes="config-bar"):
+                    yield Label("Privacy Mode — Mask Email Address in UI:", classes="config-label")
+                    yield Switch(id="switch-mask-email")
 
-                with Vertical(classes="details-box", id="box-oauth-info"):
-                    yield Label("LINKED IDENTITY PROVIDERS", classes="box-title")
-                    yield Static("Checking Google & GitHub status...", id="oauth-details-static")
+                # Split details
+                with Horizontal(classes="details-row"):
+                    with Vertical(classes="details-box", id="box-identity-info"):
+                        yield Label("SOVEREIGN CREDENTIALS", classes="box-title")
+                        yield Static("Loading identity details...", id="identity-details-static")
 
-            # Entity tallies
-            with Vertical(classes="overview-full-card", id="box-entity-tallies"):
-                yield Label("SOVEREIGN DATA INVENTORY", classes="card-header")
-                yield Static("Loading data metrics...", id="entity-tallies-static")
+                    with Vertical(classes="details-box", id="box-oauth-info"):
+                        yield Label("LINKED IDENTITY PROVIDERS", classes="box-title")
+                        yield Static("Checking Google & GitHub status...", id="oauth-details-static")
 
-            # Active Sessions & Linked Devices
-            with Vertical(classes="overview-full-card", id="box-sessions"):
-                yield Label("ACTIVE SESSIONS & AUTHORIZED CLIENTS", classes="card-header")
-                table = DataTable(id="account-sessions-table", cursor_type="row")
-                table.zebra_stripes = True
-                yield table
+                # Entity tallies
+                with Vertical(classes="overview-full-card", id="box-entity-tallies"):
+                    yield Label("SOVEREIGN DATA INVENTORY", classes="card-header")
+                    yield Static("Loading data metrics...", id="entity-tallies-static")
+
+                # Active Sessions & Linked Devices
+                with Vertical(classes="overview-full-card", id="box-sessions"):
+                    yield Label("ACTIVE SESSIONS & AUTHORIZED CLIENTS", classes="card-header")
+                    table = DataTable(id="account-sessions-table", cursor_type="row")
+                    table.zebra_stripes = True
+                    yield table
 
     def on_mount(self) -> None:
         table = self.query_one("#account-sessions-table", DataTable)
         table.add_columns("Device", "Platform", "Status", "Last Active", "Client Type")
-        
+
         cfg = load_config()
         sw = self.query_one("#switch-mask-email", Switch)
         sw.value = cfg.mask_email
@@ -71,8 +87,20 @@ class AccountView(Static):
         self.run_worker(self._fetch_account_data, thread=True)
 
     def _fetch_account_data(self) -> None:
-        client = get_client()
+        user_info = validate_session()
         cfg = load_config()
+        client = get_client()
+
+        if not cfg.token or not user_info:
+            self.app.call_from_thread(self._render_account_data, {
+                "authenticated": False,
+                "cfg": cfg,
+                "account": {},
+                "data_summary": {},
+                "github": {},
+                "devices": [],
+            })
+            return
 
         acc = {}
         try:
@@ -107,8 +135,9 @@ class AccountView(Static):
             pass
 
         self.app.call_from_thread(self._render_account_data, {
+            "authenticated": True,
             "cfg": cfg,
-            "account": acc,
+            "account": acc or user_info,
             "data_summary": data_summary,
             "github": github_info,
             "devices": devices,
@@ -117,7 +146,27 @@ class AccountView(Static):
     def _render_account_data(self, data: Dict[str, Any]) -> None:
         if not self.is_mounted:
             return
+
+        authenticated = data.get("authenticated", False)
         cfg = data["cfg"]
+
+        btn_login = self.query_one("#btn-account-login", Button)
+        btn_logout = self.query_one("#btn-account-logout", Button)
+        unauth_box = self.query_one("#unauth-account-container", Vertical)
+        auth_box = self.query_one("#auth-account-container", Vertical)
+
+        if not authenticated:
+            btn_login.display = True
+            btn_logout.display = False
+            unauth_box.display = True
+            auth_box.display = False
+            return
+
+        btn_login.display = False
+        btn_logout.display = True
+        unauth_box.display = False
+        auth_box.display = True
+
         acc = data["account"]
         summary = data["data_summary"]
         gh = data["github"]
@@ -134,7 +183,7 @@ class AccountView(Static):
 
         id_lines = [
             f"[bold cyan]User Identity:[/bold cyan] {email_display}",
-            f"[bold cyan]Account ID:[/bold cyan] {acc.get('account_id') or 'N/A'}",
+            f"[bold cyan]Account ID:[/bold cyan] {acc.get('account_id') or acc.get('id') or 'N/A'}",
             f"[bold cyan]Role:[/bold cyan] {(acc.get('role') or 'user').upper()}",
             f"[bold cyan]Status:[/bold cyan] {active_status}",
             f"[bold cyan]Registered Date:[/bold cyan] {created}",
@@ -147,11 +196,11 @@ class AccountView(Static):
             pass
 
         google_ident = acc.get("google_identity") or {}
-        g_name = google_ident.get("name", "Connected") if google_ident else "Not Linked"
+        g_name = google_ident.get("name", "Connected") if google_ident else "Linked (Google OAuth)"
         gh_user = gh.get("username") or ("Linked" if gh.get("connected") else "Not Linked")
 
         oauth_lines = [
-            f"[bold cyan]Google OAuth 2.0:[/bold cyan] {'[green]● Linked[/green]' if google_ident else '[dim]○ Unlinked[/dim]'}",
+            f"[bold cyan]Google OAuth 2.0:[/bold cyan] [green]● Linked[/green]",
             f"  • Profile Name: {g_name}",
             f"  • Scope: OpenID, Profile, Email",
             f"[bold cyan]GitHub OAuth:[/bold cyan] {'[green]● Linked[/green]' if gh.get('connected') else '[dim]○ Unlinked[/dim]'}",
@@ -207,3 +256,5 @@ class AccountView(Static):
             self.refresh_account()
         elif event.button.id == "btn-account-logout":
             self.post_message(self.ActionTriggered("logout"))
+        elif event.button.id in ("btn-account-login", "btn-unauth-login-google", "btn-unauth-login-token"):
+            self.post_message(self.ActionTriggered("login"))

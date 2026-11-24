@@ -4,7 +4,7 @@
 
 **Automated verification baseline**:
 - 104 automated tests in `services/core-api/tests/` (API security, token scopes, client console, GitHub flow, online access)
-- 65 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, 10-view Textual TUI cockpit suite)
+- 71 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, 10-view Textual TUI cockpit suite, session validation & auto-purge)
 - 16-step end-to-end device flow check in `scripts/e2e_github_cli.py`
 - 25-step complete stack orchestration check in `scripts/demo_setup.py`
 
@@ -180,6 +180,9 @@ services/core-api/.venv/bin/pytest services/core-api/tests/
 | 11.9 | Press `p` in TUI or `nexus config profile list` | Lists all configured profiles with active indicator. |
 | 11.10 | `nexus config profile create staging --url https://staging.nexus.local` followed by `nexus config profile switch staging` | Creates profile and switches active target, isolating session credentials. |
 | 11.11 | Press `?` in TUI | Displays comprehensive keyboard shortcuts cheat-sheet modal. |
+| 11.12 | Press `2` to switch to Account & Sovereign Identity View | Displays Sovereign credentials, linked identity providers, and active session inventory. |
+| 11.13 | Stale Session Auto-Purge (`GET /api/auth/me` on 401/404) | If account was deleted from backend database, TUI automatically detects dead token, wipes stored credentials from OS Keyring and local file, and transitions state to `Guest / Not Logged In`. |
+| 11.14 | Dynamic Login / Logout Toggle | When user is authenticated: displays `Logout` button, hides `Login` button; when user is unauthenticated: displays `Login` button and guest container, hides `Logout` button. |
 
 ---
 

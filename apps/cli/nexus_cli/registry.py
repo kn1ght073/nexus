@@ -227,6 +227,12 @@ def _handle_auth_status(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRe
 
 def _handle_auth_logout(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     cfg = load_config()
+    client = get_client()
+    if cfg.token:
+        try:
+            client.post("/api/auth/logout", json={"refresh_token": cfg.refresh_token}, timeout=2)
+        except Exception:
+            pass
     cfg.token = None
     cfg.refresh_token = None
     cfg.email = None

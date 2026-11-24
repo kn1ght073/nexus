@@ -403,3 +403,49 @@ def reset_config() -> None:
 
     if path.exists():
         path.unlink(missing_ok=True)
+
+
+def validate_session(client=None, force: bool = False) -> Optional[Dict[str, Any]]:
+    """Validate active session token against /api/auth/me.
+
+    If session is invalid, expired, or the user account was deleted from the database
+    (401/403/404), automatically purges stored tokens and email from local config and
+    OS Keyring, ensuring the client does not remain falsely authenticated.
+    """
+    cfg = load_config()
+    if not cfg.token:
+        if cfg.email:
+            cfg.email = None
+            save_config(cfg)
+        return None
+
+    try:
+        from .client import get_client
+        from .errors import AuthenticationError, ForbiddenError, NotFoundError, NetworkError
+        cli = client or get_client()
+        resp = cli.get("/api/auth/me", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            server_email = data.get("email")
+            if server_email and cfg.email != server_email:
+                cfg.email = server_email
+                save_config(cfg)
+            return data
+    except (AuthenticationError, ForbiddenError, NotFoundError):
+        # Account deleted or token revoked/invalidated -> purge stale credentials
+        cfg.token = None
+        cfg.refresh_token = None
+        cfg.email = None
+        save_config(cfg)
+        return None
+    except NetworkError:
+        if force:
+            return None
+        return {"offline": True, "email": cfg.email}
+    except Exception:
+        if force:
+            return None
+        return {"offline": True, "email": cfg.email}
+
+    return None
+

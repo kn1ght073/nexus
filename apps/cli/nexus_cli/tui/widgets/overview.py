@@ -20,7 +20,7 @@ from textual.reactive import reactive
 from textual.widgets import Button, DataTable, Label, Static
 
 from ...client import get_client
-from ...config import load_config, mask_email_address
+from ...config import load_config, mask_email_address, validate_session
 
 
 class OverviewDashboard(Static):
@@ -115,6 +115,7 @@ class OverviewDashboard(Static):
 
     def _fetch_telemetry_data(self) -> None:
         """Executed on background worker thread."""
+        validate_session()
         cfg = load_config()
         client = get_client()
 
@@ -219,18 +220,28 @@ class OverviewDashboard(Static):
         load_avg = payload.get("load_avg", "--")
 
         # --- 1. Account Card ---
-        email_display = cfg.email or account.get("email") or "Unauthenticated"
-        if cfg.mask_email and "@" in email_display:
-            email_display = mask_email_address(email_display)
+        has_auth = bool(cfg.token and (account.get("email") or cfg.email))
+        if has_auth:
+            email_display = cfg.email or account.get("email") or "Operator"
+            if cfg.mask_email and "@" in email_display:
+                email_display = mask_email_address(email_display)
 
-        acc_lines = [
-            f"[bold]Identity:[/bold] [cyan]{email_display}[/cyan]",
-            f"[bold]Account ID:[/bold] {account.get('account_id') or 'N/A'}",
-            f"[bold]Role:[/bold] [green]{(account.get('role') or 'user').upper()}[/green]",
-            f"[bold]Status:[/bold] {'[green]Active Sovereign[/green]' if account.get('is_active', True) else '[red]Suspended[/red]'}",
-            f"[bold]Google Linked:[/bold] {'[green]Yes[/green]' if account.get('google_identity') else '[dim]No[/dim]'}",
-            f"[bold]Active Sessions:[/bold] {account.get('sessions', {}).get('active', 1)}",
-        ]
+            acc_lines = [
+                f"[bold]Identity:[/bold] [cyan]{email_display}[/cyan]",
+                f"[bold]Account ID:[/bold] {account.get('account_id') or account.get('id') or 'N/A'}",
+                f"[bold]Role:[/bold] [green]{(account.get('role') or 'user').upper()}[/green]",
+                f"[bold]Status:[/bold] {'[green]Active Sovereign[/green]' if account.get('is_active', True) else '[red]Suspended[/red]'}",
+                f"[bold]Google Linked:[/bold] [green]Yes (OAuth 2.0)[/green]",
+                f"[bold]Active Sessions:[/bold] {account.get('sessions', {}).get('active', 1)}",
+            ]
+        else:
+            acc_lines = [
+                f"[bold]Identity:[/bold] [yellow]Guest / Not Logged In[/yellow]",
+                f"[bold]Status:[/bold] [dim]Unauthenticated[/dim]",
+                f"[bold]Google Linked:[/bold] [dim]No active session[/dim]",
+                f"[bold]Action:[/bold] [cyan]Press 2 (Account) to Sign In[/cyan]",
+                f"[dim]Authenticate via Google OAuth to link identity and vaults.[/dim]",
+            ]
         try:
             self.query_one("#account-card-body", Static).update("\n".join(acc_lines))
         except Exception:

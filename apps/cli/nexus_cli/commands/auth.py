@@ -12,7 +12,7 @@ import typer
 from rich.panel import Panel
 
 from ..client import get_client
-from ..config import CredentialStore, load_config, save_config
+from ..config import CredentialStore, load_config, save_config, validate_session
 from ..errors import AuthenticationError, ExitCode, NexusError
 from ..ui import (
     console,
@@ -265,6 +265,7 @@ def auth_status(
     """Check connectivity and active session state."""
     if json_output:
         set_json_mode(True)
+    validate_session()
     cfg = load_config()
 
     status_data = {

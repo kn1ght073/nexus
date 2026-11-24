@@ -25,6 +25,7 @@ from .widgets.files_view import FilesView
 from .widgets.form_modal import ParameterFormModal
 from .widgets.header import StatusHeader
 from .widgets.help_modal import HelpModal
+from .widgets.login_modal import LoginModal
 from .widgets.network_view import NetworkView
 from .widgets.nodes_view import NodesView
 from .widgets.notes_tasks_view import NotesTasksView
@@ -149,12 +150,45 @@ class NexusTUIApp(App):
         elif event.action_id == "open_palette":
             self.action_palette()
 
+    def refresh_all_views(self) -> None:
+        """Refresh header telemetry, account view, and dashboard cards simultaneously."""
+        try:
+            self.query_one("#status-header", StatusHeader).refresh_telemetry()
+        except Exception:
+            pass
+        try:
+            self.query_one("#view-account", AccountView).refresh_account()
+        except Exception:
+            pass
+        try:
+            self.query_one("#view-overview", OverviewDashboard).refresh_dashboard()
+        except Exception:
+            pass
+
     # Domain view message handlers
     def on_account_view_action_triggered(self, event: AccountView.ActionTriggered) -> None:
-        if event.action_id == "logout":
-            cmd = get_registry().get("auth.logout")
-            if cmd:
-                self.execute_command_flow(cmd)
+        if event.action_id == "login":
+            def on_login_dismiss(success: bool) -> None:
+                if success:
+                    self.refresh_all_views()
+                    self.notify("Successfully signed in via Google OAuth!", title="Authenticated", severity="information")
+            self.push_screen(LoginModal(), on_login_dismiss)
+        elif event.action_id == "logout":
+            from ..config import load_config, save_config
+            from ..client import get_client
+            cfg = load_config()
+            client = get_client()
+            if cfg.token:
+                try:
+                    client.post("/api/auth/logout", json={"refresh_token": cfg.refresh_token}, timeout=2)
+                except Exception:
+                    pass
+            cfg.token = None
+            cfg.refresh_token = None
+            cfg.email = None
+            save_config(cfg)
+            self.refresh_all_views()
+            self.notify("Logged out. Credentials cleared from OS Keyring.", title="Logged Out", severity="information")
 
     def on_devices_view_device_action(self, event: DevicesView.DeviceAction) -> None:
         if event.action_id == "revoke":
@@ -362,12 +396,16 @@ class NexusTUIApp(App):
                     opts_dict.update(default_opts)
                 reg = get_registry()
                 res = reg.execute(cmd.id, args=args_dict, options=opts_dict)
+                if cmd.id in ("auth.logout", "auth.login"):
+                    self.refresh_all_views()
                 self.push_screen(ExecutionResultModal(res))
 
             self.push_screen(ParameterFormModal(cmd), on_form_submit)
         else:
             reg = get_registry()
             res = reg.execute(cmd.id, args=default_args or {}, options=default_opts or {})
+            if cmd.id in ("auth.logout", "auth.login"):
+                self.refresh_all_views()
             self.push_screen(ExecutionResultModal(res))
 
     def action_palette(self) -> None:

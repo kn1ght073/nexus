@@ -11,7 +11,7 @@ from textual.reactive import reactive
 from textual.widgets import Label, Static
 
 from ...client import get_client
-from ...config import load_config, mask_email_address
+from ...config import load_config, mask_email_address, validate_session
 from ... import __version__
 
 
@@ -62,10 +62,17 @@ class StatusHeader(Static):
         self.api_endpoint = cfg.api_url
         self.local_node = f"node-{cfg.node_id}" if cfg.node_id else "local-standalone"
 
-        if cfg.email:
-            self.user_identity = mask_email_address(cfg.email) if cfg.mask_email else cfg.email
-        elif cfg.token:
-            self.user_identity = "Authenticated Operator"
+        # Validate active session against backend to ensure deleted accounts are purged
+        user_info = validate_session()
+        cfg = load_config()
+
+        if user_info and not user_info.get("offline"):
+            user_email = user_info.get("email") or cfg.email
+            self.user_identity = mask_email_address(user_email) if cfg.mask_email else user_email
+        elif user_info and user_info.get("offline"):
+            user_email = cfg.email or "Cached Operator"
+            display_email = mask_email_address(user_email) if cfg.mask_email else user_email
+            self.user_identity = f"{display_email} (Offline)"
         else:
             self.user_identity = "Guest / Not Logged In"
 
