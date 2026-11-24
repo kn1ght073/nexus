@@ -91,13 +91,13 @@ export default function CockpitDashboard() {
               title="Pair Node"
               variant="secondary"
               icon={<QrCode size={16} color={colors.textPrimary} />}
-              onPress={() => router.push('/(app)/nodes/pair')}
+              onPress={() => router.push('/nodes/pair')}
               style={{ flex: 1 }}
             />
             <Button
               title="View Fleet"
               variant="outline"
-              onPress={() => router.push('/(app)/nodes')}
+              onPress={() => router.push('/nodes')}
               style={{ flex: 1 }}
             />
           </View>
@@ -133,14 +133,14 @@ export default function CockpitDashboard() {
               title="Manage Devices"
               variant="secondary"
               icon={<Smartphone size={16} color={colors.textPrimary} />}
-              onPress={() => router.push('/(app)/devices')}
+              onPress={() => router.push('/devices')}
               style={styles.gridBtn}
             />
             <Button
               title="Tasks & Deadlines"
               variant="secondary"
               icon={<CheckSquare size={16} color={colors.textPrimary} />}
-              onPress={() => router.push('/(app)/workspace/tasks')}
+              onPress={() => router.push('/workspace/tasks')}
               style={styles.gridBtn}
             />
           </View>

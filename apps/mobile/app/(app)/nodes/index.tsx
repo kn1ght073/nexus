@@ -33,7 +33,7 @@ export default function NodesScreen() {
         <Button
           title="Pair"
           icon={<QrCode size={16} color="#FFFFFF" />}
-          onPress={() => router.push('/(app)/nodes/pair')}
+          onPress={() => router.push('/nodes/pair')}
           style={styles.pairBtn}
         />
       </View>
@@ -53,7 +53,7 @@ export default function NodesScreen() {
               action={
                 <Button
                   title="Scan Pairing QR Code"
-                  onPress={() => router.push('/(app)/nodes/pair')}
+                  onPress={() => router.push('/nodes/pair')}
                 />
               }
             />

@@ -27,28 +27,28 @@ export default function WorkspaceHub() {
       desc: 'Daily deadlines, priority tags, and completion tracking',
       count: metrics.tasks,
       icon: <CheckSquare size={22} color={colors.primary} />,
-      route: '/(app)/workspace/tasks',
+      route: '/workspace/tasks',
     },
     {
       title: 'Projects & Workspaces',
       desc: 'Top-level initiatives and sovereign workspaces',
       count: metrics.projects,
       icon: <FolderGit2 size={22} color={colors.accent} />,
-      route: '/(app)/workspace/projects',
+      route: '/workspace/projects',
     },
     {
       title: 'Notes & Ideas',
       desc: 'Quick thoughts, markdown notes, and tag filters',
       count: metrics.notes,
       icon: <FileText size={22} color={colors.success} />,
-      route: '/(app)/workspace/notes',
+      route: '/workspace/notes',
     },
     {
       title: 'Storage & Files',
       desc: 'Jailed sovereign storage roots on your primary node',
       count: metrics.files,
       icon: <HardDrive size={22} color={colors.warning} />,
-      route: '/(app)/workspace/files',
+      route: '/workspace/files',
     },
   ];
 
@@ -65,7 +65,7 @@ export default function WorkspaceHub() {
           title="Sync"
           variant="secondary"
           icon={<RefreshCw size={14} color={colors.textPrimary} />}
-          onPress={() => router.push('/(app)/workspace/sync')}
+          onPress={() => router.push('/workspace/sync')}
           style={styles.syncBtn}
         />
       </View>
