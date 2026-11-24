@@ -77,6 +77,23 @@ export interface ActivityItem {
 const DEFAULT_LOCAL_BASE = "http://127.0.0.1:8000";
 const CLOUD_BASE = "https://nexus-control-plane-uvi8.onrender.com";
 
+export function normalizeBaseUrl(url: string): string {
+  if (!url) return "";
+  return url.trim().replace(/\/+$/, "");
+}
+
+export function cleanToken(raw: string): string {
+  if (!raw) return "";
+  let t = raw.trim();
+  if (t.toLowerCase().startsWith("bearer ")) {
+    t = t.substring(7).trim();
+  }
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
+}
+
 function headers(): Record<string, string> {
   const token = localStorage.getItem("nexus.token");
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -85,8 +102,9 @@ function headers(): Record<string, string> {
 }
 
 async function request<T>(path: string, init?: RequestInit, baseOverride?: string): Promise<T> {
-  const base = baseOverride ?? api.getBaseUrl();
-  const res = await fetch(`${base}${path}`, {
+  const base = normalizeBaseUrl(baseOverride ?? api.getBaseUrl());
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const res = await fetch(`${base}${cleanPath}`, {
     ...init,
     headers: { ...headers(), ...(init?.headers ?? {}) },
   });
@@ -100,11 +118,12 @@ async function request<T>(path: string, init?: RequestInit, baseOverride?: strin
 
 export const api = {
   getBaseUrl(): string {
-    return localStorage.getItem("nexus.core") ?? DEFAULT_LOCAL_BASE;
+    const stored = localStorage.getItem("nexus.core");
+    return stored ? normalizeBaseUrl(stored) : DEFAULT_LOCAL_BASE;
   },
 
   setBaseUrl(url: string) {
-    localStorage.setItem("nexus.core", url.trim());
+    localStorage.setItem("nexus.core", normalizeBaseUrl(url));
   },
 
   getCloudBaseUrl(): string {
@@ -115,8 +134,22 @@ export const api = {
     return DEFAULT_LOCAL_BASE;
   },
 
+  isLocalUrl(url: string): boolean {
+    const norm = normalizeBaseUrl(url);
+    return norm === DEFAULT_LOCAL_BASE || norm === "http://localhost:8000";
+  },
+
+  isCloudUrl(url: string): boolean {
+    const norm = normalizeBaseUrl(url);
+    return norm === CLOUD_BASE;
+  },
+
+  cleanToken(raw: string): string {
+    return cleanToken(raw);
+  },
+
   setToken(token: string) {
-    localStorage.setItem("nexus.token", token.trim());
+    localStorage.setItem("nexus.token", cleanToken(token));
   },
 
   clearToken() {
@@ -131,8 +164,14 @@ export const api = {
     return localStorage.getItem("nexus.token");
   },
 
-  async health(targetUrl?: string): Promise<{ status: string; service: string; version?: string }> {
-    return request("/health", undefined, targetUrl);
+  async health(targetUrl?: string, timeoutMs = 6000): Promise<{ status: string; service: string; version?: string }> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await request("/health", { signal: controller.signal }, targetUrl);
+    } finally {
+      clearTimeout(id);
+    }
   },
 
   async me(): Promise<User> {
@@ -140,12 +179,26 @@ export const api = {
   },
 
   async loginWithToken(token: string): Promise<User> {
-    this.setToken(token);
+    const cleaned = cleanToken(token);
+    this.setToken(cleaned);
+    const primaryBase = normalizeBaseUrl(this.getBaseUrl());
+    const isCloudPrimary = this.isCloudUrl(primaryBase);
+    const fallbackBase = isCloudPrimary ? DEFAULT_LOCAL_BASE : CLOUD_BASE;
+
     try {
-      return await this.me();
-    } catch (e) {
-      this.clearToken();
-      throw e;
+      return await request<User>("/api/auth/me", undefined, primaryBase);
+    } catch (primaryErr) {
+      // Dual-mode fallback: try the opposite endpoint
+      try {
+        const user = await request<User>("/api/auth/me", undefined, fallbackBase);
+        this.setBaseUrl(fallbackBase);
+        return user;
+      } catch (fallbackErr) {
+        this.clearToken();
+        const primMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+        const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        throw new Error(`Auth failed on ${primaryBase} (${primMsg}) and fallback ${fallbackBase} (${fbMsg})`);
+      }
     }
   },
 

@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types src/api.test.ts"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

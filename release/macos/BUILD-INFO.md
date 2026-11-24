@@ -10,4 +10,4 @@
 - **Build Timestamp**: November 2026
 - **Commit SHA**: `f3c4dea`
 - **Signing Status**: Ad-hoc signed research build. Apple Developer ID notarization requires provisioning external developer credentials.
-- **SHA-256 Checksum**: `f743653ec6a655187d2f25805b995a95d39002c72edbb4c0e1132771f6a4ca30` (`NEXUS.dmg`)
+- **SHA-256 Checksum**: `55d8da98742f56b85ae58e60ff77c2cf2eaed2af4042e25272199f7ebf8189b0` (`NEXUS.dmg`)

@@ -37,10 +37,45 @@ async fn core_health(base_url: Option<String>) -> HealthStatus {
     }
 }
 
+#[tauri::command]
+fn open_browser_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only http and https URLs are allowed".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("/usr/bin/open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open browser on macOS: {}", e))?;
+        Ok(())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .spawn()
+            .map_err(|e| format!("Failed to open browser on Windows: {}", e))?;
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open browser on Linux: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err("Unsupported operating system for opening browser".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![core_base_url, core_health])
+        .invoke_handler(tauri::generate_handler![core_base_url, core_health, open_browser_url])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

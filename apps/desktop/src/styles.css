@@ -248,6 +248,17 @@ h4 {
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
 }
 
+.status-dot.checking {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+  animation: pulse-dot 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
 .status-dot.offline {
   background: var(--accent-rose);
   box-shadow: 0 0 8px rgba(244, 63, 94, 0.6);
@@ -1130,4 +1141,69 @@ h4 {
   text-align: center;
   padding: 30px;
   color: var(--text-dim);
+}
+
+.endpoint-toggle-container {
+  margin: 16px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.endpoint-toggle-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.endpoint-toggle-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.endpoint-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-muted);
+}
+
+.endpoint-btn:hover {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.endpoint-btn.active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #60a5fa;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+}
+
+.endpoint-btn .endpoint-name {
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.endpoint-btn .endpoint-status {
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
