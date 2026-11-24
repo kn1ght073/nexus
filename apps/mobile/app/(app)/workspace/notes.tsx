@@ -123,7 +123,7 @@ export default function NotesScreen() {
                 />
               }
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => (
           <Card style={styles.noteCard}>

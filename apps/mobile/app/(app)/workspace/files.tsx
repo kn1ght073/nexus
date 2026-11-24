@@ -69,7 +69,7 @@ export default function FilesScreen() {
               description="No files or subdirectories found within this sandboxed storage root."
               icon={<Folder size={40} color={colors.textMuted} />}
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => (
           <TouchableOpacity

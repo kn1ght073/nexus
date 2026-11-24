@@ -118,7 +118,7 @@ export default function TasksScreen() {
                 />
               }
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => {
           const isDone = item.status === 'completed';

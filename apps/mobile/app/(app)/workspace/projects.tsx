@@ -95,7 +95,7 @@ export default function ProjectsScreen() {
               icon={<FolderGit2 size={40} color={colors.textMuted} />}
               action={<Button title="Create Project" onPress={() => setShowAdd(true)} />}
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => (
           <Card style={styles.projectCard}>

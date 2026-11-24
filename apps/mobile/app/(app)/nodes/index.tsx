@@ -57,7 +57,7 @@ export default function NodesScreen() {
                 />
               }
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => (
           <Card style={styles.card}>

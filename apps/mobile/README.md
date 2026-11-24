@@ -1,9 +1,10 @@
-# NEXUS Mobile Companion (Expo + React Native)
+# NEXUS Mobile Companion (Expo SDK 58 + React Native 0.88)
 
 Official mobile application for the NEXUS sovereign personal digital infrastructure ecosystem.
 
 ## Key Features
 
+- **Expo SDK 58 & React Native 0.88**: Built for the latest official Expo release with React 19 concurrency and bridgeless TurboModules architecture.
 - **Sovereign Cockpit Dashboard**: Live infrastructure status, active node indicator, device counters, and real-time audit event streams.
 - **Google OAuth Authentication & Hardware Isolation**: OpenID Connect with PKCE S256, cryptographically random nonce/state, and hardware keychain isolation (`expo-secure-store`).
 - **Hardware Fleet & Device Management**: Register mobile clients with scoped permissions, view device capabilities, track liveness, and revoke compromised sessions.
@@ -21,7 +22,7 @@ Official mobile application for the NEXUS sovereign personal digital infrastruct
 
 - Node.js 18+ (tested on Node v26)
 - npm / yarn
-- Expo CLI (`npx expo`)
+- Expo Go App on Android / iOS (SDK 58 compatible)
 
 ### Install Dependencies
 

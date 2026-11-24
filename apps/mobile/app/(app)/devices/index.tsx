@@ -99,7 +99,7 @@ export default function DevicesScreen() {
                 />
               }
             />
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }) => (
           <Card style={styles.card}>
