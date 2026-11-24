@@ -3,15 +3,15 @@ import { View, Text, StyleSheet, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, FolderGit2, HardDrive } from 'lucide-react-native';
+import { ArrowLeft, Plus, FolderGit2, HardDrive, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../../../src/context/ThemeContext';
 import { Button } from '../../../src/components/Button';
 import { Input } from '../../../src/components/Input';
 import { Card } from '../../../src/components/Card';
 import { EmptyState } from '../../../src/components/EmptyState';
-import { apiClient } from '../../../src/api/client';
+import { apiClient, getLastSyncTimestamp, setLastSyncTimestamp } from '../../../src/api/client';
 import { ProjectOut } from '../../../src/api/types';
-import { getLocalProjects, saveLocalProject } from '../../../src/api/workspaceStore';
+import { getLocalProjects, saveLocalProject, deleteLocalProject, cacheRemoteProjects } from '../../../src/api/workspaceStore';
 
 export default function ProjectsScreen() {
   const { colors } = useTheme();
@@ -21,14 +21,24 @@ export default function ProjectsScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const { data: projects, isLoading, refetch } = useQuery<ProjectOut[]>({
     queryKey: ['projects'],
     queryFn: async () => {
       try {
         const remote = await apiClient<ProjectOut[]>('/api/projects');
+        setIsOffline(false);
+        await cacheRemoteProjects(remote);
+        const now = new Date().toISOString();
+        await setLastSyncTimestamp(now);
+        setLastSyncTime(now);
         return remote;
       } catch (err: any) {
+        setIsOffline(true);
+        const ts = await getLastSyncTimestamp();
+        setLastSyncTime(ts);
         return await getLocalProjects();
       }
     },
@@ -38,11 +48,15 @@ export default function ProjectsScreen() {
     mutationFn: async () => {
       const payload = { title: title.trim(), description: description.trim() };
       try {
-        return await apiClient<ProjectOut>('/api/projects', {
+        const res = await apiClient<ProjectOut>('/api/projects', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
+        const now = new Date().toISOString();
+        await setLastSyncTimestamp(now);
+        return res;
       } catch (err: any) {
+        setIsOffline(true);
         return await saveLocalProject(payload);
       }
     },
@@ -57,6 +71,31 @@ export default function ProjectsScreen() {
       Alert.alert('Project Creation Failed', err.message);
     },
   });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      try {
+        await apiClient(`/api/projects/${id}`, { method: 'DELETE' });
+      } catch {
+        // Fallback local deletion
+      }
+      await deleteLocalProject(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  const confirmDelete = (item: ProjectOut) => {
+    Alert.alert(
+      'Delete Project',
+      `Delete '${item.title}'? This action synchronizes across all devices.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteProjectMutation.mutate(item.id) },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -101,6 +140,15 @@ export default function ProjectsScreen() {
         </Card>
       )}
 
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            ⚠️ Mac Host Disconnected · Displaying cached data
+            {lastSyncTime ? ` (Last synced: ${new Date(lastSyncTime).toLocaleTimeString()})` : ''}
+          </Text>
+        </View>
+      )}
+
       <FlatList
         data={projects || []}
         keyExtractor={(item) => String(item.id)}
@@ -138,6 +186,13 @@ export default function ProjectsScreen() {
                   </Text>
                 )}
               </View>
+              <Button
+                title=""
+                variant="outline"
+                icon={<Trash2 size={16} color={colors.danger} />}
+                onPress={() => confirmDelete(item)}
+                style={styles.delBtn}
+              />
             </View>
           </Card>
         )}
@@ -171,4 +226,26 @@ const styles = StyleSheet.create({
   descText: { fontSize: 12, marginTop: 4, lineHeight: 16 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
   badgeText: { fontSize: 10, fontWeight: '600', textTransform: 'capitalize' },
+  offlineBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  delBtn: {
+    width: 36,
+    height: 36,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
 });

@@ -87,6 +87,12 @@ export async function getLocalProjects(): Promise<ProjectOut[]> {
   }
 }
 
+export async function cacheRemoteProjects(projects: ProjectOut[]): Promise<void> {
+  if (Array.isArray(projects)) {
+    await setSecureItem(LOCAL_PROJECTS_KEY, JSON.stringify(projects));
+  }
+}
+
 export async function saveLocalProject(project: Omit<ProjectOut, 'id' | 'created_at' | 'updated_at'>): Promise<ProjectOut> {
   const current = await getLocalProjects();
   const newProj: ProjectOut = {
@@ -119,7 +125,13 @@ export async function getLocalTasks(): Promise<TaskOut[]> {
   try {
     return JSON.parse(raw);
   } catch {
-    return INITIAL_TASKS;
+    return INITIAL_PROJECTS as any;
+  }
+}
+
+export async function cacheRemoteTasks(tasks: TaskOut[]): Promise<void> {
+  if (Array.isArray(tasks)) {
+    await setSecureItem(LOCAL_TASKS_KEY, JSON.stringify(tasks));
   }
 }
 
@@ -173,6 +185,12 @@ export async function getLocalNotes(): Promise<NoteOut[]> {
     return JSON.parse(raw);
   } catch {
     return INITIAL_NOTES;
+  }
+}
+
+export async function cacheRemoteNotes(notes: NoteOut[]): Promise<void> {
+  if (Array.isArray(notes)) {
+    await setSecureItem(LOCAL_NOTES_KEY, JSON.stringify(notes));
   }
 }
 

@@ -9,9 +9,9 @@ import { Button } from '../../../src/components/Button';
 import { Input } from '../../../src/components/Input';
 import { Card } from '../../../src/components/Card';
 import { EmptyState } from '../../../src/components/EmptyState';
-import { apiClient } from '../../../src/api/client';
+import { apiClient, getLastSyncTimestamp, setLastSyncTimestamp } from '../../../src/api/client';
 import { NoteOut } from '../../../src/api/types';
-import { getLocalNotes, saveLocalNote, deleteLocalNote } from '../../../src/api/workspaceStore';
+import { getLocalNotes, saveLocalNote, deleteLocalNote, cacheRemoteNotes } from '../../../src/api/workspaceStore';
 
 export default function NotesScreen() {
   const { colors } = useTheme();
@@ -22,14 +22,24 @@ export default function NotesScreen() {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const { data: notes, isLoading, refetch } = useQuery<NoteOut[]>({
     queryKey: ['notes'],
     queryFn: async () => {
       try {
         const remote = await apiClient<NoteOut[]>('/api/notes');
+        setIsOffline(false);
+        await cacheRemoteNotes(remote);
+        const now = new Date().toISOString();
+        await setLastSyncTimestamp(now);
+        setLastSyncTime(now);
         return remote;
       } catch (err: any) {
+        setIsOffline(true);
+        const ts = await getLastSyncTimestamp();
+        setLastSyncTime(ts);
         return await getLocalNotes();
       }
     },
@@ -130,6 +140,15 @@ export default function NotesScreen() {
             style={{ marginTop: 8 }}
           />
         </Card>
+      )}
+
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            ⚠️ Mac Host Disconnected · Displaying cached data
+            {lastSyncTime ? ` (Last synced: ${new Date(lastSyncTime).toLocaleTimeString()})` : ''}
+          </Text>
+        </View>
       )}
 
       <FlatList
@@ -257,6 +276,20 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 11,
+    fontWeight: '600',
+  },
+  offlineBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    color: '#EF4444',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

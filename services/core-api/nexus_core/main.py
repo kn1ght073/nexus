@@ -30,6 +30,8 @@ from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
+from sqlalchemy.orm import Session
+
 from .database import Base, SessionLocal, engine, get_db
 from .events import DomainEvent, subscribe, unsubscribe
 from .models import User
@@ -159,6 +161,70 @@ def create_app() -> FastAPI:
             "status": "ok",
             "service": "nexus-core",
             "mode": mode,
+        }
+
+    @app.get("/api/host/status", tags=["host"])
+    def host_status(db: Session = Depends(get_db)):
+        """Authoritative host state and telemetry endpoint for connected clients."""
+        import platform as _platform
+        import socket
+        from .models import Device, Note, Project, Task
+
+        lan_ips: list[str] = []
+        hostname = socket.gethostname()
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0)
+            try:
+                s.connect(('10.254.254.254', 1))
+                ip = s.getsockname()[0]
+                if ip and not ip.startswith('127.'):
+                    lan_ips.append(ip)
+            except Exception:
+                pass
+            finally:
+                s.close()
+
+            for info in socket.getaddrinfo(hostname, None):
+                cand = info[4][0]
+                if cand and not cand.startswith('127.') and ':' not in cand and cand not in lan_ips:
+                    lan_ips.append(cand)
+        except Exception:
+            hostname = "nexus-host"
+
+        db_path = settings.resolved_database_path if not settings.database_url else None
+        db_size = db_path.stat().st_size if db_path and db_path.exists() else 0
+
+        counts = {
+            "projects": 0,
+            "tasks": 0,
+            "notes": 0,
+            "devices": 0,
+        }
+        try:
+            if not settings.control_plane_mode:
+                counts["projects"] = db.query(Project).filter(Project.deleted_at.is_(None)).count()
+                counts["tasks"] = db.query(Task).filter(Task.deleted_at.is_(None)).count()
+                counts["notes"] = db.query(Note).filter(Note.deleted_at.is_(None)).count()
+            counts["devices"] = db.query(Device).count()
+        except Exception:
+            pass
+
+        return {
+            "status": "online",
+            "service": "nexus-host",
+            "mode": mode,
+            "hostname": hostname,
+            "platform": _platform.system().lower(),
+            "database": {
+                "engine": "postgresql" if settings.database_url else "sqlite",
+                "path": str(db_path) if db_path else None,
+                "size_bytes": db_size,
+                "wal_enabled": not bool(settings.database_url),
+            },
+            "lan_ips": lan_ips,
+            "port": settings.port,
+            "counts": counts,
         }
 
     @app.get("/api/system/status", tags=["system"])

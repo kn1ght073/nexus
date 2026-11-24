@@ -2,23 +2,31 @@ import { getSecureItem, setSecureItem, deleteSecureItem } from '../utils/secureS
 
 export const DEFAULT_SERVER_URL = 'https://nexus-control-plane-uvi8.onrender.com';
 const SERVER_URL_KEY = 'nexus_server_url';
+const HOST_URL_KEY = 'nexus_host_url';
+const LAST_SYNC_KEY = 'nexus_last_sync_timestamp';
 const ACCESS_TOKEN_KEY = 'nexus_access_token';
 const REFRESH_TOKEN_KEY = 'nexus_refresh_token';
 
 let activeServerUrl = DEFAULT_SERVER_URL;
+let activeHostUrl: string | null = null;
 let activeAccessToken: string | null = null;
 let activeRefreshToken: string | null = null;
 
-export async function initApiClient(): Promise<{ serverUrl: string; hasToken: boolean }> {
+export async function initApiClient(): Promise<{ serverUrl: string; hostUrl: string | null; hasToken: boolean }> {
   const storedUrl = await getSecureItem(SERVER_URL_KEY);
   if (storedUrl) {
     activeServerUrl = storedUrl.trim().replace(/\/+$/, '');
+  }
+  const storedHost = await getSecureItem(HOST_URL_KEY);
+  if (storedHost) {
+    activeHostUrl = storedHost.trim().replace(/\/+$/, '');
   }
   activeAccessToken = await getSecureItem(ACCESS_TOKEN_KEY);
   activeRefreshToken = await getSecureItem(REFRESH_TOKEN_KEY);
 
   return {
     serverUrl: activeServerUrl,
+    hostUrl: activeHostUrl,
     hasToken: Boolean(activeAccessToken),
   };
 }
@@ -31,6 +39,73 @@ export async function setServerUrl(url: string): Promise<void> {
   const normalized = url.trim().replace(/\/+$/, '');
   activeServerUrl = normalized;
   await setSecureItem(SERVER_URL_KEY, normalized);
+}
+
+export function getHostUrl(): string | null {
+  return activeHostUrl;
+}
+
+export async function setHostUrl(url: string | null): Promise<void> {
+  if (url) {
+    const normalized = url.trim().replace(/\/+$/, '');
+    activeHostUrl = normalized;
+    await setSecureItem(HOST_URL_KEY, normalized);
+  } else {
+    activeHostUrl = null;
+    await deleteSecureItem(HOST_URL_KEY);
+  }
+}
+
+export async function getLastSyncTimestamp(): Promise<string | null> {
+  return await getSecureItem(LAST_SYNC_KEY);
+}
+
+export async function setLastSyncTimestamp(isoStr: string): Promise<void> {
+  await setSecureItem(LAST_SYNC_KEY, isoStr);
+}
+
+export async function testConnection(targetUrl: string): Promise<{
+  ok: boolean;
+  status?: string;
+  mode?: string;
+  service?: string;
+  latencyMs: number;
+  error?: string;
+}> {
+  const t0 = Date.now();
+  const normalized = targetUrl.trim().replace(/\/+$/, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(`${normalized}/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const latencyMs = Date.now() - t0;
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        ok: true,
+        status: data.status || 'ok',
+        mode: data.mode || 'unknown',
+        service: data.service || 'nexus-core',
+        latencyMs,
+      };
+    }
+    return {
+      ok: false,
+      latencyMs,
+      error: `HTTP ${res.status}: ${res.statusText}`,
+    };
+  } catch (err: any) {
+    clearTimeout(timer);
+    return {
+      ok: false,
+      latencyMs: Date.now() - t0,
+      error: err.name === 'AbortError' ? 'Connection timed out (4s)' : err.message,
+    };
+  }
 }
 
 export function getAccessToken(): string | null {
@@ -69,7 +144,18 @@ export class ApiError extends Error {
 
 export async function apiClient<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { timeoutMs = 15000, ...fetchOpts } = options;
-  const fullUrl = `${activeServerUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  
+  // Route personal workspace endpoints to authoritative local Host if configured
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const isPersonalDataRoute = cleanPath.startsWith('/api/projects') ||
+                              cleanPath.startsWith('/api/tasks') ||
+                              cleanPath.startsWith('/api/notes') ||
+                              cleanPath.startsWith('/api/files') ||
+                              cleanPath.startsWith('/api/sync') ||
+                              cleanPath.startsWith('/api/host');
+
+  const baseUrl = (isPersonalDataRoute && activeHostUrl) ? activeHostUrl : activeServerUrl;
+  const fullUrl = `${baseUrl}${cleanPath}`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

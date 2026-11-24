@@ -1,20 +1,66 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shield, Moon, Sun, Server, LogOut, Stethoscope } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Shield, Moon, Sun, Server, LogOut, Stethoscope, HardDrive, CheckCircle2, XCircle, Wifi, QrCode } from 'lucide-react-native';
 import { useTheme } from '../../../src/context/ThemeContext';
 import { useAuth } from '../../../src/context/AuthContext';
 import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
-import { apiClient } from '../../../src/api/client';
+import { Input } from '../../../src/components/Input';
+import { apiClient, testConnection } from '../../../src/api/client';
 import { HealthCheckResponse } from '../../../src/api/types';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { colors, theme, toggleTheme, isDark } = useTheme();
-  const { serverUrl, account, logout } = useAuth();
+  const { serverUrl, hostUrl, updateHostUrl, account, logout } = useAuth();
+
+  const [customHost, setCustomHost] = useState(hostUrl || '');
+  const [hostTesting, setHostTesting] = useState(false);
+  const [hostTestResult, setHostTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
   const [diagResult, setDiagResult] = useState<string | null>(null);
+
+  const runHostConnectionTest = async () => {
+    const target = customHost.trim();
+    if (!target) {
+      Alert.alert('Host Required', 'Enter your Mac Host LAN address (e.g. http://192.168.1.15:8000).');
+      return;
+    }
+    setHostTesting(true);
+    setHostTestResult(null);
+    try {
+      const res = await testConnection(target);
+      if (res.ok) {
+        setHostTestResult({
+          ok: true,
+          message: `✓ Connected to ${res.service} (${res.mode}) in ${res.latencyMs}ms. Ready for cross-device sync.`,
+        });
+      } else {
+        setHostTestResult({
+          ok: false,
+          message: `✗ Unreachable: ${res.error || 'Connection refused'}. Check IP and firewall.`,
+        });
+      }
+    } catch (e: any) {
+      setHostTestResult({ ok: false, message: `✗ Probe failed: ${e.message}` });
+    } finally {
+      setHostTesting(false);
+    }
+  };
+
+  const saveHost = async () => {
+    const target = customHost.trim();
+    await updateHostUrl(target || null);
+    Alert.alert(
+      'Host Configured',
+      target
+        ? `Authoritative NEXUS Host set to ${target}. Workspace data will synchronize with this machine.`
+        : 'Local host cleared. Reverted to cloud control-plane mode.'
+    );
+  };
 
   const runDiagnostics = async () => {
     setDiagnosticsRunning(true);
@@ -95,6 +141,64 @@ export default function SettingsScreen() {
               <Text style={[styles.diagText, { color: colors.textPrimary }]}>{diagResult}</Text>
             </View>
           )}
+        </Card>
+
+        {/* Primary Authoritative Host (Mac / LAN) Card */}
+        <Card style={styles.card}>
+          <View style={styles.cardHeader}>
+            <HardDrive size={18} color={colors.accent} />
+            <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Primary NEXUS Host (Mac)</Text>
+          </View>
+          <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
+            Connect directly to your active Mac/PC running the authoritative SQLite database. All projects, tasks, and notes synchronize with this host.
+          </Text>
+
+          <View style={[styles.hostStatusBadge, { backgroundColor: hostUrl ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)' }]}>
+            <Wifi size={16} color={hostUrl ? '#10B981' : '#EF4444'} />
+            <Text style={[styles.hostStatusText, { color: hostUrl ? '#10B981' : '#EF4444' }]}>
+              {hostUrl ? `Linked Host: ${hostUrl}` : 'No Local Host Linked (Cloud Control Plane Only)'}
+            </Text>
+          </View>
+
+          <Input
+            value={customHost}
+            onChangeText={setCustomHost}
+            placeholder="e.g. http://192.168.1.15:8000"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={{ marginBottom: 10, marginTop: 8 }}
+          />
+
+          <View style={styles.buttonRow}>
+            <Button
+              title="Test Reachability"
+              variant="secondary"
+              onPress={runHostConnectionTest}
+              loading={hostTesting}
+              style={{ flex: 1, marginRight: 6 }}
+            />
+            <Button
+              title="Save & Connect"
+              onPress={saveHost}
+              style={{ flex: 1, marginLeft: 6 }}
+            />
+          </View>
+
+          {hostTestResult && (
+            <View style={[styles.diagBox, { backgroundColor: hostTestResult.ok ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)' }]}>
+              <Text style={[styles.diagText, { color: hostTestResult.ok ? colors.success : colors.danger }]}>
+                {hostTestResult.message}
+              </Text>
+            </View>
+          )}
+
+          <Button
+            title="Scan Pairing QR / Enter PIN"
+            variant="outline"
+            icon={<QrCode size={16} color={colors.primary} />}
+            onPress={() => router.push('/(app)/nodes/pair')}
+            style={{ marginTop: 10 }}
+          />
         </Card>
 
         {/* Active Session Card */}
@@ -193,5 +297,23 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 11,
     marginTop: 4,
+  },
+  hostStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  hostStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });

@@ -6,6 +6,8 @@ import {
   clearAuthTokens,
   setServerUrl,
   getServerUrl,
+  setHostUrl,
+  getHostUrl,
   apiClient,
 } from '../api/client';
 import { AccountOverviewResponse } from '../api/types';
@@ -14,9 +16,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   serverUrl: string;
+  hostUrl: string | null;
   account: AccountOverviewResponse | null;
   loginWithToken: (accessToken: string, refreshToken?: string) => Promise<void>;
   updateServerUrl: (url: string) => Promise<void>;
+  updateHostUrl: (url: string | null) => Promise<void>;
   logout: () => Promise<void>;
   refreshAccount: () => Promise<void>;
 }
@@ -27,6 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [serverUrl, setLocalServerUrl] = useState<string>(getServerUrl());
+  const [hostUrl, setLocalHostUrl] = useState<string | null>(getHostUrl());
   const [account, setAccount] = useState<AccountOverviewResponse | null>(null);
 
   const fetchOverview = async () => {
@@ -44,8 +49,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     (async () => {
       try {
-        const { serverUrl: url, hasToken } = await initApiClient();
+        const { serverUrl: url, hostUrl: hUrl, hasToken } = await initApiClient();
         setLocalServerUrl(url);
+        setLocalHostUrl(hUrl);
         if (hasToken) {
           await fetchOverview();
         }
@@ -63,6 +69,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateServerUrl = async (url: string) => {
     await setServerUrl(url);
     setLocalServerUrl(getServerUrl());
+  };
+
+  const updateHostUrl = async (url: string | null) => {
+    await setHostUrl(url);
+    setLocalHostUrl(getHostUrl());
   };
 
   const logout = async () => {
@@ -88,9 +99,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated,
         isLoading,
         serverUrl,
+        hostUrl,
         account,
         loginWithToken,
         updateServerUrl,
+        updateHostUrl,
         logout,
         refreshAccount,
       }}

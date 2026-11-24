@@ -26,7 +26,9 @@ def _engine_url() -> str:
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         return url
-    return f"sqlite:///{s.database_path}"
+    db_path = s.resolved_database_path
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{db_path}"
 
 
 engine = create_engine(

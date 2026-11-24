@@ -31,6 +31,23 @@ class Settings(BaseSettings):
     # Used by the hosted control plane (Render + Neon/Supabase free tiers).
     database_url: str | None = None
 
+    @property
+    def resolved_database_path(self) -> Path:
+        """Resolve persistent SQLite database path.
+        Priority:
+        1. Explicit path if database_path is set to non-default
+        2. Local nexus.db in current working directory if it exists
+        3. ~/.nexus/nexus.db persistent home directory
+        """
+        p = self.database_path
+        if p and p != Path("nexus.db"):
+            return p.expanduser().resolve()
+        if Path("nexus.db").exists():
+            return Path("nexus.db").resolve()
+        default_dir = Path.home() / ".nexus"
+        default_dir.mkdir(parents=True, exist_ok=True)
+        return (default_dir / "nexus.db").resolve()
+
     # --- Deployment mode ---
     # True on the hosted control plane: only auth/devices/activity/nodes
     # routers mount (no personal-data endpoints). See create_app().
@@ -158,6 +175,17 @@ class Settings(BaseSettings):
         pub = self.canonical_public_url
         if pub and pub not in origins:
             origins.append(pub)
+        if not self.control_plane_mode:
+            for o in [
+                "http://localhost:8081",
+                "http://127.0.0.1:8081",
+                "http://localhost:19006",
+                "http://localhost:3000",
+                "http://localhost:8000",
+                "http://127.0.0.1:8000",
+            ]:
+                if o not in origins:
+                    origins.append(o)
         return origins
 
 

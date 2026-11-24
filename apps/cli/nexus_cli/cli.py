@@ -15,6 +15,7 @@ from nexus_cli.commands.devices import devices_app
 from nexus_cli.commands.doctor import doctor_cmd
 from nexus_cli.commands.files import files_app
 from nexus_cli.commands.github import github_app
+from nexus_cli.commands.host import host_app
 from nexus_cli.commands.nodes import nodes_app
 from nexus_cli.commands.notes import notes_app
 from nexus_cli.commands.projects import projects_app
@@ -39,6 +40,7 @@ app.add_typer(config_app, name="config")
 app.add_typer(devices_app, name="devices")
 app.add_typer(nodes_app, name="nodes")
 app.add_typer(nodes_app, name="node")
+app.add_typer(host_app, name="host")
 app.add_typer(projects_app, name="projects")
 app.add_typer(projects_app, name="project")
 app.add_typer(tasks_app, name="tasks")

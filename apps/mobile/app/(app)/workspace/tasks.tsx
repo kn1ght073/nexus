@@ -9,13 +9,14 @@ import { Button } from '../../../src/components/Button';
 import { Input } from '../../../src/components/Input';
 import { Card } from '../../../src/components/Card';
 import { EmptyState } from '../../../src/components/EmptyState';
-import { apiClient } from '../../../src/api/client';
+import { apiClient, getLastSyncTimestamp, setLastSyncTimestamp } from '../../../src/api/client';
 import { TaskOut } from '../../../src/api/types';
 import {
   getLocalTasks,
   saveLocalTask,
   updateLocalTask,
   deleteLocalTask,
+  cacheRemoteTasks,
 } from '../../../src/api/workspaceStore';
 
 export default function TasksScreen() {
@@ -25,14 +26,24 @@ export default function TasksScreen() {
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const { data: tasks, isLoading, refetch } = useQuery<TaskOut[]>({
     queryKey: ['tasks'],
     queryFn: async () => {
       try {
         const remote = await apiClient<TaskOut[]>('/api/tasks');
+        setIsOffline(false);
+        await cacheRemoteTasks(remote);
+        const now = new Date().toISOString();
+        await setLastSyncTimestamp(now);
+        setLastSyncTime(now);
         return remote;
       } catch (err: any) {
+        setIsOffline(true);
+        const ts = await getLastSyncTimestamp();
+        setLastSyncTime(ts);
         return await getLocalTasks();
       }
     },
@@ -133,6 +144,15 @@ export default function TasksScreen() {
             loading={createTaskMutation.isPending}
             style={{ marginTop: 6 }}
           />
+        </View>
+      )}
+
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            ⚠️ Mac Host Disconnected · Displaying cached data
+            {lastSyncTime ? ` (Last synced: ${new Date(lastSyncTime).toLocaleTimeString()})` : ''}
+          </Text>
         </View>
       )}
 
@@ -238,4 +258,18 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   metaText: { fontSize: 11 },
   deleteTouch: { padding: 8 },
+  offlineBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });
