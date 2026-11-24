@@ -106,7 +106,8 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
     const json = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new ApiError(json.detail || `Request failed with status ${response.status}`, response.status, json);
+      const errorMsg = extractErrorMessage(json.detail, response.status);
+      throw new ApiError(errorMsg, response.status, json);
     }
 
     return json as T;
@@ -117,6 +118,22 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
     }
     throw err;
   }
+}
+
+function extractErrorMessage(detail: any, status: number): string {
+  if (!detail) return `Request failed with status ${status}`;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d: any) => {
+      if (typeof d === 'string') return d;
+      const field = Array.isArray(d.loc) ? d.loc.filter((l: any) => l !== 'body').join('.') : '';
+      return field ? `${field}: ${d.msg || JSON.stringify(d)}` : (d.msg || JSON.stringify(d));
+    }).join('; ');
+  }
+  if (typeof detail === 'object') {
+    return detail.message || detail.msg || JSON.stringify(detail);
+  }
+  return String(detail);
 }
 
 async function tryRefreshToken(): Promise<boolean> {

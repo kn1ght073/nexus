@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Smartphone, Plus, Trash2 } from 'lucide-react-native';
@@ -25,8 +25,8 @@ export default function DevicesScreen() {
       apiClient<DeviceOut>('/api/devices/register', {
         method: 'POST',
         body: JSON.stringify({
-          name: 'NEXUS Mobile Companion',
-          platform: 'mobile',
+          name: `NEXUS ${Platform.OS === 'ios' ? 'iOS' : 'Android'} Companion`,
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
           capabilities: ['mobile', 'camera', 'storage'],
         }),
       }),
