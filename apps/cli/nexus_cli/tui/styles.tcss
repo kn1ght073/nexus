@@ -90,8 +90,14 @@ Screen {
 }
 
 /* Navigation Sidebar */
-#sidebar-container {
+#nav-sidebar {
     width: 32;
+    height: 100%;
+    background: #0a0f1d;
+}
+
+#sidebar-container {
+    width: 100%;
     height: 100%;
     background: #0a0f1d;
     border-right: solid #1e293b;
@@ -117,6 +123,23 @@ Screen {
     width: 1fr;
     height: 100%;
     background: #080c14;
+}
+
+#view-overview,
+#view-account,
+#view-devices,
+#view-nodes,
+#view-network,
+#view-sync,
+#view-files,
+#view-notes-tasks,
+#view-services,
+#view-diagnostics,
+#view-activity,
+#view-settings,
+#cmd-explorer {
+    width: 100%;
+    height: 100%;
 }
 
 /* Overview Dashboard */
@@ -513,8 +536,14 @@ Screen {
 }
 
 /* Context Panel */
-#context-container {
+#ctx-panel {
     width: 38;
+    height: 100%;
+    background: #0b1120;
+}
+
+#context-container {
+    width: 100%;
     height: 100%;
     background: #0b1120;
     border-left: solid #1e293b;
