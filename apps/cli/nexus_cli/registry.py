@@ -156,6 +156,14 @@ class CommandRegistry:
 # ---------------------------------------------------------------------------
 
 
+def _handle_overview_dashboard(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
+    return CommandResult(
+        success=True,
+        title="Interactive Dashboard Active",
+        message="The NEXUS interactive terminal user interface is running.",
+    )
+
+
 def _handle_overview_status(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     cfg = load_config()
     client = get_client()
@@ -762,7 +770,8 @@ def get_registry() -> CommandRegistry:
             detailed_description="Launches the full interactive Terminal User Interface with navigation sidebar, live telemetry, and command explorer.",
             usage="nexus ui",
             shortcut="F1",
-        )
+        ),
+        _handle_overview_dashboard,
     )
     reg.register(
         CommandMetadata(

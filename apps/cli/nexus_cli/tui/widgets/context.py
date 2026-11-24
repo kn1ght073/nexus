@@ -49,7 +49,7 @@ class ContextPanel(Static):
         content_lines.append(f"[bold cyan]{cmd.name}[/bold cyan]")
         content_lines.append(f"[dim]Category: {cmd.category.value}[/dim]")
         content_lines.append("")
-        content_lines.append(f"[bold white]{cmd.summary}[/bold white]")
+        content_lines.append(f"[bold]{cmd.summary}[/bold]")
         content_lines.append("")
         content_lines.append(f"[dim]{cmd.detailed_description}[/dim]")
         content_lines.append("")
@@ -123,7 +123,7 @@ class ContextPanel(Static):
                 elif isinstance(v, bool):
                     v_str = "[green]Yes[/green]" if v else "[dim]No[/dim]"
                 else:
-                    v_str = f"[white]{v}[/white]"
+                    v_str = f"{v}"
                 lines.append(f"• [cyan]{k}:[/cyan] {v_str}")
             lines.append("")
 

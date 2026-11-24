@@ -132,7 +132,7 @@ class ServicesView(Static):
                 badge_llm.add_class("stat-badge-online")
                 desc_llm.update(
                     f"[bold green]Ollama daemon is active on port 11434.[/bold green] (Version: {llm['version']})\n"
-                    "[white]Supports sovereign local LLM inference without sending prompts off-device.[/white]"
+                    "Supports sovereign local LLM inference without sending prompts off-device."
                 )
             else:
                 badge_llm.update("○ IDLE / STOPPED")
@@ -154,7 +154,7 @@ class ServicesView(Static):
                 badge_stt.add_class("stat-badge-online")
                 desc_stt.update(
                     "[bold green]faster-whisper is installed in the local environment.[/bold green]\n"
-                    "[white]Supports offline high-speed speech-to-text transcription via CTranslate2.[/white]"
+                    "Supports offline high-speed speech-to-text transcription via CTranslate2."
                 )
             else:
                 badge_stt.update("○ OPTIONAL (NOT INSTALLED)")
@@ -175,7 +175,7 @@ class ServicesView(Static):
                 badge_dmn.add_class("stat-badge-online")
                 desc_dmn.update(
                     f"[bold green]Connected to Core Control Plane.[/bold green] Machine Role: node-{daemon['node_id'] or 'standalone'}\n"
-                    "[white]Secure reverse WebSocket tunnel coordinates remote client attachment without opening inbound ports.[/white]"
+                    "Secure reverse WebSocket tunnel coordinates remote client attachment without opening inbound ports."
                 )
             else:
                 badge_dmn.update("● DISCONNECTED")

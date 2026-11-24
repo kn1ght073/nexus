@@ -113,7 +113,7 @@ class FilesView(Static):
             if first_key is None:
                 first_key = key
 
-            name_styled = f"[bold cyan]{name}/[/bold cyan]" if is_dir else f"[white]{name}[/white]"
+            name_styled = f"[bold cyan]{name}/[/bold cyan]" if is_dir else name
             table.add_row(icon, name_styled, size_str, p, key=key)
 
         if not files:

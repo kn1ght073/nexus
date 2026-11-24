@@ -45,6 +45,7 @@ class NexusTUIApp(App):
 
     TITLE = "NEXUS Control Center"
     CSS_PATH = Path(__file__).parent / "styles.tcss"
+    _current_theme: str = "dark"
 
     BINDINGS = [
         Binding("q", "quit", "Quit", show=True),
@@ -109,8 +110,45 @@ class NexusTUIApp(App):
 
     def on_mount(self) -> None:
         cfg = load_config()
-        if cfg.theme and cfg.theme != "dark":
-            self.screen.add_class(f"theme-{cfg.theme}")
+        self.apply_theme(cfg.theme or "dark")
+
+    def apply_theme(self, theme_name: str) -> None:
+        """Apply theme class to app, active screens, and synchronize Textual theme."""
+        theme = theme_name if theme_name in ("dark", "synthwave", "light") else "dark"
+        self._current_theme = theme
+        for t in ("dark", "synthwave", "light"):
+            self.remove_class(f"theme-{t}")
+            for sc in getattr(self, "screen_stack", [self.screen]):
+                try:
+                    sc.remove_class(f"theme-{t}")
+                except Exception:
+                    pass
+        self.add_class(f"theme-{theme}")
+        for sc in getattr(self, "screen_stack", [self.screen]):
+            try:
+                sc.add_class(f"theme-{theme}")
+                sc.refresh(repaint=True, layout=True)
+            except Exception:
+                pass
+        try:
+            self.theme = "textual-light" if theme == "light" else "textual-dark"
+        except Exception:
+            pass
+        self.refresh(layout=True)
+
+    def push_screen(self, screen, callback=None, wait_for_dismiss=False):
+        theme = getattr(self, "_current_theme", "dark")
+        if not isinstance(screen, str):
+            for t in ("dark", "synthwave", "light"):
+                try:
+                    screen.remove_class(f"theme-{t}")
+                except Exception:
+                    pass
+            try:
+                screen.add_class(f"theme-{theme}")
+            except Exception:
+                pass
+        return super().push_screen(screen, callback=callback, wait_for_dismiss=wait_for_dismiss)
 
     def on_resize(self, event: events.Resize) -> None:
         """Adapt layout to terminal width: collapse context panel or sidebar on small terminals."""
@@ -338,10 +376,7 @@ class NexusTUIApp(App):
         header = self.query_one("#status-header", StatusHeader)
         header.refresh_telemetry()
         if event.key == "theme":
-            self.screen.remove_class("theme-dark")
-            self.screen.remove_class("theme-synthwave")
-            self.screen.remove_class("theme-light")
-            self.screen.add_class(f"theme-{event.value}")
+            self.apply_theme(event.value)
             self.notify(f"Theme switched to {event.value}", title="Appearance")
 
     # Command Explorer & Context panel handlers
@@ -412,6 +447,9 @@ class NexusTUIApp(App):
         def on_palette_selected(cmd: Optional[CommandMetadata]) -> None:
             if not cmd:
                 return
+            if cmd.id == "overview.dashboard":
+                self.switch_to_view("view-overview")
+                return
             self.switch_to_view("cmd-explorer")
             explorer = self.query_one("#cmd-explorer", CommandExplorer)
             explorer.load_category(cmd.category)
@@ -426,6 +464,8 @@ class NexusTUIApp(App):
     def action_settings(self) -> None:
         def on_settings_done(changed: bool) -> None:
             if changed:
+                cfg = load_config()
+                self.apply_theme(cfg.theme or "dark")
                 header = self.query_one("#status-header", StatusHeader)
                 header.refresh_telemetry()
         self.push_screen(SettingsModal(), on_settings_done)

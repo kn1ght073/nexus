@@ -310,7 +310,7 @@ class OverviewDashboard(Static):
 
         gauge_lines = [
             f"[bold cyan]Disk Storage:[/bold cyan] [{bar_color}][{bar_str}][/{bar_color}] {pct}% ({disk_info.get('used', 0)}GB / {disk_info.get('total', 0)}GB used, {disk_info.get('free', 0)}GB free)",
-            f"[bold cyan]CPU Load Average (1m, 5m, 15m):[/bold cyan] [white]{load_avg}[/white]  |  [bold cyan]Architecture:[/bold cyan] {platform.processor() or platform.machine()}",
+            f"[bold cyan]CPU Load Average (1m, 5m, 15m):[/bold cyan] {load_avg}  |  [bold cyan]Architecture:[/bold cyan] {platform.processor() or platform.machine()}",
             f"[bold cyan]Service Monitors:[/bold cyan] [green]● Core API: Healthy[/green]   [green]● Relay Engine: Active[/green]   [green]● Local Node: Bound[/green]   [cyan]● Keyring: Enabled[/cyan]",
         ]
         try:

@@ -413,3 +413,156 @@ async def test_activity_export_sanitizes_credentials(tmp_path, monkeypatch):
         assert details["api_key"] == "***"
         assert details["client"] == "desktop_cli"
 
+
+@pytest.mark.anyio
+async def test_theme_switching_and_color_contrast():
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        app.switch_to_view("view-settings")
+        await pilot.pause()
+
+        settings = app.query_one(SettingsView)
+        btn_light = settings.query_one("#theme-light")
+        btn_light.press()
+        await pilot.pause()
+
+        assert "theme-light" in app.screen.classes
+        assert "theme-light" in app.classes
+
+        config_bar = settings.query_one(".config-bar")
+        inp_name = settings.query_one("#new-profile-name", Input)
+        table = settings.query_one("#profiles-table", DataTable)
+        tree = app.query_one("#category-tree")
+        sw = settings.query_one("#switch-compact-mode", Switch)
+
+        # In light mode:
+        # Screen background is light (#f8fafc -> 248, 250, 252)
+        assert app.screen.styles.background.r > 200
+        # ConfigBar background is light (#f1f5f9 -> 241, 245, 249)
+        assert config_bar.styles.background.r > 200
+        # Input background is pure white (#ffffff -> 255, 255, 255)
+        assert inp_name.styles.background.r > 200
+        # Table background is pure white (#ffffff -> 255, 255, 255)
+        assert table.styles.background.r > 200
+        # Tree background is light (#e2e8f0 -> 226, 232, 240)
+        assert tree.styles.background.r > 200
+        # Switch background is light (#e2e8f0 -> 226, 232, 240)
+        assert sw.styles.background.r > 200
+        # Text color is dark slate (#0f172a -> 15, 23, 42), NOT white or black-on-black
+        assert app.screen.styles.color.r < 50
+        assert config_bar.styles.color.r < 50
+        assert inp_name.styles.color.r < 50
+        assert sw.styles.color.r < 50
+        # Input placeholder must be legible slate (#64748b -> 100, 116, 139), not white
+        ph = inp_name.get_component_styles("input--placeholder")
+        assert ph.color.r < 120
+
+        # Switch to synthwave
+        btn_synth = settings.query_one("#theme-synthwave")
+        btn_synth.press()
+        await pilot.pause()
+
+        assert "theme-synthwave" in app.screen.classes
+        assert "theme-synthwave" in app.classes
+        # Synthwave background is deep purple (#18002e)
+        assert app.screen.styles.background.r == 24
+        # Synthwave text color is neon pink (#ff71ce)
+        assert app.screen.styles.color.r == 255
+        # Synthwave Switch styled correctly
+        assert sw.styles.background.r == 43
+        assert sw.styles.color.r == 255
+
+        # Switch back to dark
+        btn_dark = settings.query_one("#theme-dark")
+        btn_dark.press()
+        await pilot.pause()
+
+        assert "theme-dark" in app.screen.classes
+        assert "theme-dark" in app.classes
+        # Dark background is dark cyber (#080c14)
+        assert app.screen.styles.background.r < 20
+
+
+@pytest.mark.anyio
+async def test_command_palette_light_theme_integration():
+    from nexus_cli.tui.widgets.palette import CommandPaletteModal
+    from textual.widgets import OptionList
+
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        app.apply_theme("light")
+        await pilot.pause()
+
+        # Trigger palette
+        app.action_palette()
+        await pilot.pause()
+
+        palette = app.screen
+        assert isinstance(palette, CommandPaletteModal)
+        assert "theme-light" in palette.classes
+
+        pbox = palette.query_one("#palette-box")
+        inp = palette.query_one("#palette-search-input", Input)
+        opt_list = palette.query_one("#palette-results-list", OptionList)
+
+        # In light mode: palette box is white, not dark
+        assert pbox.styles.background.r > 200
+        assert inp.styles.background.r > 200
+        assert opt_list.styles.background.r > 200
+
+        # Search
+        inp.value = "devices"
+        await pilot.pause()
+        assert opt_list.option_count >= 1
+
+        # Dismiss
+        palette.key_escape()
+        await pilot.pause()
+        assert not isinstance(app.screen, CommandPaletteModal)
+
+
+@pytest.mark.anyio
+async def test_all_workspace_tabs_audit_no_crash():
+    app = NexusTUIApp()
+    async with app.run_test() as pilot:
+        switcher = app.query_one("#main-content-switcher", ContentSwitcher)
+        tabs = [
+            "view-overview", "view-account", "view-devices", "view-nodes",
+            "view-network", "view-sync", "view-files", "view-notes-tasks",
+            "view-services", "view-diagnostics", "view-activity", "view-settings",
+            "cmd-explorer"
+        ]
+        for theme in ("light", "synthwave", "dark"):
+            app.apply_theme(theme)
+            await pilot.pause()
+            for tab_id in tabs:
+                app.switch_to_view(tab_id)
+                await pilot.pause()
+                assert switcher.current == tab_id
+
+
+def test_registry_commands_safe_execution_audit():
+    from nexus_cli.registry import get_registry
+
+    reg = get_registry()
+    all_cmds = reg.list_all()
+    assert len(all_cmds) >= 32
+
+    for cmd in all_cmds:
+        args = {}
+        for a in cmd.args:
+            if a.type == "int":
+                args[a.name] = 1
+            elif a.type == "path":
+                args[a.name] = "/tmp"
+            else:
+                args[a.name] = "test"
+        res = reg.execute(cmd.id, args=args, options={})
+        assert res is not None
+        assert isinstance(res.success, bool)
+
+    # Confirm overview.dashboard executes cleanly
+    res_ui = reg.execute("overview.dashboard")
+    assert res_ui.success is True
+    assert "Active" in res_ui.title
+

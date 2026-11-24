@@ -169,14 +169,17 @@ class SettingsView(Static):
             cfg.theme = "dark"
             save_config(cfg)
             self.post_message(self.SettingsChanged("theme", "dark"))
+            self.refresh_settings_view()
         elif btn_id == "theme-synthwave":
             cfg.theme = "synthwave"
             save_config(cfg)
             self.post_message(self.SettingsChanged("theme", "synthwave"))
+            self.refresh_settings_view()
         elif btn_id == "theme-light":
             cfg.theme = "light"
             save_config(cfg)
             self.post_message(self.SettingsChanged("theme", "light"))
+            self.refresh_settings_view()
         elif btn_id == "startup-overview":
             cfg.default_view = "overview"
             save_config(cfg)

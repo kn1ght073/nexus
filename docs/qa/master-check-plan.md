@@ -4,7 +4,7 @@
 
 **Automated verification baseline**:
 - 104 automated tests in `services/core-api/tests/` (API security, token scopes, client console, GitHub flow, online access)
-- 71 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, 10-view Textual TUI cockpit suite, session validation & auto-purge)
+- 75 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, 10-view Textual TUI cockpit suite, session validation & auto-purge, multi-theme contrast validation)
 - 16-step end-to-end device flow check in `scripts/e2e_github_cli.py`
 - 25-step complete stack orchestration check in `scripts/demo_setup.py`
 

@@ -162,7 +162,7 @@ class NotesTasksView(Static):
             rev = t.get("revision", 1)
 
             card_str = (
-                f"[bold cyan]• [{tid}][/bold cyan] [white]{title}[/white]\n"
+                f"[bold cyan]• [{tid}][/bold cyan] [bold]{title}[/bold]\n"
                 f"  [dim]Project: {proj_id} | Rev: {rev}[/dim]\n"
             )
 
@@ -247,7 +247,7 @@ class NotesTasksView(Static):
 
             card_box = (
                 f"┌─ [bold cyan]📌 Note #{nid}: {title}[/bold cyan] ─────────\n"
-                f"│ [white]{preview}[/white]\n"
+                f"│ {preview}\n"
                 f"└─ [dim]Updated: {upd}[/dim]\n"
             )
             note_cards.append(card_box)
