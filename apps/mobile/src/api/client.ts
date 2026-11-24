@@ -56,6 +56,54 @@ export async function setHostUrl(url: string | null): Promise<void> {
   }
 }
 
+export async function autoDiscoverHost(): Promise<{
+  discovered: boolean;
+  activeHostUrl: string | null;
+  mode: 'lan' | 'relay' | 'none';
+  node?: any;
+}> {
+  if (!activeAccessToken) {
+    return { discovered: false, activeHostUrl: null, mode: 'none' };
+  }
+  try {
+    const res = await fetch(`${activeServerUrl}/api/nodes/active`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${activeAccessToken}`,
+      },
+    });
+    if (!res.ok) {
+      return { discovered: false, activeHostUrl: null, mode: 'none' };
+    }
+    const node = await res.json().catch(() => null);
+    if (!node || !node.id) {
+      return { discovered: false, activeHostUrl: null, mode: 'none' };
+    }
+
+    const lanUrl = node.lan_url || node.endpoint;
+    const proxyUrl = node.relay_proxy_url
+      ? (node.relay_proxy_url.startsWith('http') ? node.relay_proxy_url : `${activeServerUrl}${node.relay_proxy_url}`)
+      : `${activeServerUrl}/api/relay/proxy`;
+
+    // 1. Fast probe local LAN address first (zero cloud latency)
+    if (lanUrl && typeof lanUrl === 'string' && lanUrl.startsWith('http')) {
+      const probe = await testConnection(lanUrl);
+      if (probe.ok) {
+        await setHostUrl(lanUrl);
+        return { discovered: true, activeHostUrl: lanUrl, mode: 'lan', node };
+      }
+    }
+
+    // 2. Global route fallback via encrypted control-plane relay
+    await setHostUrl(proxyUrl);
+    return { discovered: true, activeHostUrl: proxyUrl, mode: 'relay', node };
+  } catch (err) {
+    console.warn('[ApiClient] Automatic host discovery error:', err);
+    return { discovered: false, activeHostUrl: null, mode: 'none' };
+  }
+}
+
 export async function getLastSyncTimestamp(): Promise<string | null> {
   return await getSecureItem(LAST_SYNC_KEY);
 }

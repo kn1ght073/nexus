@@ -67,6 +67,7 @@ def host_environment():
     database_mod.SessionLocal = database_mod.sessionmaker(
         autocommit=False, autoflush=False, bind=database_mod.engine
     )
+    database_mod.Base.metadata.create_all(bind=database_mod.engine)
 
     import nexus_core.main as main_mod
     app = main_mod.create_app()

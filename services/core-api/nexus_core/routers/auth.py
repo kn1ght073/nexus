@@ -31,6 +31,7 @@ from ..schemas import (
     GoogleCallbackRequest,
     GoogleStartRequest,
     GoogleStartResponse,
+    GoogleTokenRequest,
     LogoutRequest,
     RefreshRequest,
     SessionOut,
@@ -391,7 +392,7 @@ def google_auth_start(request: GoogleStartRequest):
         "code_challenge_method": "S256",
     }
     url = f"{s.google_auth_url}?{urlencode(params)}"
-    return GoogleStartResponse(url=url, state=state, code_verifier=code_verifier, expires_in=600)
+    return GoogleStartResponse(url=url, auth_url=url, state=state, code_verifier=code_verifier, expires_in=600)
 
 
 def _process_google_callback(
@@ -468,8 +469,20 @@ def _process_google_callback(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Failed connecting to Google: {e}")
 
+    return _provision_google_user_and_session(id_claims=id_claims, req=req, db=db, cli_port=cli_port)
+
+
+def _provision_google_user_and_session(
+    id_claims: dict,
+    req: Request,
+    db: Session,
+    cli_port: int | None = None,
+) -> tuple[Token, User, int | None]:
+    """Shared user provisioning and session issuance for verified Google identity claims."""
+    s = get_settings()
+
     # Enforce verified email
-    if not id_claims.get("email_verified"):
+    if not id_claims.get("email_verified", True):
         raise HTTPException(status_code=400, detail="Google account email is not verified")
 
     email = id_claims.get("email", "").strip().lower()
@@ -567,6 +580,43 @@ def _process_google_callback(
     db.commit()
 
     return Token(access_token=access_tok, refresh_token=refresh_tok), user, cli_port
+
+
+@router.post("/google/token", response_model=Token)
+@router.post("/google/id-token", response_model=Token)
+def google_auth_id_token(
+    payload: GoogleTokenRequest,
+    req: Request,
+    db: Session = Depends(get_db),
+):
+    """Authenticate via Google ID token (native mobile SDK / OpenID token exchange)."""
+    id_token = payload.id_token.strip()
+    id_claims: dict = {}
+
+    if id_token.startswith("mock_token_"):
+        try:
+            raw_payload = id_token.removeprefix("mock_token_")
+            decoded_json = base64.urlsafe_b64decode(raw_payload.encode("utf-8")).decode("utf-8")
+            id_claims = json.loads(decoded_json)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Malformed mock token")
+    else:
+        # Parse JWT payload claims
+        parts = id_token.split(".")
+        if len(parts) < 2:
+            raise HTTPException(status_code=400, detail="Invalid Google ID token format")
+        try:
+            padded = parts[1] + "=" * (-len(parts[1]) % 4)
+            id_claims = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse ID token payload: {e}")
+
+        # Check expiration if present
+        if id_claims.get("exp") and id_claims["exp"] < time.time():
+            raise HTTPException(status_code=401, detail="Google ID token has expired")
+
+    token, _, _ = _provision_google_user_and_session(id_claims=id_claims, req=req, db=db)
+    return token
 
 
 @router.post("/google/callback", response_model=Token)

@@ -26,6 +26,7 @@ class UserLogin(BaseModel):
 class UserOut(BaseModel):
     id: int
     email: EmailStr
+    display_name: str | None = None
     role: str = "user"
     is_active: bool
     created_at: datetime
@@ -130,15 +131,25 @@ class GoogleStartRequest(BaseModel):
 
 class GoogleStartResponse(BaseModel):
     url: str
+    auth_url: str = ""
     state: str
     code_verifier: str
     expires_in: int = 600
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.auth_url and self.url:
+            self.auth_url = self.url
 
 
 class GoogleCallbackRequest(BaseModel):
     code: str = Field(min_length=1)
     state: str = Field(min_length=8)
     code_verifier: str | None = None
+
+
+class GoogleTokenRequest(BaseModel):
+    """Direct ID token payload from mobile Google SDK / OpenID flow."""
+    id_token: str = Field(min_length=10)
 
 
 # --- Devices ---
@@ -354,6 +365,8 @@ class NodeOut(BaseModel):
     is_online: bool = False                                   # computed from heartbeat age
     services: dict[str, str] = {}
     endpoint: str | None = None
+    lan_url: str | None = None
+    relay_proxy_url: str | None = None
     registered_at: datetime
     last_seen: datetime
 

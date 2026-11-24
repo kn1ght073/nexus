@@ -27,11 +27,13 @@ checks apply exactly as if the device were on the LAN. The control plane
 never sees a token or a plaintext body.
 """
 import asyncio
+import base64
 import json
+import secrets
 import time
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from .. import pairing as crypto
@@ -83,7 +85,7 @@ class RelayState:
                     await old["ws"].close(code=4000)
                 except Exception:
                     pass
-            entry = {"ws": ws, "owner_id": owner_id, "device": None}
+            entry = {"ws": ws, "owner_id": owner_id, "device": None, "pending_proxy": {}}
             self.nodes[node_id] = entry
             return old
 
@@ -311,6 +313,14 @@ async def node_relay_socket(websocket: WebSocket, node_id: int, key: str = Query
             if op == "ping":
                 await websocket.send_json({"op": "pong", "t": frame.get("t")})
                 continue
+            if op == "proxy_res":
+                req_id = frame.get("id")
+                entry = relay_state.get(node_id)
+                if entry:
+                    fut = entry.get("pending_proxy", {}).pop(req_id, None)
+                    if fut and not fut.done():
+                        fut.set_result(frame)
+                continue
             # Everything else from the NODE is a reply/handshake destined for
             # the attached device: forward verbatim (sealed bytes — we cannot
             # read them, by design).
@@ -452,3 +462,88 @@ async def device_attach_socket(websocket: WebSocket):
             pass
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Global HTTP Proxy Route (Seamless cellular/remote access without NAT setup)
+# ---------------------------------------------------------------------------
+@router.api_route("/proxy/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@router.api_route("/{node_id}/proxy/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def relay_proxy_request(
+    path: str,
+    request: Request,
+    node_id: int | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Tunnel authenticated requests through the outbound node WebSocket directly to local SQLite."""
+    target_node = None
+    if node_id is not None:
+        target_node = (
+            db.query(Node)
+            .filter(Node.id == node_id, Node.owner_id == current_user.id)
+            .first()
+        )
+    else:
+        target_node = (
+            db.query(Node)
+            .filter(Node.owner_id == current_user.id, Node.is_active.is_(True))
+            .first()
+        )
+
+    if not target_node:
+        raise HTTPException(status_code=404, detail="No registered NEXUS Host found for your account")
+
+    entry = relay_state.get(target_node.id)
+    if not entry or entry.get("ws") is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"NEXUS Host '{target_node.name}' is currently offline. Start host with 'nexus host start'."
+        )
+
+    req_id = secrets.token_hex(16)
+    body = await request.body()
+    body_b64 = base64.b64encode(body).decode("utf-8") if body else ""
+
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    entry.setdefault("pending_proxy", {})[req_id] = fut
+
+    # Forward headers, preserving auth and content-type
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length", "connection")
+    }
+
+    clean_path = path if path.startswith("/") else f"/{path}"
+    query = str(request.url.query)
+    if query:
+        clean_path = f"{clean_path}?{query}"
+
+    frame = {
+        "op": "proxy_req",
+        "id": req_id,
+        "method": request.method,
+        "path": clean_path,
+        "headers": headers,
+        "body_b64": body_b64,
+    }
+
+    try:
+        await entry["ws"].send_text(json.dumps(frame))
+        res_frame = await asyncio.wait_for(fut, timeout=20.0)
+    except asyncio.TimeoutError:
+        entry.get("pending_proxy", {}).pop(req_id, None)
+        raise HTTPException(status_code=504, detail="Relayed request to host timed out (20s)")
+    except Exception as e:
+        entry.get("pending_proxy", {}).pop(req_id, None)
+        raise HTTPException(status_code=502, detail=f"Relay communication error: {e}")
+
+    res_body = base64.b64decode(res_frame.get("body_b64", "") or "")
+    status_code = int(res_frame.get("status", 200))
+    res_headers = {
+        k: v for k, v in (res_frame.get("headers") or {}).items()
+        if k.lower() not in ("content-length", "content-encoding", "transfer-encoding")
+    }
+
+    return Response(content=res_body, status_code=status_code, headers=res_headers)

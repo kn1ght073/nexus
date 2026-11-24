@@ -15,7 +15,7 @@ import { AccountOverviewResponse, ActiveNodeResponse, ActivityEvent } from '../.
 
 export default function CockpitDashboard() {
   const { colors } = useTheme();
-  const { account, refreshAccount, serverUrl } = useAuth();
+  const { account, refreshAccount, serverUrl, hostUrl, hostConnectionMode, discoverHost } = useAuth();
   const router = useRouter();
 
   const { data: activeNodeData, refetch: refetchNode } = useQuery<ActiveNodeResponse>({
@@ -29,7 +29,7 @@ export default function CockpitDashboard() {
   });
 
   const onRefresh = async () => {
-    await Promise.all([refreshAccount(), refetchNode(), refetchActivity()]);
+    await Promise.all([refreshAccount(), refetchNode(), refetchActivity(), discoverHost()]);
   };
 
   const activeNode = activeNodeData?.active_node;
@@ -49,14 +49,17 @@ export default function CockpitDashboard() {
               {account?.google_identity?.name || account?.display_name || account?.email || 'NEXUS Operator'}
             </Text>
           </View>
-          <StatusBadge status="online" label="CONTROL PLANE" />
+          <StatusBadge
+            status={hostUrl ? 'online' : 'idle'}
+            label={hostUrl ? (hostConnectionMode === 'lan' ? 'MAC HOST (LAN)' : 'MAC HOST (RELAY)') : 'STANDBY'}
+          />
         </View>
 
         {/* Server Endpoint Bar */}
         <View style={[styles.endpointBar, { backgroundColor: colors.surfaceSubtle, borderColor: colors.surfaceBorder }]}>
           <Shield size={14} color={colors.primary} />
           <Text style={[styles.endpointText, { color: colors.textSecondary }]} numberOfLines={1}>
-            {serverUrl}
+            {hostUrl ? `Host: ${hostUrl} (${hostConnectionMode.toUpperCase()})` : `Control Plane: ${serverUrl}`}
           </Text>
         </View>
 
@@ -65,23 +68,25 @@ export default function CockpitDashboard() {
           <View style={styles.cardTop}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Server size={18} color={colors.primary} />
-              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Active Edge Node</Text>
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Primary NEXUS Host</Text>
             </View>
-            <StatusBadge status={activeNode?.is_online ? 'online' : 'offline'} />
+            <StatusBadge status={activeNode?.is_online || Boolean(hostUrl) ? 'online' : 'offline'} />
           </View>
 
-          {activeNode ? (
+          {activeNode || hostUrl ? (
             <View style={styles.nodeBody}>
-              <Text style={[styles.nodeName, { color: colors.textPrimary }]}>{activeNode.name}</Text>
+              <Text style={[styles.nodeName, { color: colors.textPrimary }]}>
+                {activeNode?.name || 'MacBook Sovereign Host'}
+              </Text>
               <Text style={[styles.nodePlatform, { color: colors.textMuted }]}>
-                Platform: {activeNode.platform} · {activeNode.endpoint || 'Direct Relay Bridge'}
+                {hostConnectionMode === 'lan' ? 'Connected via High-Speed LAN' : 'Connected via Secure Encrypted Relay'} · {hostUrl}
               </Text>
             </View>
           ) : (
             <View style={styles.nodeBody}>
-              <Text style={[styles.nodeName, { color: colors.textSecondary }]}>No Edge Node Claimed</Text>
+              <Text style={[styles.nodeName, { color: colors.textSecondary }]}>Mac Host Offline</Text>
               <Text style={[styles.nodePlatform, { color: colors.textMuted }]}>
-                Promote a local desktop/laptop node via `nexus node claim`
+                Run 'nexus host start' on your Mac to establish your sovereign host
               </Text>
             </View>
           )}

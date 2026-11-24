@@ -27,7 +27,7 @@ export default function SignInScreen() {
     setLoadingGoogle(true);
     try {
       const redirectUri = Linking.createURL('auth/callback');
-      const startRes = await apiClient<{ auth_url: string; state: string }>(
+      const startRes = await apiClient<{ url?: string; auth_url?: string; state: string }>(
         '/api/auth/google/start',
         {
           method: 'POST',
@@ -35,11 +35,17 @@ export default function SignInScreen() {
         }
       );
 
-      if (!startRes.auth_url) {
-        throw new Error('Server returned empty Google auth URL');
+      const authTargetUrl = startRes.auth_url || startRes.url;
+      if (!authTargetUrl) {
+        throw new Error('Control plane returned empty Google authentication endpoint');
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(startRes.auth_url, redirectUri);
+      const result = await WebBrowser.openAuthSessionAsync(authTargetUrl, redirectUri);
+
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        // User closed the authentication window
+        return;
+      }
 
       if (result.type === 'success' && result.url) {
         const parsed = Linking.parse(result.url);
@@ -61,8 +67,8 @@ export default function SignInScreen() {
       }
     } catch (err: any) {
       Alert.alert(
-        'Google Sign-In Notice',
-        `Browser OAuth session was cancelled or needs client credentials: ${err.message}. For testing, use session token entry below.`
+        'Google Authentication Notice',
+        err.message || 'Google authentication could not be completed.'
       );
     } finally {
       setLoadingGoogle(false);

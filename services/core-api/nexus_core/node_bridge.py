@@ -136,6 +136,24 @@ class NodeBridge:
             await self._on_request(ws, frame)
             return
 
+        if op == "proxy_req":
+            req_id = frame.get("id")
+            exec_payload = {
+                "method": frame.get("method", "GET"),
+                "path": frame.get("path", "/"),
+                "headers": frame.get("headers", {}),
+                "body_b64": frame.get("body_b64", ""),
+            }
+            res = await self._execute(exec_payload)
+            await ws.send(json.dumps({
+                "op": "proxy_res",
+                "id": req_id,
+                "status": res.get("status", 200),
+                "headers": res.get("headers", {}),
+                "body_b64": res.get("body_b64", ""),
+            }))
+            return
+
     async def _on_request(self, ws, frame: dict) -> None:
         """Unwrap a sealed request, execute it locally, seal the response."""
         if self.key_dev_to_node is None and self.session_key is None:
@@ -191,15 +209,22 @@ class NodeBridge:
             for k, v in (request.get("headers") or {}).items()
             if k.lower() not in ("content-length", "transfer-encoding", "host")
         ]
+        full_path = request.get("path", "/")
+        if "?" in full_path:
+            req_path, req_query = full_path.split("?", 1)
+        else:
+            req_path = full_path
+            req_query = request.get("query") or ""
+
         scope = {
             "type": "http",
             "asgi": {"version": "3.0", "spec_version": "2.3"},
             "http_version": "1.1",
             "method": request.get("method", "GET"),
             "scheme": "http",
-            "path": request.get("path", "/"),
-            "raw_path": request.get("path", "/").encode(),
-            "query_string": (request.get("query") or "").encode(),
+            "path": req_path,
+            "raw_path": req_path.encode(),
+            "query_string": req_query.encode(),
             "root_path": "",
             "headers": headers,
             "client": ("relay", 0),

@@ -127,6 +127,38 @@ def start_host(
     env["NEXUS_PORT"] = str(port)
     env["NEXUS_DATABASE_PATH"] = str(resolved_db)
 
+    # Auto-claim active Mac Host with control plane if CLI is authenticated
+    cfg = load_config()
+    claimed_node_id: Optional[int] = None
+    if cfg.token:
+        try:
+            from ..client import get_client
+            client = get_client(cfg)
+            hostname = socket.gethostname() or "MacBook-Host"
+            claim_res = client.post(
+                "/api/nodes/claim",
+                json={"name": f"{hostname} (Host)", "platform": "macos", "endpoint": lan_url},
+                timeout=4,
+            )
+            if claim_res.status_code in (200, 201):
+                node_data = claim_res.json()
+                claimed_node_id = node_data.get("id")
+                api_key = node_data.get("api_key")
+                if claimed_node_id and api_key:
+                    env["NEXUS_BRIDGE_CP_URL"] = cfg.api_url
+                    env["NEXUS_BRIDGE_ID"] = str(claimed_node_id)
+                    env["NEXUS_BRIDGE_KEY"] = api_key
+                    # Also write ~/.nexus/nexus_node.json for node bridge fallback
+                    node_cfg = {
+                        "control_plane_url": cfg.api_url,
+                        "node_id": claimed_node_id,
+                        "api_key": api_key,
+                        "endpoint": lan_url,
+                    }
+                    (Path.home() / ".nexus" / "nexus_node.json").write_text(json.dumps(node_cfg, indent=2))
+        except Exception:
+            pass
+
     # Locate project root and python executable
     repo_root = Path(__file__).resolve().parents[4]
     python_candidates = [
@@ -172,6 +204,8 @@ def start_host(
             "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "local_url": local_url,
             "lan_url": lan_url,
+            "node_id": claimed_node_id,
+            "relay_proxy_url": f"{cfg.api_url}/api/relay/{claimed_node_id}/proxy" if claimed_node_id else None,
         }
         HOST_INFO_FILE.write_text(json.dumps(host_info, indent=2))
 

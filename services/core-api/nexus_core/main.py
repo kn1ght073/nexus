@@ -76,7 +76,23 @@ async def lifespan(app: FastAPI):
     # Create tables at boot (SQLite WAL is set per-connection in database.py)
     Base.metadata.create_all(bind=engine)
     _ensure_schema_compatibility(engine)
-    yield
+
+    bridge_task = None
+    if not settings.control_plane_mode:
+        try:
+            from .node_bridge import bridge_from_settings
+            bridge = bridge_from_settings(app=app)
+            if bridge:
+                import asyncio
+                bridge_task = asyncio.create_task(bridge.run())
+        except Exception:
+            pass
+
+    try:
+        yield
+    finally:
+        if bridge_task:
+            bridge_task.cancel()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

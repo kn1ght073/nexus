@@ -357,6 +357,7 @@ async def test_diagnostics_export_valid_timestamp(tmp_path, monkeypatch):
     export_dir = tmp_path / "home"
     export_dir.mkdir()
     monkeypatch.setattr("pathlib.Path.home", lambda: export_dir)
+    monkeypatch.setattr(ActivityView, "refresh_activity", lambda self, filter_q="": None)
 
     app = NexusTUIApp()
     async with app.run_test() as pilot:
@@ -383,6 +384,7 @@ async def test_activity_export_sanitizes_credentials(tmp_path, monkeypatch):
     export_dir = tmp_path / "home"
     export_dir.mkdir()
     monkeypatch.setattr("pathlib.Path.home", lambda: export_dir)
+    monkeypatch.setattr(ActivityView, "refresh_activity", lambda self, filter_q="": None)
 
     app = NexusTUIApp()
     async with app.run_test() as pilot:

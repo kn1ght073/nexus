@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import log_activity, publish_event
 from ..models import Node, User, utcnow
+from .relay import relay_state
 from ..schemas import (
     NodeClaimRequest,
     NodeOut,
@@ -112,9 +113,11 @@ def list_nodes(
     current_user: User = Depends(get_current_user),
 ):
     nodes = db.query(Node).filter(Node.owner_id == current_user.id).order_by(Node.last_seen.desc()).all()
+    connected = relay_state.connected_node_ids()
     for n in nodes:
-        # computed liveness, not the stored flag alone
-        setattr(n, "is_online", _is_fresh(n))
+        setattr(n, "is_online", _is_fresh(n) or (n.id in connected))
+        setattr(n, "lan_url", n.endpoint)
+        setattr(n, "relay_proxy_url", f"/api/relay/{n.id}/proxy")
     return nodes
 
 
@@ -123,7 +126,7 @@ def active_node(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Resolve the current main server: active AND heartbeating.
+    """Resolve the current main server: active AND heartbeating (or connected to relay).
 
     Returns null when the node is offline — clients then stay on the control
     plane (auth + config only) until a machine claims again.
@@ -133,9 +136,17 @@ def active_node(
         .filter(Node.owner_id == current_user.id, Node.is_active.is_(True))
         .first()
     )
-    if node is None or not _is_fresh(node):
+    if node is None:
         return None
+
+    connected = relay_state.connected_node_ids()
+    is_live = _is_fresh(node) or (node.id in connected)
+    if not is_live:
+        return None
+
     setattr(node, "is_online", True)
+    setattr(node, "lan_url", node.endpoint)
+    setattr(node, "relay_proxy_url", f"/api/relay/{node.id}/proxy")
     return node
 
 
