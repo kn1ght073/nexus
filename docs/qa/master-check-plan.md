@@ -4,7 +4,7 @@
 
 **Automated verification baseline**:
 - 104 automated tests in `services/core-api/tests/` (API security, token scopes, client console, GitHub flow, online access)
-- 42 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, Textual TUI pilot suite)
+- 65 automated unit tests in `apps/cli/tests/` (CLI v0.2.0 modular architecture, client pooling, OS keyring, doctor diagnostic engine, Command Registry, multi-profile isolation, 10-view Textual TUI cockpit suite)
 - 16-step end-to-end device flow check in `scripts/e2e_github_cli.py`
 - 25-step complete stack orchestration check in `scripts/demo_setup.py`
 
@@ -150,7 +150,7 @@
 Run the automated test matrix to ensure 100% test passing rate:
 
 ```bash
-# 1. Modular CLI Test Suite (42 tests: registry, profiles, TUI pilot, dispatch)
+# 1. Modular CLI Test Suite (65 tests: registry, profiles, 10-view TUI pilot, dispatch)
 PYTHONPATH=apps/cli services/core-api/.venv/bin/pytest apps/cli/tests/
 
 # 2. GitHub CLI E2E Verification (16 checks)
