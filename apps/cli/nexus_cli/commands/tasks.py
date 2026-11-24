@@ -6,6 +6,7 @@ import typer
 
 from ..client import get_client
 from ..errors import NexusError
+from ..local_store import create_local_task, list_local_tasks, update_local_task_status
 from ..ui import (
     console,
     create_table,
@@ -53,17 +54,18 @@ def list_tasks(
     if json_output:
         set_json_mode(True)
     client = get_client()
+    tasks = []
     try:
         with status_spinner("Fetching tasks…"):
             resp = client.get("/api/tasks")
         tasks = resp.json()
-        if is_json_mode():
-            output_json(tasks)
-            return
-        _render_tasks_table(tasks)
-    except NexusError as e:
-        print_error(e.message, title="TASKS FAILED")
-        raise typer.Exit(e.exit_code)
+    except Exception:
+        tasks = list_local_tasks()
+
+    if is_json_mode():
+        output_json(tasks)
+        return
+    _render_tasks_table(tasks)
 
 
 @tasks_app.command("today")
@@ -97,31 +99,35 @@ def add_task(
     payload = {"title": title}
     if project_id:
         payload["project_id"] = project_id
+    t = None
+    source = "Remote Node"
     try:
         with status_spinner("Adding task…"):
             resp = client.post("/api/tasks", json=payload)
         t = resp.json()
-        if is_json_mode():
-            output_json(t)
-            return
-        print_success(f"Task #{t['id']} created: '{t['title']}'.", title="TASK ADDED")
-    except NexusError as e:
-        print_error(e.message, title="ADD TASK FAILED")
-        raise typer.Exit(e.exit_code)
+    except Exception:
+        t = create_local_task(title=title, project_id=project_id)
+        source = "Local Sovereign Store"
+
+    if is_json_mode():
+        output_json(t)
+        return
+    print_success(f"Task #{t['id']} created in {source}: '{t['title']}'.", title="TASK ADDED")
 
 
 @tasks_app.command("done")
 def done_task(task_id: int = typer.Argument(..., help="ID of task to complete")):
     """Mark a task as completed."""
     client = get_client()
+    t = None
     try:
         with status_spinner(f"Completing task #{task_id}…"):
             resp = client.put(f"/api/tasks/{task_id}", json={"status": "completed"})
         t = resp.json()
-        if is_json_mode():
-            output_json(t)
-            return
-        print_success(f"Task #{t['id']} marked as completed.", title="TASK COMPLETED")
-    except NexusError as e:
-        print_error(e.message, title="COMPLETE TASK FAILED")
-        raise typer.Exit(e.exit_code)
+    except Exception:
+        t = update_local_task_status(task_id, status="completed")
+
+    if is_json_mode():
+        output_json(t)
+        return
+    print_success(f"Task #{task_id} marked as completed.", title="TASK COMPLETED")

@@ -4,6 +4,7 @@ import typer
 
 from ..client import get_client
 from ..errors import NexusError
+from ..local_store import create_local_note, list_local_notes
 from ..ui import (
     console,
     create_table,
@@ -27,36 +28,39 @@ def list_notes(
     if json_output:
         set_json_mode(True)
     client = get_client()
+    notes = []
+    source = "Remote Node"
     try:
         with status_spinner("Fetching notes…"):
             resp = client.get("/api/notes")
         notes = resp.json()
-        if is_json_mode():
-            output_json(notes)
-            return
+    except Exception:
+        notes = list_local_notes()
+        source = "Local Sovereign Store"
 
-        if not notes:
-            print_info("No notes found. Capture one via 'nexus note add <title> <content>'.", title="NOTES")
-            return
+    if is_json_mode():
+        output_json(notes)
+        return
 
-        table = create_table(
-            "NEXUS Notes",
-            [
-                {"name": "ID", "justify": "right", "width": 4},
-                {"name": "Title", "style": "bold cyan"},
-                {"name": "Content Preview"},
-                {"name": "Updated At"},
-            ],
-        )
-        for n in notes:
-            content = (n.get("content") or "").replace("\n", " ")
-            preview = content[:50] + ("…" if len(content) > 50 else "")
-            table.add_row(str(n["id"]), n["title"], preview, n.get("updated_at", "")[:19].replace("T", " "))
+    if not notes:
+        print_info("No notes found. Capture one via 'nexus note add <title> <content>'.", title="NOTES")
+        return
 
-        console.print(table)
-    except NexusError as e:
-        print_error(e.message, title="NOTES FAILED")
-        raise typer.Exit(e.exit_code)
+    table = create_table(
+        f"NEXUS Notes ({source})",
+        [
+            {"name": "ID", "justify": "right", "width": 4},
+            {"name": "Title", "style": "bold cyan"},
+            {"name": "Content Preview"},
+            {"name": "Updated At"},
+        ],
+    )
+    for n in notes:
+        content = (n.get("content") or "").replace("\n", " ")
+        preview = content[:50] + ("…" if len(content) > 50 else "")
+        table.add_row(str(n["id"]), n["title"], preview, n.get("updated_at", "")[:19].replace("T", " "))
+
+    console.print(table)
 
 
 @notes_app.command("add")
@@ -66,14 +70,17 @@ def add_note(
 ):
     """Add a quick sovereign note."""
     client = get_client()
+    n = None
+    source = "Remote Node"
     try:
         with status_spinner("Saving note…"):
             resp = client.post("/api/notes", json={"title": title, "content": content})
         n = resp.json()
-        if is_json_mode():
-            output_json(n)
-            return
-        print_success(f"Note #{n['id']} '{n['title']}' saved.", title="NOTE SAVED")
-    except NexusError as e:
-        print_error(e.message, title="NOTE SAVE FAILED")
-        raise typer.Exit(e.exit_code)
+    except Exception:
+        n = create_local_note(title=title, content=content)
+        source = "Local Sovereign Store"
+
+    if is_json_mode():
+        output_json(n)
+        return
+    print_success(f"Note #{n['id']} '{n['title']}' saved in {source}.", title="NOTE SAVED")

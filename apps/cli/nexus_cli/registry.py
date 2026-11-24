@@ -458,13 +458,38 @@ def _handle_files_search(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
     )
 
 
+from .local_store import (
+    list_local_projects,
+    create_local_project,
+    delete_local_project,
+    list_local_tasks,
+    create_local_task,
+    update_local_task_status,
+    delete_local_task,
+    list_local_notes,
+    create_local_note,
+    delete_local_note,
+)
+
+
 def _handle_notes_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
-    client = get_client()
-    resp = client.get("/api/notes", timeout=5)
-    notes = resp.json()
-    if not isinstance(notes, list):
-        notes = []
-    lines = [f"Total notes: {len(notes)}"]
+    notes: List[Dict[str, Any]] = []
+    source = "Remote Node"
+    try:
+        client = get_client()
+        resp = client.get("/api/notes", timeout=5)
+        if resp.status_code == 200:
+            notes = resp.json()
+            if not isinstance(notes, list):
+                notes = []
+        else:
+            notes = list_local_notes()
+            source = "Local Sovereign Store"
+    except Exception:
+        notes = list_local_notes()
+        source = "Local Sovereign Store"
+
+    lines = [f"Total notes ({source}): {len(notes)}"]
     for n in notes:
         lines.append(f"• [{n.get('id')}] {n.get('title', 'Untitled')}")
     return CommandResult(
@@ -478,21 +503,40 @@ def _handle_notes_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRes
 def _handle_notes_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     title = args.get("title", "")
     content = args.get("content", "")
-    client = get_client()
-    resp = client.post("/api/notes", json={"title": title, "content": content}, timeout=5)
-    data = resp.json()
+    data = None
+    source = "Remote Node"
+    try:
+        client = get_client()
+        resp = client.post("/api/notes", json={"title": title, "content": content}, timeout=5)
+        if resp.status_code in (200, 201):
+            data = resp.json()
+        else:
+            data = create_local_note(title=title, content=content)
+            source = "Local Sovereign Store"
+    except Exception:
+        data = create_local_note(title=title, content=content)
+        source = "Local Sovereign Store"
+
     return CommandResult(
         success=True,
         title="Note Created",
-        message=f"Note '{title}' added with ID: {data.get('id')}",
+        message=f"Note '{title}' saved to {source} with ID: {data.get('id')}",
         data=data,
     )
 
 
 def _handle_notes_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     note_id = args.get("note_id")
-    client = get_client()
-    client.delete(f"/api/notes/{note_id}", timeout=5)
+    try:
+        client = get_client()
+        client.delete(f"/api/notes/{note_id}", timeout=5)
+    except Exception:
+        pass
+    if note_id is not None:
+        try:
+            delete_local_note(int(note_id))
+        except Exception:
+            pass
     return CommandResult(
         success=True,
         title="Note Deleted",
@@ -501,12 +545,23 @@ def _handle_notes_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandR
 
 
 def _handle_projects_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
-    client = get_client()
-    resp = client.get("/api/projects", timeout=5)
-    projects = resp.json()
-    if not isinstance(projects, list):
-        projects = []
-    lines = [f"Total active projects: {len(projects)}"]
+    projects: List[Dict[str, Any]] = []
+    source = "Remote Node"
+    try:
+        client = get_client()
+        resp = client.get("/api/projects", timeout=5)
+        if resp.status_code == 200:
+            projects = resp.json()
+            if not isinstance(projects, list):
+                projects = []
+        else:
+            projects = list_local_projects()
+            source = "Local Sovereign Store"
+    except Exception:
+        projects = list_local_projects()
+        source = "Local Sovereign Store"
+
+    lines = [f"Total active projects ({source}): {len(projects)}"]
     for p in projects:
         lines.append(f"• [{p.get('id')}] {p.get('title', 'Untitled')}")
     return CommandResult(
@@ -520,21 +575,40 @@ def _handle_projects_list(args: Dict[str, Any], opts: Dict[str, Any]) -> Command
 def _handle_projects_create(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     title = args.get("title", "")
     desc = args.get("description", "")
-    client = get_client()
-    resp = client.post("/api/projects", json={"title": title, "description": desc}, timeout=5)
-    data = resp.json()
+    data = None
+    source = "Remote Node"
+    try:
+        client = get_client()
+        resp = client.post("/api/projects", json={"title": title, "description": desc}, timeout=5)
+        if resp.status_code in (200, 201):
+            data = resp.json()
+        else:
+            data = create_local_project(title=title, description=desc)
+            source = "Local Sovereign Store"
+    except Exception:
+        data = create_local_project(title=title, description=desc)
+        source = "Local Sovereign Store"
+
     return CommandResult(
         success=True,
         title="Project Created",
-        message=f"Project '{title}' created with ID: {data.get('id')}",
+        message=f"Project '{title}' created in {source} with ID: {data.get('id')}",
         data=data,
     )
 
 
 def _handle_projects_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     proj_id = args.get("project_id")
-    client = get_client()
-    client.delete(f"/api/projects/{proj_id}", timeout=5)
+    try:
+        client = get_client()
+        client.delete(f"/api/projects/{proj_id}", timeout=5)
+    except Exception:
+        pass
+    if proj_id is not None:
+        try:
+            delete_local_project(int(proj_id))
+        except Exception:
+            pass
     return CommandResult(
         success=True,
         title="Project Deleted",
@@ -543,12 +617,23 @@ def _handle_projects_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> Comma
 
 
 def _handle_tasks_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
-    client = get_client()
-    resp = client.get("/api/tasks", timeout=5)
-    tasks = resp.json()
-    if not isinstance(tasks, list):
-        tasks = []
-    lines = [f"Total tasks: {len(tasks)}"]
+    tasks: List[Dict[str, Any]] = []
+    source = "Remote Node"
+    try:
+        client = get_client()
+        resp = client.get("/api/tasks", timeout=5)
+        if resp.status_code == 200:
+            tasks = resp.json()
+            if not isinstance(tasks, list):
+                tasks = []
+        else:
+            tasks = list_local_tasks()
+            source = "Local Sovereign Store"
+    except Exception:
+        tasks = list_local_tasks()
+        source = "Local Sovereign Store"
+
+    lines = [f"Total tasks ({source}): {len(tasks)}"]
     for t in tasks:
         done = "✓" if t.get("completed") or t.get("status") == "completed" else "○"
         lines.append(f"{done} [{t.get('id')}] {t.get('title', 'Untitled')}")
@@ -563,36 +648,73 @@ def _handle_tasks_list(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandRes
 def _handle_tasks_add(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     title = args.get("title", "")
     pid = args.get("project_id")
+    data = None
+    source = "Remote Node"
+    project_id_val = int(pid) if pid is not None and str(pid).isdigit() else None
+
     body: Dict[str, Any] = {"title": title}
-    if pid is not None and str(pid).isdigit():
-        body["project_id"] = int(pid)
-    client = get_client()
-    resp = client.post("/api/tasks", json=body, timeout=5)
-    data = resp.json()
+    if project_id_val is not None:
+        body["project_id"] = project_id_val
+
+    try:
+        client = get_client()
+        resp = client.post("/api/tasks", json=body, timeout=5)
+        if resp.status_code in (200, 201):
+            data = resp.json()
+        else:
+            data = create_local_task(title=title, project_id=project_id_val)
+            source = "Local Sovereign Store"
+    except Exception:
+        data = create_local_task(title=title, project_id=project_id_val)
+        source = "Local Sovereign Store"
+
     return CommandResult(
         success=True,
         title="Task Added",
-        message=f"Task '{title}' created with ID: {data.get('id')}",
+        message=f"Task '{title}' created in {source} with ID: {data.get('id')}",
         data=data,
     )
 
 
 def _handle_tasks_done(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     task_id = args.get("task_id")
-    client = get_client()
-    resp = client.put(f"/api/tasks/{task_id}", json={"status": "completed"}, timeout=5)
+    data = None
+    try:
+        client = get_client()
+        resp = client.put(f"/api/tasks/{task_id}", json={"status": "completed"}, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+    except Exception:
+        pass
+    if task_id is not None:
+        try:
+            local_res = update_local_task_status(int(task_id), status="completed")
+            if not data:
+                data = local_res
+        except Exception:
+            pass
+
     return CommandResult(
         success=True,
         title="Task Completed",
         message=f"Task {task_id} marked as completed.",
-        data=resp.json() if resp.text else None,
+        data=data,
     )
 
 
 def _handle_tasks_delete(args: Dict[str, Any], opts: Dict[str, Any]) -> CommandResult:
     task_id = args.get("task_id")
-    client = get_client()
-    client.delete(f"/api/tasks/{task_id}", timeout=5)
+    try:
+        client = get_client()
+        client.delete(f"/api/tasks/{task_id}", timeout=5)
+    except Exception:
+        pass
+    if task_id is not None:
+        try:
+            delete_local_task(int(task_id))
+        except Exception:
+            pass
+
     return CommandResult(
         success=True,
         title="Task Deleted",

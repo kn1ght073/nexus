@@ -14,6 +14,7 @@ from textual.widgets import Button, DataTable, Input, Label, Static
 
 from ...client import get_client
 from ...config import load_config
+from ...local_store import list_local_notes, list_local_projects, list_local_tasks
 from .context import ContextPanel
 
 
@@ -123,6 +124,11 @@ class NotesTasksView(Static):
                 tasks = r.json()
         except Exception:
             pass
+        if not tasks:
+            try:
+                tasks = list_local_tasks()
+            except Exception:
+                pass
 
         notes = []
         try:
@@ -131,6 +137,11 @@ class NotesTasksView(Static):
                 notes = r.json()
         except Exception:
             pass
+        if not notes:
+            try:
+                notes = list_local_notes()
+            except Exception:
+                pass
 
         projects = []
         try:
@@ -139,6 +150,11 @@ class NotesTasksView(Static):
                 projects = r.json()
         except Exception:
             pass
+        if not projects:
+            try:
+                projects = list_local_projects()
+            except Exception:
+                pass
 
         self.app.call_from_thread(self._render_productivity, tasks, notes, projects)
 
