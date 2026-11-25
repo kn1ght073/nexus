@@ -72,6 +72,16 @@ const INITIAL_NOTES: NoteOut[] = [
   },
 ];
 
+const INITIAL_PROJECT_IDS = new Set(INITIAL_PROJECTS.map((p) => p.id));
+const INITIAL_TASK_IDS = new Set(INITIAL_TASKS.map((t) => t.id));
+const INITIAL_NOTE_IDS = new Set(INITIAL_NOTES.map((n) => n.id));
+
+export async function clearLocalWorkspace(): Promise<void> {
+  await setSecureItem(LOCAL_PROJECTS_KEY, JSON.stringify([]));
+  await setSecureItem(LOCAL_TASKS_KEY, JSON.stringify([]));
+  await setSecureItem(LOCAL_NOTES_KEY, JSON.stringify([]));
+}
+
 // --- Projects ---
 
 export async function getLocalProjects(): Promise<ProjectOut[]> {
@@ -81,7 +91,10 @@ export async function getLocalProjects(): Promise<ProjectOut[]> {
     return INITIAL_PROJECTS;
   }
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return INITIAL_PROJECTS;
+    const hasReal = parsed.some((p) => !INITIAL_PROJECT_IDS.has(p.id));
+    return hasReal ? parsed.filter((p) => !INITIAL_PROJECT_IDS.has(p.id)) : parsed;
   } catch {
     return INITIAL_PROJECTS;
   }
@@ -95,6 +108,7 @@ export async function cacheRemoteProjects(projects: ProjectOut[]): Promise<void>
 
 export async function saveLocalProject(project: Omit<ProjectOut, 'id' | 'created_at' | 'updated_at'>): Promise<ProjectOut> {
   const current = await getLocalProjects();
+  const realCurrent = current.filter((p) => !INITIAL_PROJECT_IDS.has(p.id));
   const newProj: ProjectOut = {
     id: Date.now(),
     title: project.title,
@@ -103,7 +117,7 @@ export async function saveLocalProject(project: Omit<ProjectOut, 'id' | 'created
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  const updated = [newProj, ...current];
+  const updated = [newProj, ...realCurrent];
   await setSecureItem(LOCAL_PROJECTS_KEY, JSON.stringify(updated));
   return newProj;
 }
@@ -123,9 +137,12 @@ export async function getLocalTasks(): Promise<TaskOut[]> {
     return INITIAL_TASKS;
   }
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return INITIAL_TASKS;
+    const hasReal = parsed.some((t) => !INITIAL_TASK_IDS.has(t.id));
+    return hasReal ? parsed.filter((t) => !INITIAL_TASK_IDS.has(t.id)) : parsed;
   } catch {
-    return INITIAL_PROJECTS as any;
+    return INITIAL_TASKS;
   }
 }
 
@@ -137,6 +154,7 @@ export async function cacheRemoteTasks(tasks: TaskOut[]): Promise<void> {
 
 export async function saveLocalTask(task: { title: string; description?: string; status?: 'pending' | 'in_progress' | 'completed' | 'cancelled'; priority?: number; project_id?: number | null; due_date?: string | null }): Promise<TaskOut> {
   const current = await getLocalTasks();
+  const realCurrent = current.filter((t) => !INITIAL_TASK_IDS.has(t.id));
   const newTask: TaskOut = {
     id: Date.now(),
     title: task.title,
@@ -148,7 +166,7 @@ export async function saveLocalTask(task: { title: string; description?: string;
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  const updated = [newTask, ...current];
+  const updated = [newTask, ...realCurrent];
   await setSecureItem(LOCAL_TASKS_KEY, JSON.stringify(updated));
   return newTask;
 }
@@ -182,7 +200,10 @@ export async function getLocalNotes(): Promise<NoteOut[]> {
     return INITIAL_NOTES;
   }
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return INITIAL_NOTES;
+    const hasReal = parsed.some((n) => !INITIAL_NOTE_IDS.has(n.id));
+    return hasReal ? parsed.filter((n) => !INITIAL_NOTE_IDS.has(n.id)) : parsed;
   } catch {
     return INITIAL_NOTES;
   }
@@ -196,6 +217,7 @@ export async function cacheRemoteNotes(notes: NoteOut[]): Promise<void> {
 
 export async function saveLocalNote(note: { title: string; content: string; tags?: string; project_id?: number | null }): Promise<NoteOut> {
   const current = await getLocalNotes();
+  const realCurrent = current.filter((n) => !INITIAL_NOTE_IDS.has(n.id));
   const newNote: NoteOut = {
     id: Date.now(),
     title: note.title,
@@ -205,7 +227,7 @@ export async function saveLocalNote(note: { title: string; content: string; tags
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  const updated = [newNote, ...current];
+  const updated = [newNote, ...realCurrent];
   await setSecureItem(LOCAL_NOTES_KEY, JSON.stringify(updated));
   return newNote;
 }

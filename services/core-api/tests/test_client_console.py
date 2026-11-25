@@ -39,6 +39,27 @@ def test_account_overview_happy_path(client: TestClient, user_a: dict):
     assert data["google_identity"]["linked"] is True
     assert data["device_stats"]["total"] == 0
     assert data["session_stats"]["total"] >= 1  # login session exists
+    assert "metrics" in data
+    assert data["metrics"]["projects"] == 0
+    assert data["metrics"]["tasks"] == 0
+    assert data["metrics"]["notes"] == 0
+    assert data["metrics"]["files"] >= 1
+
+
+def test_account_overview_metrics_reflect_user_data(client: TestClient, user_a: dict):
+    """Account overview metrics accurately reflect user projects, tasks, and notes."""
+    # Create a project, task, and note for user_a
+    client.post("/api/projects", json={"title": "Test Project"}, headers=user_a["headers"])
+    client.post("/api/tasks", json={"title": "Test Task"}, headers=user_a["headers"])
+    client.post("/api/notes", json={"title": "Test Note", "content": "Note content"}, headers=user_a["headers"])
+
+    res = client.get("/api/account/overview", headers=user_a["headers"])
+    assert res.status_code == 200
+    metrics = res.json()["metrics"]
+    assert metrics["projects"] >= 1
+    assert metrics["tasks"] >= 1
+    assert metrics["notes"] >= 1
+    assert metrics["files"] >= 1
 
 
 def test_device_listing_and_revocation_isolated(client: TestClient, user_a: dict, user_b: dict):

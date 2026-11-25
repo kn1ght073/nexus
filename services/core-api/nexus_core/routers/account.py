@@ -22,6 +22,7 @@ from ..models import (
 )
 from ..schemas import (
     AccountDataSummaryOut,
+    AccountMetricsOut,
     AccountOverviewOut,
     ActivityOut,
     ActivityPageOut,
@@ -33,6 +34,7 @@ from ..schemas import (
     SessionStatsOut,
 )
 from ..security import get_current_user
+from ..settings import get_settings
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -82,6 +84,23 @@ def get_account_overview(
         .count()
     )
 
+    project_count = (
+        db.query(Project)
+        .filter(Project.owner_id == current_user.id, Project.deleted_at == None)
+        .count()
+    )
+    task_count = (
+        db.query(Task)
+        .filter(Task.owner_id == current_user.id, Task.deleted_at == None)
+        .count()
+    )
+    note_count = (
+        db.query(Note)
+        .filter(Note.owner_id == current_user.id, Note.deleted_at == None)
+        .count()
+    )
+    files_count = len(get_settings().storage_roots)
+
     return AccountOverviewOut(
         id=current_user.id,
         email=current_user.email,
@@ -92,6 +111,12 @@ def get_account_overview(
         google_identity=google_id,
         device_stats=DeviceStatsOut(total=total_devices, active=active_devices),
         session_stats=SessionStatsOut(total=total_sessions, active=active_sessions),
+        metrics=AccountMetricsOut(
+            projects=project_count,
+            tasks=task_count,
+            notes=note_count,
+            files=files_count,
+        ),
     )
 
 

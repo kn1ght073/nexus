@@ -106,6 +106,24 @@ export async function autoDiscoverHost(): Promise<{
   if (!activeAccessToken) {
     return { discovered: false, activeHostUrl: null, mode: 'none' };
   }
+
+  const fallbackToSavedHost = async (): Promise<{
+    discovered: boolean;
+    activeHostUrl: string | null;
+    mode: 'lan' | 'relay' | 'none';
+  }> => {
+    const candidateHost = activeHostUrl || (await getSecureItem(HOST_URL_KEY));
+    if (candidateHost) {
+      const probe = await testConnection(candidateHost);
+      if (probe.ok) {
+        await setHostUrl(candidateHost);
+        await exchangeCpTokenOnHost(candidateHost, activeAccessToken!);
+        return { discovered: true, activeHostUrl: candidateHost, mode: 'lan' };
+      }
+    }
+    return { discovered: false, activeHostUrl: null, mode: 'none' };
+  };
+
   try {
     const res = await fetch(`${activeServerUrl}/api/nodes/active`, {
       method: 'GET',
@@ -115,11 +133,11 @@ export async function autoDiscoverHost(): Promise<{
       },
     });
     if (!res.ok) {
-      return { discovered: false, activeHostUrl: null, mode: 'none' };
+      return await fallbackToSavedHost();
     }
     const node = await res.json().catch(() => null);
     if (!node || !node.id) {
-      return { discovered: false, activeHostUrl: null, mode: 'none' };
+      return await fallbackToSavedHost();
     }
 
     const lanUrl = node.lan_url || node.endpoint;
@@ -143,7 +161,7 @@ export async function autoDiscoverHost(): Promise<{
     return { discovered: true, activeHostUrl: proxyUrl, mode: 'relay', node };
   } catch (err) {
     console.warn('[ApiClient] Automatic host discovery error:', err);
-    return { discovered: false, activeHostUrl: null, mode: 'none' };
+    return await fallbackToSavedHost();
   }
 }
 
@@ -245,7 +263,8 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
                               cleanPath.startsWith('/api/notes') ||
                               cleanPath.startsWith('/api/files') ||
                               cleanPath.startsWith('/api/sync') ||
-                              cleanPath.startsWith('/api/host');
+                              cleanPath.startsWith('/api/host') ||
+                              cleanPath.startsWith('/api/account/overview');
 
   const isHostTarget = Boolean(isPersonalDataRoute && activeHostUrl);
   const baseUrl = isHostTarget ? activeHostUrl! : activeServerUrl;

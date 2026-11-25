@@ -9,6 +9,7 @@ import {
   getLocalNotes,
   saveLocalNote,
   deleteLocalNote,
+  clearLocalWorkspace,
 } from '../src/api/workspaceStore';
 
 describe('NEXUS Mobile Workspace Local Store', () => {
@@ -65,5 +66,21 @@ describe('NEXUS Mobile Workspace Local Store', () => {
     await deleteLocalNote(note.id);
     const remaining = await getLocalNotes();
     expect(remaining.find((n) => n.id === note.id)).toBeUndefined();
+  });
+
+  it('clears workspace and avoids presenting stale mock data when user has real data', async () => {
+    await clearLocalWorkspace();
+    const emptyProjects = await getLocalProjects();
+    const emptyTasks = await getLocalTasks();
+    const emptyNotes = await getLocalNotes();
+    expect(emptyProjects).toEqual([]);
+    expect(emptyTasks).toEqual([]);
+    expect(emptyNotes).toEqual([]);
+
+    const task = await saveLocalTask({ title: 'Real User Task' });
+    const tasks = await getLocalTasks();
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].title).toBe('Real User Task');
+    expect(tasks.find((t) => t.id === 2001)).toBeUndefined();
   });
 });

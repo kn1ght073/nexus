@@ -5,7 +5,7 @@ project_id) so apps/cli keeps working unchanged, while adding the fields the
 architecture plan requires: ids, timestamps, capabilities and sync metadata.
 """
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -87,6 +87,13 @@ class SessionStatsOut(BaseModel):
     active: int = 0
 
 
+class AccountMetricsOut(BaseModel):
+    projects: int = 0
+    tasks: int = 0
+    notes: int = 0
+    files: int = 0
+
+
 class AccountOverviewOut(BaseModel):
     id: int
     email: str
@@ -97,6 +104,7 @@ class AccountOverviewOut(BaseModel):
     google_identity: GoogleIdentityOut
     device_stats: DeviceStatsOut
     session_stats: SessionStatsOut
+    metrics: Optional[AccountMetricsOut] = None
 
 
 class ServerStatusOut(BaseModel):
