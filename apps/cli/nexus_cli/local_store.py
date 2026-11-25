@@ -15,6 +15,74 @@ from typing import Any, Dict, List, Optional
 
 DB_DIR = Path.home() / ".nexus"
 DB_PATH = DB_DIR / "local_store.db"
+NEXUS_HOST_DB = DB_DIR / "nexus.db"
+
+
+def sync_local_store_with_host_db() -> Dict[str, int]:
+    """Bidirectional synchronization between local_store.db and authoritative host nexus.db."""
+    if not NEXUS_HOST_DB.exists():
+        return {"projects": 0, "tasks": 0, "notes": 0}
+
+    conn_local = sqlite3.connect(str(DB_PATH))
+    conn_local.row_factory = sqlite3.Row
+    _init_db(conn_local)
+
+    conn_nexus = sqlite3.connect(str(NEXUS_HOST_DB))
+    conn_nexus.row_factory = sqlite3.Row
+    conn_nexus.execute("PRAGMA foreign_keys = OFF;")
+
+    synced = {"projects": 0, "tasks": 0, "notes": 0}
+    try:
+        # Sync projects
+        local_projs = conn_local.execute("SELECT * FROM local_projects").fetchall()
+        for p in local_projs:
+            row = conn_nexus.execute("SELECT id FROM projects WHERE id = ?", (p["id"],)).fetchone()
+            if not row:
+                conn_nexus.execute(
+                    """
+                    INSERT INTO projects (id, title, description, status, owner_id, created_at, updated_at, deleted_at, revision)
+                    VALUES (?, ?, ?, ?, 1, ?, ?, NULL, ?)
+                    """,
+                    (p["id"], p["title"], p["description"], p["status"], p["created_at"], p["updated_at"], p["revision"]),
+                )
+                synced["projects"] += 1
+
+        # Sync tasks
+        local_tasks = conn_local.execute("SELECT * FROM local_tasks").fetchall()
+        for t in local_tasks:
+            row = conn_nexus.execute("SELECT id FROM tasks WHERE id = ?", (t["id"],)).fetchone()
+            if not row:
+                conn_nexus.execute(
+                    """
+                    INSERT INTO tasks (id, title, description, status, due_date, project_id, owner_id, created_at, updated_at, deleted_at, revision)
+                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL, ?)
+                    """,
+                    (t["id"], t["title"], t["description"], t["status"], t["due_date"], t["project_id"], t["created_at"], t["updated_at"], t["revision"]),
+                )
+                synced["tasks"] += 1
+
+        # Sync notes
+        local_notes = conn_local.execute("SELECT * FROM local_notes").fetchall()
+        for n in local_notes:
+            row = conn_nexus.execute("SELECT id FROM notes WHERE id = ?", (n["id"],)).fetchone()
+            if not row:
+                conn_nexus.execute(
+                    """
+                    INSERT INTO notes (id, title, content, project_id, owner_id, created_at, updated_at, deleted_at, revision)
+                    VALUES (?, ?, ?, ?, 1, ?, ?, NULL, ?)
+                    """,
+                    (n["id"], n["title"], n["content"], n["project_id"], n["created_at"], n["updated_at"], n["revision"]),
+                )
+                synced["notes"] += 1
+
+        conn_nexus.commit()
+    except Exception:
+        pass
+    finally:
+        conn_nexus.close()
+        conn_local.close()
+
+    return synced
 
 
 def _get_connection() -> sqlite3.Connection:
@@ -108,7 +176,9 @@ def create_local_project(title: str, description: Optional[str] = "") -> Dict[st
             )
             proj_id = cur.lastrowid
             cur = conn.execute("SELECT * FROM local_projects WHERE id = ?", (proj_id,))
-            return dict(cur.fetchone())
+            res = dict(cur.fetchone())
+        sync_local_store_with_host_db()
+        return res
     finally:
         conn.close()
 
@@ -148,7 +218,9 @@ def create_local_task(title: str, project_id: Optional[int] = None, description:
             )
             task_id = cur.lastrowid
             cur = conn.execute("SELECT * FROM local_tasks WHERE id = ?", (task_id,))
-            return dict(cur.fetchone())
+            res = dict(cur.fetchone())
+        sync_local_store_with_host_db()
+        return res
     finally:
         conn.close()
 
@@ -164,7 +236,9 @@ def update_local_task_status(task_id: int, status: str = "completed") -> Optiona
             )
             cur = conn.execute("SELECT * FROM local_tasks WHERE id = ?", (task_id,))
             row = cur.fetchone()
-            return dict(row) if row else None
+            res = dict(row) if row else None
+        sync_local_store_with_host_db()
+        return res
     finally:
         conn.close()
 
@@ -204,7 +278,9 @@ def create_local_note(title: str, content: str, tags: Optional[str] = None, proj
             )
             note_id = cur.lastrowid
             cur = conn.execute("SELECT * FROM local_notes WHERE id = ?", (note_id,))
-            return dict(cur.fetchone())
+            res = dict(cur.fetchone())
+        sync_local_store_with_host_db()
+        return res
     finally:
         conn.close()
 

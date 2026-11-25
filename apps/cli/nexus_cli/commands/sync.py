@@ -6,6 +6,7 @@ import typer
 
 from ..client import get_client
 from ..errors import NexusError
+from ..local_store import sync_local_store_with_host_db
 from ..ui import (
     console,
     is_json_mode,
@@ -26,6 +27,7 @@ def sync_pull(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Pull incremental entity changes (projects, tasks, notes) since cursor."""
+    sync_local_store_with_host_db()
     if json_output:
         set_json_mode(True)
     client = get_client()
