@@ -1,63 +1,113 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  TextInput,
+  Modal,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, FileText, Tag, Trash2 } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Plus,
+  FileText,
+  Tag,
+  Trash2,
+  Search,
+  FolderGit2,
+  X,
+  Edit3,
+  Calendar,
+} from 'lucide-react-native';
 import { useTheme } from '../../../src/context/ThemeContext';
 import { Button } from '../../../src/components/Button';
 import { Input } from '../../../src/components/Input';
 import { Card } from '../../../src/components/Card';
 import { EmptyState } from '../../../src/components/EmptyState';
-import { apiClient, getLastSyncTimestamp, setLastSyncTimestamp } from '../../../src/api/client';
-import { NoteOut } from '../../../src/api/types';
-import { getLocalNotes, saveLocalNote, deleteLocalNote, cacheRemoteNotes } from '../../../src/api/workspaceStore';
+import { apiClient } from '../../../src/api/client';
+import { NoteOut, ProjectOut } from '../../../src/api/types';
+import {
+  getLocalNotes,
+  saveLocalNote,
+  updateLocalNote,
+  deleteLocalNote,
+  cacheRemoteNotes,
+  getLocalProjects,
+} from '../../../src/api/workspaceStore';
 
 export default function NotesScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  // Create form state
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
+  // Filter & Search
+  const [search, setSearch] = useState('');
+  const [filterProjectId, setFilterProjectId] = useState<number | null>(null);
+
+  // Note Viewer / Editor Modal
+  const [viewingNote, setViewingNote] = useState<NoteOut | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editTags, setEditTags] = useState('');
+
+  // Fetch Notes
   const { data: notes, isLoading, refetch } = useQuery<NoteOut[]>({
     queryKey: ['notes'],
     queryFn: async () => {
       try {
         const remote = await apiClient<NoteOut[]>('/api/notes');
-        setIsOffline(false);
         await cacheRemoteNotes(remote);
-        const now = new Date().toISOString();
-        await setLastSyncTimestamp(now);
-        setLastSyncTime(now);
         return remote;
-      } catch (err: any) {
-        setIsOffline(true);
-        const ts = await getLastSyncTimestamp();
-        setLastSyncTime(ts);
+      } catch {
         return await getLocalNotes();
       }
     },
   });
 
+  // Fetch Projects for association
+  const { data: projects } = useQuery<ProjectOut[]>({
+    queryKey: ['projects'],
+    queryFn: async () => {
+      try {
+        return await apiClient<ProjectOut[]>('/api/projects');
+      } catch {
+        return await getLocalProjects();
+      }
+    },
+  });
+
+  const projectMap = new Map<number, string>();
+  (projects || []).forEach((p) => projectMap.set(p.id, p.title));
+
+  // Create Note Mutation
   const createNoteMutation = useMutation({
     mutationFn: async () => {
       const payload = {
         title: title.trim(),
         content: content.trim(),
         tags: tags.trim() || undefined,
+        project_id: selectedProjectId,
       };
       try {
         return await apiClient<NoteOut>('/api/notes', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-      } catch (err: any) {
+      } catch {
         return await saveLocalNote(payload);
       }
     },
@@ -65,6 +115,7 @@ export default function NotesScreen() {
       setTitle('');
       setContent('');
       setTags('');
+      setSelectedProjectId(null);
       setShowAdd(false);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       queryClient.invalidateQueries({ queryKey: ['accountOverview'] });
@@ -74,22 +125,66 @@ export default function NotesScreen() {
     },
   });
 
+  // Delete Note Mutation
   const deleteNoteMutation = useMutation({
     mutationFn: async (id: number) => {
       try {
         await apiClient(`/api/notes/${id}`, { method: 'DELETE' });
-      } catch (err: any) {
-        await deleteLocalNote(id);
+      } catch {
+        // Fallback local deletion
       }
+      await deleteLocalNote(id);
     },
     onSuccess: () => {
+      if (viewingNote) setViewingNote(null);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       queryClient.invalidateQueries({ queryKey: ['accountOverview'] });
     },
   });
 
+  // Update Note Mutation
+  const handleSaveEdit = async () => {
+    if (!viewingNote || !editTitle.trim()) return;
+    const patch = {
+      title: editTitle.trim(),
+      content: editContent.trim(),
+      tags: editTags.trim() || undefined,
+    };
+    try {
+      await apiClient<NoteOut>(`/api/notes/${viewingNote.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+    } catch {
+      await updateLocalNote(viewingNote.id, patch);
+    }
+    const updated = { ...viewingNote, ...patch, updated_at: new Date().toISOString() };
+    setViewingNote(updated);
+    setIsEditing(false);
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ['notes'] });
+  };
+
+  const openViewModal = (note: NoteOut) => {
+    setViewingNote(note);
+    setEditTitle(note.title);
+    setEditContent(note.content);
+    setEditTags(note.tags || '');
+    setIsEditing(false);
+  };
+
+  const filteredNotes = (notes || []).filter((n) => {
+    const matchesProject = filterProjectId === null || n.project_id === filterProjectId;
+    const matchesSearch =
+      n.title.toLowerCase().includes(search.toLowerCase()) ||
+      n.content.toLowerCase().includes(search.toLowerCase()) ||
+      (n.tags && n.tags.toLowerCase().includes(search.toLowerCase()));
+    return matchesProject && matchesSearch;
+  });
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* Top Bar */}
       <View style={styles.topBar}>
         <Button
           title=""
@@ -101,7 +196,7 @@ export default function NotesScreen() {
         <View style={styles.titleContainer}>
           <Text style={[styles.topTitle, { color: colors.textPrimary }]}>Notes & Ideas</Text>
           <Text style={[styles.topSubtitle, { color: colors.textMuted }]}>
-            Sovereign Knowledge Vault
+            Sovereign Knowledge Vault & Markdown
           </Text>
         </View>
         <Button
@@ -112,29 +207,144 @@ export default function NotesScreen() {
         />
       </View>
 
+      {/* Search & Project Filter */}
+      <View style={styles.toolbar}>
+        <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
+          <Search size={14} color={colors.textMuted} />
+          <TextInput
+            placeholder="Search notes, tags, content..."
+            placeholderTextColor={colors.textMuted}
+            value={search}
+            onChangeText={setSearch}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+          />
+        </View>
+
+        {projects && projects.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillsRow}>
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                filterProjectId === null && [styles.filterPillActive, { backgroundColor: colors.surface }],
+                { borderColor: colors.surfaceBorder },
+              ]}
+              onPress={() => setFilterProjectId(null)}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  { color: filterProjectId === null ? colors.primary : colors.textSecondary },
+                ]}
+              >
+                All Projects
+              </Text>
+            </TouchableOpacity>
+
+            {projects.map((p) => {
+              const active = filterProjectId === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[
+                    styles.filterPill,
+                    active && [styles.filterPillActive, { backgroundColor: colors.surface }],
+                    { borderColor: colors.surfaceBorder },
+                  ]}
+                  onPress={() => setFilterProjectId(p.id)}
+                >
+                  <FolderGit2 size={12} color={active ? colors.accent : colors.textMuted} />
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      { color: active ? colors.accent : colors.textSecondary },
+                    ]}
+                  >
+                    {p.title}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* Note Creation Card */}
       {showAdd && (
         <Card style={styles.createCard}>
           <Input
             value={title}
             onChangeText={setTitle}
             placeholder="Note title..."
+            autoFocus
           />
           <Input
             value={content}
             onChangeText={setContent}
-            placeholder="Thoughts, meeting notes, code snippets..."
+            placeholder="Capture thoughts, meetings, markdown, or snippets..."
             multiline
             numberOfLines={4}
-            style={{ height: 90 }}
+            style={{ height: 84 }}
           />
+
+          {/* Project Picker for New Note */}
+          {projects && projects.length > 0 && (
+            <View style={styles.projectPickerSection}>
+              <Text style={[styles.pickerLabel, { color: colors.textMuted }]}>LINK TO PROJECT</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.filterPill,
+                    selectedProjectId === null && [styles.filterPillActive, { backgroundColor: colors.primary }],
+                    { borderColor: colors.surfaceBorder },
+                  ]}
+                  onPress={() => setSelectedProjectId(null)}
+                >
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      { color: selectedProjectId === null ? '#FFF' : colors.textSecondary },
+                    ]}
+                  >
+                    None
+                  </Text>
+                </TouchableOpacity>
+                {projects.map((p) => {
+                  const isSel = selectedProjectId === p.id;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[
+                        styles.filterPill,
+                        isSel && [styles.filterPillActive, { backgroundColor: colors.primary }],
+                        { borderColor: colors.surfaceBorder },
+                      ]}
+                      onPress={() => setSelectedProjectId(p.id)}
+                    >
+                      <FolderGit2 size={12} color={isSel ? '#FFF' : colors.textMuted} />
+                      <Text
+                        style={[
+                          styles.filterPillText,
+                          { color: isSel ? '#FFF' : colors.textSecondary },
+                        ]}
+                      >
+                        {p.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
           <Input
             value={tags}
             onChangeText={setTags}
-            placeholder="Tags (comma separated, e.g. research, kernel)"
-            icon={<Tag size={16} color={colors.textMuted} />}
+            placeholder="Tags (comma separated, e.g. research, ideas)"
+            icon={<Tag size={14} color={colors.textMuted} />}
           />
+
           <Button
-            title="Save Note"
+            title="Save Sovereign Note"
             onPress={() => createNoteMutation.mutate()}
             loading={createNoteMutation.isPending}
             style={{ marginTop: 8 }}
@@ -142,17 +352,9 @@ export default function NotesScreen() {
         </Card>
       )}
 
-      {isOffline && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineBannerText}>
-            ⚠️ Mac Host Disconnected · Displaying cached data
-            {lastSyncTime ? ` (Last synced: ${new Date(lastSyncTime).toLocaleTimeString()})` : ''}
-          </Text>
-        </View>
-      )}
-
+      {/* Notes List */}
       <FlatList
-        data={notes || []}
+        data={filteredNotes}
         keyExtractor={(item) => String(item.id)}
         refreshing={isLoading}
         onRefresh={refetch}
@@ -160,42 +362,187 @@ export default function NotesScreen() {
         ListEmptyComponent={
           !isLoading ? (
             <EmptyState
-              title="No Sovereign Notes"
-              description="Capture encrypted thoughts and meeting minutes directly to your sovereign store."
-              action={
-                <Button
-                  title="Capture Note"
-                  onPress={() => setShowAdd(true)}
-                />
-              }
+              title="No Notes Found"
+              description="Capture quick ideas, technical notes, and sovereign knowledge that persist safely."
+              icon={<FileText size={40} color={colors.textMuted} />}
+              action={<Button title="Write New Note" onPress={() => setShowAdd(true)} />}
             />
           ) : undefined
         }
-        renderItem={({ item }) => (
-          <Card style={styles.noteCard}>
-            <View style={styles.noteTop}>
-              <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{item.title}</Text>
-              <TouchableOpacity onPress={() => deleteNoteMutation.mutate(item.id)}>
-                <Trash2 size={16} color={colors.textMuted} />
-              </TouchableOpacity>
+        renderItem={({ item }) => {
+          const projectName = item.project_id ? projectMap.get(item.project_id) : null;
+          const tagList = item.tags ? item.tags.split(',').map((t) => t.trim()).filter(Boolean) : [];
+
+          return (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => openViewModal(item)}
+            >
+              <Card style={styles.noteCard}>
+                <View style={styles.noteHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{item.title}</Text>
+                    {projectName && (
+                      <View style={[styles.projectTag, { backgroundColor: colors.accentSubtle }]}>
+                        <FolderGit2 size={11} color={colors.accent} />
+                        <Text style={[styles.projectTagText, { color: colors.accent }]} numberOfLines={1}>
+                          {projectName}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.delBtn}
+                    onPress={() => {
+                      Alert.alert('Delete Note', `Delete "${item.title}"?`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Delete', style: 'destructive', onPress: () => deleteNoteMutation.mutate(item.id) },
+                      ]);
+                    }}
+                  >
+                    <Trash2 size={16} color={colors.danger} />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.noteContentPreview, { color: colors.textSecondary }]} numberOfLines={3}>
+                  {item.content}
+                </Text>
+
+                {/* Footer with Tags & Date */}
+                <View style={styles.noteFooter}>
+                  <View style={styles.tagsContainer}>
+                    {tagList.map((tag, idx) => (
+                      <View key={idx} style={[styles.tagBadge, { backgroundColor: colors.surfaceSubtle }]}>
+                        <Text style={[styles.tagText, { color: colors.textMuted }]}>#{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={[styles.dateText, { color: colors.textMuted }]}>
+                    {new Date(item.updated_at).toLocaleDateString()}
+                  </Text>
+                </View>
+              </Card>
+            </TouchableOpacity>
+          );
+        }}
+      />
+
+      {/* Note View & Edit Modal */}
+      {viewingNote && (
+        <Modal
+          visible={Boolean(viewingNote)}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setViewingNote(null)}
+        >
+          <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalHeaderTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {isEditing ? 'Edit Note' : viewingNote.title}
+                </Text>
+                <Text style={[styles.modalHeaderSubtitle, { color: colors.textMuted }]}>
+                  {new Date(viewingNote.updated_at).toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <Button
+                  title=""
+                  variant="outline"
+                  icon={isEditing ? <FileText size={16} color={colors.textPrimary} /> : <Edit3 size={16} color={colors.primary} />}
+                  onPress={() => setIsEditing(!isEditing)}
+                  style={styles.headerIconBtn}
+                />
+                <Button
+                  title=""
+                  variant="outline"
+                  icon={<Trash2 size={16} color={colors.danger} />}
+                  onPress={() => {
+                    Alert.alert('Delete Note', `Delete "${viewingNote.title}"?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => deleteNoteMutation.mutate(viewingNote.id) },
+                    ]);
+                  }}
+                  style={styles.headerIconBtn}
+                />
+                <TouchableOpacity
+                  style={[styles.closeBtn, { backgroundColor: colors.surfaceSubtle }]}
+                  onPress={() => setViewingNote(null)}
+                >
+                  <X size={18} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <Text style={[styles.noteBody, { color: colors.textSecondary }]} numberOfLines={3}>
-              {item.content}
-            </Text>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              {isEditing ? (
+                <View style={styles.editSection}>
+                  <Input
+                    placeholder="Note title..."
+                    value={editTitle}
+                    onChangeText={setEditTitle}
+                  />
+                  <Input
+                    placeholder="Note content..."
+                    value={editContent}
+                    onChangeText={setEditContent}
+                    multiline
+                    style={{ height: 200, textAlignVertical: 'top' }}
+                  />
+                  <Input
+                    placeholder="Tags (comma separated)..."
+                    value={editTags}
+                    onChangeText={setEditTags}
+                    icon={<Tag size={14} color={colors.textMuted} />}
+                  />
+                  <Button
+                    title="Save Changes"
+                    onPress={handleSaveEdit}
+                    style={{ marginTop: 12 }}
+                  />
+                </View>
+              ) : (
+                <View>
+                  {/* Linked Project Banner */}
+                  {viewingNote.project_id && projectMap.has(viewingNote.project_id) && (
+                    <View style={[styles.linkedProjectBanner, { backgroundColor: colors.accentSubtle }]}>
+                      <FolderGit2 size={14} color={colors.accent} />
+                      <Text style={[styles.linkedProjectText, { color: colors.accent }]}>
+                        Part of {projectMap.get(viewingNote.project_id)}
+                      </Text>
+                    </View>
+                  )}
 
-            {item.tags && (
-              <View style={styles.tagRow}>
-                {item.tags.split(',').map((t, idx) => (
-                  <View key={idx} style={[styles.tagBadge, { backgroundColor: colors.surfaceSubtle }]}>
-                    <Text style={[styles.tagText, { color: colors.primary }]}>#{t.trim()}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </Card>
-        )}
-      />
+                  <Text style={[styles.viewTitle, { color: colors.textPrimary }]}>
+                    {viewingNote.title}
+                  </Text>
+
+                  <Card style={styles.viewContentCard}>
+                    <Text style={[styles.viewContentText, { color: colors.textSecondary }]}>
+                      {viewingNote.content}
+                    </Text>
+                  </Card>
+
+                  {/* Tags */}
+                  {viewingNote.tags ? (
+                    <View style={styles.viewTagsRow}>
+                      <Tag size={14} color={colors.textMuted} />
+                      {viewingNote.tags.split(',').map((tag, i) => (
+                        <View key={i} style={[styles.tagBadge, { backgroundColor: colors.surfaceSubtle }]}>
+                          <Text style={[styles.tagText, { color: colors.primary }]}>#{tag.trim()}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -207,89 +554,223 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 12,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    borderRadius: 12,
-  },
-  addBtn: {
-    width: 44,
-    height: 44,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
   },
   titleContainer: {
-    alignItems: 'center',
+    flex: 1,
   },
   topTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
   },
   topSubtitle: {
+    fontSize: 12,
+  },
+  addBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  toolbar: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 38,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    padding: 0,
+  },
+  filterPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  filterPillActive: {
+    borderColor: 'transparent',
+    elevation: 1,
+  },
+  filterPillText: {
     fontSize: 11,
-    fontWeight: '500',
-    marginTop: 1,
+    fontWeight: '600',
   },
   createCard: {
-    marginHorizontal: 20,
+    marginHorizontal: 16,
     marginBottom: 12,
+    padding: 12,
+  },
+  projectPickerSection: {
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  pickerLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   list: {
-    padding: 20,
-    paddingTop: 4,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   noteCard: {
     marginBottom: 10,
+    padding: 14,
   },
-  noteTop: {
+  noteHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    gap: 8,
   },
   noteTitle: {
     fontSize: 16,
     fontWeight: '700',
-    flex: 1,
+    lineHeight: 22,
   },
-  noteBody: {
+  projectTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  projectTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  delBtn: {
+    padding: 4,
+  },
+  noteContentPreview: {
     fontSize: 13,
     lineHeight: 18,
+    marginTop: 8,
   },
-  tagRow: {
+  noteFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+  },
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
+    gap: 4,
+    flex: 1,
   },
   tagBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   tagText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  dateText: {
     fontSize: 11,
-    fontWeight: '600',
+    marginLeft: 8,
   },
-  offlineBanner: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginHorizontal: 20,
-    marginBottom: 8,
-    borderRadius: 8,
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  offlineBannerText: {
-    color: '#EF4444',
+  modalHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  modalHeaderSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  headerIconBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  editSection: {
+    gap: 8,
+  },
+  linkedProjectBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 12,
+  },
+  linkedProjectText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  viewTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 14,
+    lineHeight: 28,
+  },
+  viewContentCard: {
+    padding: 16,
+    marginBottom: 16,
+  },
+  viewContentText: {
+    fontSize: 15,
+    lineHeight: 24,
+  },
+  viewTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
 });

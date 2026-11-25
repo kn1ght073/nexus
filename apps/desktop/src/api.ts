@@ -126,6 +126,9 @@ async function rawRequest<T>(
   forHost = false
 ): Promise<T> {
   const base = normalizeBaseUrl(baseOverride ?? (forHost ? api.getHostUrl() : api.getBaseUrl()));
+  if (forHost && base === CLOUD_BASE) {
+    throw new Error("Mac Host Node is offline. Start your local Mac host (port 8000) or bring an active node online.");
+  }
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(`${base}${cleanPath}`, {
     ...init,
@@ -199,7 +202,9 @@ export const api = {
   },
 
   getHostUrl(): string {
-    return normalizeBaseUrl(localStorage.getItem("nexus.host") ?? "");
+    const raw = normalizeBaseUrl(localStorage.getItem("nexus.host") ?? "");
+    if (raw === CLOUD_BASE) return "";
+    return raw;
   },
 
   getHostMode(): HostMode {
@@ -312,6 +317,9 @@ export const api = {
           this.setHostConnection(DEFAULT_LOCAL_BASE, "local");
           return { mode: "local", url: DEFAULT_LOCAL_BASE };
         }
+        // If local host responded healthy with mode='node', it is the authoritative host
+        this.setHostConnection(DEFAULT_LOCAL_BASE, "local");
+        return { mode: "local", url: DEFAULT_LOCAL_BASE };
       }
     } catch {
       // Local host unreachable; check control-plane active node

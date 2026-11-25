@@ -35,15 +35,15 @@ export default function AppLayout() {
       <Tabs.Screen
         name="devices"
         options={{
-          title: 'Devices',
+          title: 'Devices & Nodes',
           tabBarIcon: ({ color, size }) => <Smartphone size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="nodes"
         options={{
+          href: null,
           title: 'Nodes',
-          tabBarIcon: ({ color, size }) => <Server size={size} color={color} />,
         }}
       />
       <Tabs.Screen

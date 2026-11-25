@@ -148,6 +148,25 @@ def test_notes_list_json(mock_req):
 
 
 @patch("requests.Session.request")
+def test_notes_add_and_show_json(mock_req):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"id": 9, "title": "Memory scan", "content": "AOB search details"}
+    mock_req.return_value = mock_resp
+
+    res = runner.invoke(app, ["notes", "add", "Memory scan", "AOB search details", "--json"])
+    assert res.exit_code == 0
+    data = json.loads(res.stdout)
+    assert data["id"] == 9
+    assert data["title"] == "Memory scan"
+
+    res_show = runner.invoke(app, ["notes", "show", "9", "--json"])
+    assert res_show.exit_code == 0
+    show_data = json.loads(res_show.stdout)
+    assert show_data["id"] == 9
+
+
+@patch("requests.Session.request")
 def test_account_overview_json(mock_req):
     mock_resp = MagicMock()
     mock_resp.status_code = 200

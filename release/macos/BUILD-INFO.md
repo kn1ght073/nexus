@@ -8,4 +8,4 @@
 - **Frontend Stack**: React 18, Vite 6, TypeScript 5.6
 - **Package Format**: Apple Disk Image (`.dmg` UDZO compressed) & Application Bundle (`.app`)
 - **Signing Status**: Ad-hoc bundle signature (`codesign --force --deep --sign -`), verified with `codesign --verify --deep --strict`. Apple Developer ID notarization is not configured on this build machine.
-- **SHA-256 Checksum**: `8f323fb436599de6d2bb958aef078fc2cb2d4a82e9d96740d2b2854c232d828a` (`NEXUS.dmg`)
+- **SHA-256 Checksum**: `f20574bf7fd2b305425265672bc94ee127ca0376e1c88d633453b5e60ead441e` (`NEXUS.dmg`)

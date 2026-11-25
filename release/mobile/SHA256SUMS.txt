@@ -1,1 +1,1 @@
-ccf464b21d91f41318a66764ef56359fd09f72828ad4bb93c8ca00f754059cda  NEXUS-android.apk
+2a71bf0868f9203cb58d92ff9214f303982c4e7fdceb4a5446dc7fe3adfee8ea  release/mobile/NEXUS-android.apk

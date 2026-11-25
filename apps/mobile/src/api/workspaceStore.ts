@@ -128,6 +128,20 @@ export async function deleteLocalProject(id: number): Promise<void> {
   await setSecureItem(LOCAL_PROJECTS_KEY, JSON.stringify(updated));
 }
 
+export async function updateLocalProject(id: number, patch: Partial<ProjectOut>): Promise<ProjectOut | null> {
+  const current = await getLocalProjects();
+  let updatedProj: ProjectOut | null = null;
+  const updated = current.map((p) => {
+    if (p.id === id) {
+      updatedProj = { ...p, ...patch, updated_at: new Date().toISOString() };
+      return updatedProj;
+    }
+    return p;
+  });
+  await setSecureItem(LOCAL_PROJECTS_KEY, JSON.stringify(updated));
+  return updatedProj;
+}
+
 // --- Tasks ---
 
 export async function getLocalTasks(): Promise<TaskOut[]> {
@@ -236,4 +250,18 @@ export async function deleteLocalNote(id: number): Promise<void> {
   const current = await getLocalNotes();
   const updated = current.filter((n) => n.id !== id);
   await setSecureItem(LOCAL_NOTES_KEY, JSON.stringify(updated));
+}
+
+export async function updateLocalNote(id: number, patch: Partial<NoteOut>): Promise<NoteOut | null> {
+  const current = await getLocalNotes();
+  let updatedNote: NoteOut | null = null;
+  const updated = current.map((n) => {
+    if (n.id === id) {
+      updatedNote = { ...n, ...patch, updated_at: new Date().toISOString() };
+      return updatedNote;
+    }
+    return n;
+  });
+  await setSecureItem(LOCAL_NOTES_KEY, JSON.stringify(updated));
+  return updatedNote;
 }

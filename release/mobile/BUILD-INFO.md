@@ -9,4 +9,4 @@
 - **Package Format**: Compiled Android Release Package (`.apk`) built via Gradle `assembleRelease`
 - **Signature**: Signed with APK Signature Scheme v2 (`apksigner verify` passed)
 - **Runtime Verification**: Installed and launched on Android API 36 emulator (`AlloyPlayer`), confirmed rendering `NEXUS` welcome screen cleanly with zero crashes
-- **SHA-256 Checksum**: `ccf464b21d91f41318a66764ef56359fd09f72828ad4bb93c8ca00f754059cda` (`NEXUS-android.apk`)
+- **SHA-256 Checksum**: `2a71bf0868f9203cb58d92ff9214f303982c4e7fdceb4a5446dc7fe3adfee8ea` (`NEXUS-android.apk`)
