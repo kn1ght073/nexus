@@ -125,21 +125,45 @@ async function rawRequest<T>(
   baseOverride?: string,
   forHost = false
 ): Promise<T> {
-  const base = normalizeBaseUrl(baseOverride ?? (forHost ? api.getHostUrl() : api.getBaseUrl()));
-  if (forHost && base === CLOUD_BASE) {
+  const hostTarget = api.getHostUrl();
+  const base = normalizeBaseUrl(baseOverride || (forHost ? hostTarget : api.getBaseUrl()));
+  if (forHost && (base === CLOUD_BASE || !base)) {
     throw new Error("Mac Host Node is offline. Start your local Mac host (port 8000) or bring an active node online.");
   }
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  const res = await fetch(`${base}${cleanPath}`, {
-    ...init,
-    headers: { ...authHeaders(forHost), ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
+  const isLocalHostTarget = base === DEFAULT_LOCAL_BASE || base === "http://localhost:8000";
+
+  try {
+    const res = await fetch(`${base}${cleanPath}`, {
+      ...init,
+      headers: { ...authHeaders(forHost), ...(init?.headers ?? {}) },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${res.status}: ${body}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  } catch (fetchErr) {
+    // If WebKit fetch failed on local host inside Tauri, fall back to native Rust IPC request
+    if (isLocalHostTarget && typeof window !== "undefined") {
+      const tauriInvoke = (window as any)?.__TAURI_INTERNALS__?.invoke || (window as any)?.__TAURI__?.core?.invoke;
+      if (typeof tauriInvoke === "function") {
+        try {
+          const nativeData = await tauriInvoke("native_local_request", {
+            path: cleanPath,
+            method: init?.method || "GET",
+            headers: { ...authHeaders(forHost), ...(init?.headers as Record<string, string> ?? {}) },
+            body: typeof init?.body === "string" ? init.body : undefined,
+          });
+          return nativeData as T;
+        } catch (nativeErr) {
+          throw new Error(String(nativeErr));
+        }
+      }
+    }
+    throw fetchErr;
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
 }
 
 async function exchangeCpTokenOnHost(hostUrl: string, cpToken: string, relayMode = false): Promise<string | null> {
@@ -148,14 +172,17 @@ async function exchangeCpTokenOnHost(hostUrl: string, cpToken: string, relayMode
     if (relayMode) {
       headers["Authorization"] = `Bearer ${cpToken}`;
     }
-    const res = await fetch(`${normalizeBaseUrl(hostUrl)}/api/auth/cp-exchange`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ token: cpToken }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { access_token?: string };
-    return data.access_token ? cleanToken(data.access_token) : null;
+    const data = await rawRequest<{ access_token?: string }>(
+      "/api/auth/cp-exchange",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ token: cpToken }),
+      },
+      hostUrl,
+      false
+    );
+    return data?.access_token ? cleanToken(data.access_token) : null;
   } catch {
     return null;
   }
@@ -187,6 +214,12 @@ async function hostRequest<T>(path: string, init?: RequestInit): Promise<T> {
         return await rawRequest<T>(path, init, hostUrl, true);
       }
     }
+    if (msg.startsWith("404:") && hostUrl !== DEFAULT_LOCAL_BASE) {
+      const resolved = await api.resolveHost();
+      if (resolved.mode !== "none" && resolved.url !== hostUrl) {
+        return await rawRequest<T>(path, init, resolved.url, true);
+      }
+    }
     throw err;
   }
 }
@@ -204,7 +237,7 @@ export const api = {
   getHostUrl(): string {
     const raw = normalizeBaseUrl(localStorage.getItem("nexus.host") ?? "");
     if (raw === CLOUD_BASE) return "";
-    return raw;
+    return raw || DEFAULT_LOCAL_BASE;
   },
 
   getHostMode(): HostMode {

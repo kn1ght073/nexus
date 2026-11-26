@@ -37,11 +37,92 @@ fn core_base_url() -> String {
 
 #[tauri::command]
 async fn core_health(base_url: Option<String>) -> HealthStatus {
-    let url = format!("{}/health", base_url.unwrap_or_else(|| CORE_URL.to_string()));
-    HealthStatus {
-        ok: false,
-        detail: format!("probe from frontend directly: {}", url),
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let target = base_url.unwrap_or_else(|| "http://127.0.0.1:8000".to_string());
+    if target.contains("127.0.0.1:8000") || target.contains("localhost:8000") {
+        let addr: SocketAddr = ([127, 0, 0, 1], 8000).into();
+        match TcpStream::connect_timeout(&addr, Duration::from_millis(1000)) {
+            Ok(_) => HealthStatus {
+                ok: true,
+                detail: "Local Mac Host is online on port 8000".to_string(),
+            },
+            Err(e) => HealthStatus {
+                ok: false,
+                detail: format!("Port 8000 unreachable: {}", e),
+            },
+        }
+    } else {
+        HealthStatus {
+            ok: true,
+            detail: format!("Target URL configured: {}", target),
+        }
     }
+}
+
+#[tauri::command]
+fn native_local_request(
+    path: String,
+    method: Option<String>,
+    headers: Option<std::collections::HashMap<String, String>>,
+    body: Option<String>,
+) -> Result<serde_json::Value, String> {
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let method_str = method.unwrap_or_else(|| "GET".to_string()).to_uppercase();
+    let addr: SocketAddr = ([127, 0, 0, 1], 8000).into();
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(3000))
+        .map_err(|e| format!("Host connection failed on port 8000: {}", e))?;
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(4000)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(4000)));
+
+    let clean_path = if path.starts_with('/') { path } else { format!("/{}", path) };
+    let req_body = body.unwrap_or_default();
+
+    let mut req_str = format!("{} {} HTTP/1.0\r\nHost: 127.0.0.1:8000\r\nConnection: close\r\n", method_str, clean_path);
+    if let Some(hdrs) = headers {
+        for (k, v) in hdrs {
+            req_str.push_str(&format!("{}: {}\r\n", k, v));
+        }
+    }
+    if !req_body.is_empty() {
+        req_str.push_str(&format!("Content-Length: {}\r\n", req_body.len()));
+    }
+    req_str.push_str("\r\n");
+    req_str.push_str(&req_body);
+
+    stream.write_all(req_str.as_bytes()).map_err(|e| e.to_string())?;
+
+    let mut response_bytes = Vec::new();
+    let _ = stream.read_to_end(&mut response_bytes);
+
+    let resp_text = String::from_utf8_lossy(&response_bytes).to_string();
+    let parts: Vec<&str> = resp_text.splitn(2, "\r\n\r\n").collect();
+    if parts.is_empty() {
+        return Err("Empty response from local host".to_string());
+    }
+
+    let header_part = parts[0];
+    let body_part = if parts.len() > 1 { parts[1] } else { "" };
+
+    let status_line = header_part.lines().next().unwrap_or("");
+    let status_code: u16 = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(500);
+
+    let parsed_body: serde_json::Value = serde_json::from_str(body_part)
+        .unwrap_or_else(|_| serde_json::Value::String(body_part.to_string()));
+
+    if status_code >= 400 {
+        return Err(format!("{}: {}", status_code, body_part));
+    }
+
+    Ok(parsed_body)
 }
 
 #[tauri::command]
@@ -313,7 +394,8 @@ pub fn run() {
             poll_oauth_result,
             get_host_daemon_status,
             start_host_daemon,
-            stop_host_daemon
+            stop_host_daemon,
+            native_local_request
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

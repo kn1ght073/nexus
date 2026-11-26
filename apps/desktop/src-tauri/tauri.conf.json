@@ -38,7 +38,7 @@
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "11.0",
-      "exceptionDomain": ""
+      "infoPlist": "Info.plist"
     }
   }
 }
